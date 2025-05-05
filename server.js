@@ -34,9 +34,24 @@ app.post('/login', async (req, res) => {
 
 async function findUser(username) {
   const url = `https://api.airtable.com/v0/${airtableBaseId}/${usersTableName}?filterByFormula={Username}='${username}'`;
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${airtableToken}` } });
-  const data = await res.json();
+
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${airtableToken}` }
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    console.error("Airtable API error:", errText);
+    throw new Error("Airtable request failed");
+  }
+
+  const data = await response.json();
+
+  if (!data.records || data.records.length === 0) return null;
+
   return data.records[0];
+}
+
 }
 
 async function createUser(username, password) {
