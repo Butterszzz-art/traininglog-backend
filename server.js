@@ -52,7 +52,6 @@ async function findUser(username) {
   return data.records[0];
 }
 
-}
 
 async function createUser(username, password) {
   const url = `https://api.airtable.com/v0/${airtableBaseId}/${usersTableName}`;
