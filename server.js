@@ -1,9 +1,13 @@
+require('dotenv').config(); // <- FIRST line, before anything else
+
+console.log("AIRTABLE_TOKEN:", airtableToken);
+console.log("BASE_ID:", airtableBaseId);
+
+
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const fetch = require('node-fetch');
-
-require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
