@@ -1,8 +1,4 @@
-require('dotenv').config(); // <- FIRST line, before anything else
-
-console.log("AIRTABLE_TOKEN:", airtableToken);
-console.log("BASE_ID:", airtableBaseId);
-
+require('dotenv').config(); // ✅ Always first to load .env
 
 const express = require('express');
 const cors = require('cors');
@@ -12,9 +8,19 @@ const fetch = require('node-fetch');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// ✅ Define environment variables
 const airtableToken = process.env.AIRTABLE_TOKEN;
 const airtableBaseId = process.env.BASE_ID;
-const usersTableName = 'Users';
+
+// ✅ Log them after defining (optional: helpful for debugging)
+console.log("AIRTABLE_TOKEN:", airtableToken);
+console.log("BASE_ID:", airtableBaseId);
+
+// ...rest of your code below...
+app.use(cors());
+app.use(bodyParser.json());
+
+// your signup/login endpoints...
 
 app.use(cors());
 app.use(bodyParser.json());
