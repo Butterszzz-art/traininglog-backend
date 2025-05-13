@@ -8,7 +8,7 @@ const fetch = require('node-fetch');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const airtableToken = process.env.AIRTABLE_TOKEN;
+const airtableToken = process.env.AIRTABLE_TOKEN?.trim();
 const airtableBaseId = process.env.BASE_ID;
 const usersTableName = 'Users';
 
