@@ -10,13 +10,11 @@ const PORT = process.env.PORT || 3000;
 
 const airtableToken = process.env.AIRTABLE_TOKEN;
 const airtableBaseId = process.env.BASE_ID;
-const usersTableName = 'Users'; // ✅ This must be defined BEFORE using it
+const usersTableName = 'Users';
 
-console.log("AIRTABLE_TOKEN:", pathZwfK2z58ohjBy);
-console.log("BASE_ID:", appmjr4IgnEH72K1b);
+console.log("AIRTABLE_TOKEN:", airtableToken);
+console.log("BASE_ID:", airtableBaseId);
 
-app.use(cors());
-app.use(bodyParser.json());
 
 // your signup/login endpoints...
 
