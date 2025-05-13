@@ -12,8 +12,8 @@ const airtableToken = process.env.AIRTABLE_TOKEN;
 const airtableBaseId = process.env.BASE_ID;
 const usersTableName = 'Users'; // ✅ This must be defined BEFORE using it
 
-console.log("AIRTABLE_TOKEN:", airtableToken);
-console.log("BASE_ID:", airtableBaseId);
+console.log("AIRTABLE_TOKEN:", pathZwfK2z58ohjBy);
+console.log("BASE_ID:", appmjr4IgnEH72K1b);
 
 app.use(cors());
 app.use(bodyParser.json());
