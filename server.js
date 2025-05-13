@@ -9,7 +9,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 const airtableToken = process.env.AIRTABLE_TOKEN?.trim();
-const airtableBaseId = process.env.BASE_ID;
+const airtableBaseId = process.env.BASE_ID?.trim();
 const usersTableName = 'Users';
 
 console.log("AIRTABLE_TOKEN:", airtableToken);
