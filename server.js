@@ -74,3 +74,41 @@ async function createUser(username, password) {
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
+app.post('/saveTemplate', async (req, res) => {
+  const { username, templateName, templateData } = req.body;
+
+  try {
+    await airtableBase('Templates').create({
+      fields: {
+        Username: username,
+        TemplateName: templateName,
+        TemplateData: JSON.stringify(templateData)
+      }
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.get('/getTemplates', async (req, res) => {
+  const username = req.query.username;
+
+  try {
+    const records = await airtableBase('Templates').select({
+      filterByFormula: `{Username} = '${username}'`
+    }).all();
+
+    const templates = records.map(record => ({
+      id: record.id,
+      templateName: record.fields.TemplateName,
+      templateData: JSON.parse(record.fields.TemplateData)
+    }));
+
+    res.json({ success: true, templates });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
