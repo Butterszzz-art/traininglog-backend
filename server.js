@@ -111,4 +111,38 @@ app.get('/getTemplates', async (req, res) => {
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
+
+  app.post('/saveWorkout', async (req, res) => {
+  const { username, workout } = req.body;
+  if (!username || !workout) return res.status(400).json({ error: 'Missing fields' });
+
+  try {
+    await base('Workouts').create({
+      fields: {
+        Username: username,
+        WorkoutData: JSON.stringify(workout)
+      }
+    });
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error saving workout' });
+  }
+});
+
+app.get('/getWorkouts', async (req, res) => {
+  const { username } = req.query;
+  try {
+    const records = await base('Workouts')
+      .select({ filterByFormula: `{Username}='${username}'` })
+      .all();
+
+    const workouts = records.map(r => JSON.parse(r.fields.WorkoutData));
+    res.json({ workouts });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error fetching workouts' });
+  }
+});
+
 });
