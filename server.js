@@ -145,4 +145,59 @@ app.get('/getWorkouts', async (req, res) => {
   }
 });
 
+app.post("/saveMacros", async (req, res) => {
+  const { username, targets } = req.body;
+
+  try {
+    await fetch(`https://api.airtable.com/v0/appmjr4IgnEH72K1b/MacroTargets`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${airtableToken}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        fields: {
+          Username: username,
+          Calories: targets.calories,
+          Protein: targets.protein,
+          Carbs: targets.carbs,
+          Fat: targets.fat
+        }
+      })
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Failed to save macros:", err);
+    res.status(500).json({ success: false });
+  }
+});
+
+app.get("/getMacros", async (req, res) => {
+  const username = req.query.username;
+
+  try {
+    const response = await fetch(
+      `https://api.airtable.com/v0/appmjr4IgnEH72K1b/MacroTargets?filterByFormula={Username}='${username}'`,
+      {
+        headers: {
+          Authorization: `Bearer ${airtableToken}`
+        }
+      }
+    );
+
+    const data = await response.json();
+    if (data.records.length > 0) {
+      const latest = data.records[data.records.length - 1].fields;
+      res.json({ targets: latest });
+    } else {
+      res.json({ targets: null });
+    }
+  } catch (err) {
+    console.error("Failed to fetch macros:", err);
+    res.status(500).json({ error: true });
+  }
+});
+  
+  
 });
