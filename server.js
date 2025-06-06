@@ -6,6 +6,12 @@ const bodyParser = require('body-parser');
 const fetch = require('node-fetch');
 
 const app = express();
+
+app.use(cors());   // Enable CORS for all origins
+app.use(bodyParser.json());
+
+// then define routes
+
 const PORT = process.env.PORT || 3000;
 
 const airtableToken = process.env.AIRTABLE_TOKEN?.trim();
