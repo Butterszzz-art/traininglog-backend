@@ -18,6 +18,18 @@ const airtableToken = process.env.AIRTABLE_TOKEN?.trim();
 const airtableBaseId = process.env.BASE_ID?.trim();
 const usersTableName = 'Users';
 
+// simple in-memory stores for groups and shared programs
+const groups = {};
+const sharedPrograms = {};
+
+// very basic auth placeholder
+function authenticate(req, res, next) {
+  if (!req.headers.authorization) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  next();
+}
+
 console.log("AIRTABLE_TOKEN:", airtableToken);
 console.log("BASE_ID:", airtableBaseId);
 
@@ -208,8 +220,65 @@ app.get("/getMacros", async (req, res) => {
     }
   } catch (err) {
     console.error("Failed to fetch macros:", err);
-    res.status(500).json({ error: true });
+  res.status(500).json({ error: true });
   }
+});
+
+// ---- Community Endpoints ----
+
+// Invite a user to a group
+app.post('/community/groups/:groupId/invite', authenticate, async (req, res) => {
+  const { groupId } = req.params;
+  const { invitedUserId } = req.body || {};
+
+  if (!invitedUserId) {
+    return res.status(400).json({ error: 'invitedUserId required' });
+  }
+
+  const group = groups[groupId];
+  if (!group) {
+    return res.status(404).json({ error: 'Group not found' });
+  }
+
+  try {
+    const user = await findUser(invitedUserId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (!group.members.includes(invitedUserId)) {
+      group.members.push(invitedUserId);
+    }
+
+    res.json({ success: true, group });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to invite user' });
+  }
+});
+
+// Share a program with a group
+app.post('/community/groups/:groupId/share', authenticate, (req, res) => {
+  const { groupId } = req.params;
+  const { senderId, programData } = req.body || {};
+
+  if (!senderId || !programData) {
+    return res.status(400).json({ error: 'senderId and programData required' });
+  }
+
+  const group = groups[groupId];
+  if (!group) {
+    return res.status(404).json({ error: 'Group not found' });
+  }
+  if (!group.members.includes(senderId)) {
+    return res.status(403).json({ error: 'Sender not a group member' });
+  }
+
+  if (!sharedPrograms[groupId]) {
+    sharedPrograms[groupId] = [];
+  }
+  sharedPrograms[groupId].push({ senderId, programData });
+
+  res.json({ success: true });
 });
 
 
