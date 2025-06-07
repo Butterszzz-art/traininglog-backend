@@ -18,8 +18,9 @@ const airtableToken = process.env.AIRTABLE_TOKEN?.trim();
 const airtableBaseId = process.env.BASE_ID?.trim();
 const usersTableName = 'Users';
 
-// simple in-memory stores for groups and shared programs
+// simple in-memory stores for groups, posts and shared programs
 const groups = {};
+const groupPosts = {};
 const sharedPrograms = {};
 
 // very basic auth placeholder
@@ -279,6 +280,28 @@ app.post('/community/groups/:groupId/share', authenticate, (req, res) => {
   sharedPrograms[groupId].push({ senderId, programData });
 
   res.json({ success: true });
+});
+
+// Get posts for a group
+app.get('/community/groups/:groupId/posts', authenticate, (req, res) => {
+  const { groupId } = req.params;
+
+  try {
+    const group = groups[groupId];
+    if (!group) {
+      return res.status(404).json({ error: 'Group not found' });
+    }
+
+    const posts = groupPosts[groupId];
+    if (!posts || posts.length === 0) {
+      return res.status(404).json({ error: 'No posts found' });
+    }
+
+    res.json({ posts });
+  } catch (err) {
+    console.error('Failed to fetch posts for group', groupId, err);
+    res.status(500).json({ error: 'Failed to retrieve posts' });
+  }
 });
 
 
