@@ -1,22 +1,41 @@
+// server.js
 require('dotenv').config();
-
 const express = require('express');
-const cors = require('cors');
-const bodyParser = require('body-parser');
-const fetch = require('node-fetch');
+const cors    = require('cors');
+const fetch   = require('node-fetch');
 
 const app = express();
 
-app.use(cors());   // Enable CORS for all origins
-app.use(bodyParser.json());
+// —— MIDDLEWARE ——
+// enable CORS for _every_ route
+app.use(cors());
+// parse JSON bodies
+app.use(express.json());
+
+const PORT           = process.env.PORT || 3000;
+// make sure your .env uses AIRTABLE_BASE_ID, not BASE_ID
+const airtableToken  = process.env.AIRTABLE_TOKEN?.trim();
+const airtableBaseId = process.env.AIRTABLE_BASE_ID?.trim();
+const usersTableName = 'Users';
+
+// —— ROUTES ——
+
+app.get('/config', (req, res) => {
+  res.json({
+    airtableToken,
+    airtableBaseId
+  });
+});
+
+
+app.listen(PORT, () => {
+  console.log(`✅ Server running on port ${PORT}`);
+});
+
 
 // then define routes
 
-const PORT = process.env.PORT || 3000;
 
-const airtableToken = process.env.AIRTABLE_TOKEN?.trim();
-const airtableBaseId = process.env.BASE_ID?.trim();
-const usersTableName = 'Users';
 
 // simple in-memory stores for groups, posts and shared programs
 const groups = {};
@@ -32,20 +51,13 @@ function authenticate(req, res, next) {
 }
 
 console.log("AIRTABLE_TOKEN:", airtableToken);
-console.log("BASE_ID:", airtableBaseId);
+console.log("AIRTABLE_BASE_ID:", airtableBaseId);
 
 
 // your signup/login endpoints...
 
-app.get('/config', (req, res) => {
-  res.json({
-    airtableToken: process.env.AIRTABLE_TOKEN || 'patHs7yemB2TYuOOc.6ed847f094d08b1d30710f9f5763d909d1841a2e7dc63fbdac208133a39ae577',
-    airtableBaseId: process.env.AIRTABLE_BASE_ID || 'appmjr4IgnEH72K1b'
-  });
-});
 
-app.use(cors());
-app.use(bodyParser.json());
+
 
 app.post('/signup', async (req, res) => {
   const { username, password } = req.body;
@@ -97,9 +109,6 @@ async function createUser(username, password) {
   });
 }
 
-app.listen(PORT, () => {
-  console.log(`✅ Server running on port ${PORT}`);
-});
 
 app.post('/saveTemplate', async (req, res) => {
   const { username, templateName, templateData } = req.body;
