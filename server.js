@@ -1,101 +1,35 @@
 // server.js
 require('dotenv').config();
 const express = require('express');
-const cors    = require('cors');
-const fetch   = require('node-fetch');
+const cors = require('cors');
+const fetch = require('node-fetch');
 
 const app = express();
 
-// —— MIDDLEWARE ——
-// enable CORS for _every_ route
-app.use(cors());
-// parse JSON bodies
-app.use(express.json());
-
-const PORT           = process.env.PORT || 3000;
-// make sure your .env uses AIRTABLE_BASE_ID, not BASE_ID
-const airtableToken  = process.env.AIRTABLE_TOKEN?.trim();
+const PORT = process.env.PORT || 3000;
+const airtableToken = process.env.AIRTABLE_TOKEN?.trim();
 const airtableBaseId = process.env.AIRTABLE_BASE_ID?.trim();
 const usersTableName = 'Users';
 
-// —— ROUTES ——
-
-app.get('/config', (req, res) => {
-  res.json({
-    airtableToken,
-    airtableBaseId
-  });
-});
-
-
-app.listen(PORT, () => {
-  console.log(`✅ Server running on port ${PORT}`);
-});
-
-
-// then define routes
-
-
-
-// simple in-memory stores for groups, posts and shared programs
-const groups = {};
-const groupPosts = {};
-const sharedPrograms = {};
-
-// very basic auth placeholder
-function authenticate(req, res, next) {
-  if (!req.headers.authorization) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-  next();
-}
-
-console.log("AIRTABLE_TOKEN:", airtableToken);
-console.log("AIRTABLE_BASE_ID:", airtableBaseId);
-
-
-// your signup/login endpoints...
-
-
-
-
-app.post('/signup', async (req, res) => {
-  const { username, password } = req.body;
-  const exists = await findUser(username);
-  if (exists) return res.status(400).json({ success: false, message: 'User exists' });
-  await createUser(username, password);
-  res.json({ success: true });
-});
-
-app.post('/login', async (req, res) => {
-  const { username, password } = req.body;
-  const user = await findUser(username);
-  if (!user) return res.status(404).json({ success: false, message: 'Not found' });
-  if (user.fields.Password !== password)
-    return res.status(401).json({ success: false, message: 'Wrong password' });
-  res.json({ success: true });
-});
+app.use(cors());
+app.use(express.json());
 
 async function findUser(username) {
   const url = `https://api.airtable.com/v0/${airtableBaseId}/${usersTableName}?filterByFormula={Username}='${username}'`;
-
   const response = await fetch(url, {
     headers: { Authorization: `Bearer ${airtableToken}` }
   });
 
   if (!response.ok) {
     const errText = await response.text();
-    console.error("Airtable API error:", errText);
-    throw new Error("Airtable request failed");
+    console.error('Airtable API error:', errText);
+    throw new Error('Airtable request failed');
   }
 
   const data = await response.json();
-
   if (!data.records || data.records.length === 0) return null;
-
   return data.records[0];
 }
-
 
 async function createUser(username, password) {
   const url = `https://api.airtable.com/v0/${airtableBaseId}/${usersTableName}`;
@@ -109,10 +43,45 @@ async function createUser(username, password) {
   });
 }
 
+const groups = {};
+const groupPosts = {};
+const sharedPrograms = {};
+
+function authenticate(req, res, next) {
+  if (!req.headers.authorization) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  next();
+}
+
+console.log('AIRTABLE_TOKEN:', airtableToken);
+console.log('AIRTABLE_BASE_ID:', airtableBaseId);
+
+// ---- Routes ----
+app.get('/config', (req, res) => {
+  res.json({ airtableToken, airtableBaseId });
+});
+
+app.post('/signup', async (req, res) => {
+  const { username, password } = req.body;
+  const exists = await findUser(username);
+  if (exists) return res.status(400).json({ success: false, message: 'User exists' });
+  await createUser(username, password);
+  res.json({ success: true });
+});
+
+app.post('/login', async (req, res) => {
+  const { username, password } = req.body;
+  const user = await findUser(username);
+  if (!user) return res.status(404).json({ success: false, message: 'Not found' });
+  if (user.fields.Password !== password) {
+    return res.status(401).json({ success: false, message: 'Wrong password' });
+  }
+  res.json({ success: true });
+});
 
 app.post('/saveTemplate', async (req, res) => {
   const { username, templateName, templateData } = req.body;
-
   try {
     await airtableBase('Templates').create({
       fields: {
@@ -121,7 +90,6 @@ app.post('/saveTemplate', async (req, res) => {
         TemplateData: JSON.stringify(templateData)
       }
     });
-
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -130,7 +98,6 @@ app.post('/saveTemplate', async (req, res) => {
 
 app.get('/getTemplates', async (req, res) => {
   const username = req.query.username;
-
   try {
     const records = await airtableBase('Templates').select({
       filterByFormula: `{Username} = '${username}'`
@@ -141,16 +108,15 @@ app.get('/getTemplates', async (req, res) => {
       templateName: record.fields.TemplateName,
       templateData: JSON.parse(record.fields.TemplateData)
     }));
-
     res.json({ success: true, templates });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
+});
 
-  app.post('/saveWorkout', async (req, res) => {
+app.post('/saveWorkout', async (req, res) => {
   const { username, workout } = req.body;
   if (!username || !workout) return res.status(400).json({ error: 'Missing fields' });
-
   try {
     await base('Workouts').create({
       fields: {
@@ -180,15 +146,14 @@ app.get('/getWorkouts', async (req, res) => {
   }
 });
 
-app.post("/saveMacros", async (req, res) => {
+app.post('/saveMacros', async (req, res) => {
   const { username, targets } = req.body;
-
   try {
-    await fetch(`https://api.airtable.com/v0/appmjr4IgnEH72K1b/MacroTargets`, {
-      method: "POST",
+    await fetch('https://api.airtable.com/v0/appmjr4IgnEH72K1b/MacroTargets', {
+      method: 'POST',
       headers: {
         Authorization: `Bearer ${airtableToken}`,
-        "Content-Type": "application/json"
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
         fields: {
@@ -200,27 +165,22 @@ app.post("/saveMacros", async (req, res) => {
         }
       })
     });
-
     res.json({ success: true });
   } catch (err) {
-    console.error("Failed to save macros:", err);
+    console.error('Failed to save macros:', err);
     res.status(500).json({ success: false });
   }
 });
 
-app.get("/getMacros", async (req, res) => {
+app.get('/getMacros', async (req, res) => {
   const username = req.query.username;
-
   try {
     const response = await fetch(
       `https://api.airtable.com/v0/appmjr4IgnEH72K1b/MacroTargets?filterByFormula={Username}='${username}'`,
       {
-        headers: {
-          Authorization: `Bearer ${airtableToken}`
-        }
+        headers: { Authorization: `Bearer ${airtableToken}` }
       }
     );
-
     const data = await response.json();
     if (data.records.length > 0) {
       const latest = data.records[data.records.length - 1].fields;
@@ -229,52 +189,41 @@ app.get("/getMacros", async (req, res) => {
       res.json({ targets: null });
     }
   } catch (err) {
-    console.error("Failed to fetch macros:", err);
-  res.status(500).json({ error: true });
+    console.error('Failed to fetch macros:', err);
+    res.status(500).json({ error: true });
   }
 });
 
-// ---- Community Endpoints ----
-
-// Invite a user to a group
 app.post('/community/groups/:groupId/invite', authenticate, async (req, res) => {
   const { groupId } = req.params;
   const { invitedUserId } = req.body || {};
-
   if (!invitedUserId) {
     return res.status(400).json({ error: 'invitedUserId required' });
   }
-
   const group = groups[groupId];
   if (!group) {
     return res.status(404).json({ error: 'Group not found' });
   }
-
   try {
     const user = await findUser(invitedUserId);
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
-
     if (!group.members.includes(invitedUserId)) {
       group.members.push(invitedUserId);
     }
-
     res.json({ success: true, group });
   } catch (err) {
     res.status(500).json({ error: 'Failed to invite user' });
   }
 });
 
-// Share a program with a group
 app.post('/community/groups/:groupId/share', authenticate, (req, res) => {
   const { groupId } = req.params;
   const { senderId, programData } = req.body || {};
-
   if (!senderId || !programData) {
     return res.status(400).json({ error: 'senderId and programData required' });
   }
-
   const group = groups[groupId];
   if (!group) {
     return res.status(404).json({ error: 'Group not found' });
@@ -282,30 +231,24 @@ app.post('/community/groups/:groupId/share', authenticate, (req, res) => {
   if (!group.members.includes(senderId)) {
     return res.status(403).json({ error: 'Sender not a group member' });
   }
-
   if (!sharedPrograms[groupId]) {
     sharedPrograms[groupId] = [];
   }
   sharedPrograms[groupId].push({ senderId, programData });
-
   res.json({ success: true });
 });
 
-// Get posts for a group
 app.get('/community/groups/:groupId/posts', authenticate, (req, res) => {
   const { groupId } = req.params;
-
   try {
     const group = groups[groupId];
     if (!group) {
       return res.status(404).json({ error: 'Group not found' });
     }
-
     const posts = groupPosts[groupId];
     if (!posts || posts.length === 0) {
       return res.status(404).json({ error: 'No posts found' });
     }
-
     res.json({ posts });
   } catch (err) {
     console.error('Failed to fetch posts for group', groupId, err);
@@ -313,7 +256,6 @@ app.get('/community/groups/:groupId/posts', authenticate, (req, res) => {
   }
 });
 
-
-
-
+app.listen(PORT, () => {
+  console.log(`✅ Server running on port ${PORT}`);
 });
