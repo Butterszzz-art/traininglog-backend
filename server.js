@@ -6,13 +6,25 @@ const fetch = require('node-fetch');
 
 const app = express();
 
+// Enable CORS for all origins (or replace * with your GitHub Pages URL)
+app.use(
+  cors({
+    origin: [
+      'https://butterszzz-art.github.io',
+      'http://localhost:3000'
+    ],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    credentials: true
+  })
+);
+
+// parse JSON bodies
+app.use(express.json());
+
 const PORT = process.env.PORT || 3000;
 const airtableToken = process.env.AIRTABLE_TOKEN?.trim();
 const airtableBaseId = process.env.AIRTABLE_BASE_ID?.trim();
 const usersTableName = 'Users';
-
-app.use(cors());
-app.use(express.json());
 
 async function findUser(username) {
   const url = `https://api.airtable.com/v0/${airtableBaseId}/${usersTableName}?filterByFormula={Username}='${username}'`;
