@@ -6,20 +6,11 @@ const fetch = require('node-fetch');
 
 const app = express();
 
-// Enable CORS for all origins (or replace * with your GitHub Pages URL)
-app.use(
-  cors({
-    origin: [
-      'https://butterszzz-art.github.io',
-      'http://localhost:3000'
-    ],
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    credentials: true
-  })
-);
-
 // parse JSON bodies
 app.use(express.json());
+
+// enable CORS for all routes
+app.use(cors({ origin: '*' }));
 
 const PORT = process.env.PORT || 3000;
 const airtableToken = process.env.AIRTABLE_TOKEN?.trim();
