@@ -10,8 +10,14 @@ const app = express();
 // parse JSON bodies
 app.use(express.json());
 
-// enable CORS for all routes
-app.use(cors({ origin: '*' }));
+// enable CORS for the frontend application
+app.use(
+  cors({
+    origin: ['https://butterszzz-art.github.io'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    credentials: true
+  })
+);
 
 const PORT = process.env.PORT || 3000;
 const airtableToken = process.env.AIRTABLE_TOKEN?.trim();
