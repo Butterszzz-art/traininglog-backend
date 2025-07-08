@@ -3,6 +3,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
+const Airtable = require('airtable');
 
 const app = express();
 
@@ -15,6 +16,14 @@ app.use(cors({ origin: '*' }));
 const PORT = process.env.PORT || 3000;
 const airtableToken = process.env.AIRTABLE_TOKEN?.trim();
 const airtableBaseId = process.env.AIRTABLE_BASE_ID?.trim();
+let airtableBase;
+let base;
+if (airtableToken && airtableBaseId) {
+  airtableBase = new Airtable({ apiKey: airtableToken }).base(airtableBaseId);
+  base = airtableBase;
+} else {
+  console.warn('Missing Airtable environment variables, Airtable features disabled');
+}
 const usersTableName = 'Users';
 
 async function findUser(username) {
@@ -259,6 +268,6 @@ app.get('/community/groups/:groupId/posts', authenticate, (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
