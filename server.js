@@ -72,30 +72,40 @@ function authenticate(req, res, next) {
   next();
 }
 
-console.log('AIRTABLE_TOKEN:', airtableToken);
-console.log('AIRTABLE_BASE_ID:', airtableBaseId);
+// ⚙️ Log critical startup config
+console.log('PORT=', PORT);
+console.log('AIRTABLE_TOKEN set?', !!airtableToken);
+console.log('AIRTABLE_BASE_ID=', airtableBaseId);
 
 // ---- Routes ----
 app.get('/config', (req, res) => {
   res.json({ airtableToken, airtableBaseId });
 });
 
-app.post('/signup', async (req, res) => {
-  const { username, password } = req.body;
-  const exists = await findUser(username);
-  if (exists) return res.status(400).json({ success: false, message: 'User exists' });
-  await createUser(username, password);
-  res.json({ success: true });
+app.post('/signup', async (req, res, next) => {
+  try {
+    const { username, password } = req.body;
+    const exists = await findUser(username);
+    if (exists) return res.status(400).json({ success: false, message: 'User exists' });
+    await createUser(username, password);
+    res.json({ success: true });
+  } catch(err) {
+    next(err);
+  }
 });
 
-app.post('/login', async (req, res) => {
-  const { username, password } = req.body;
-  const user = await findUser(username);
-  if (!user) return res.status(404).json({ success: false, message: 'Not found' });
-  if (user.fields.Password !== password) {
-    return res.status(401).json({ success: false, message: 'Wrong password' });
+app.post('/login', async (req, res, next) => {
+  try {
+    const { username, password } = req.body;
+    const user = await findUser(username);
+    if (!user) return res.status(404).json({ success: false, message: 'Not found' });
+    if (user.fields.Password !== password) {
+      return res.status(401).json({ success: false, message: 'Wrong password' });
+    }
+    res.json({ success: true });
+  } catch(err) {
+    next(err);
   }
-  res.json({ success: true });
 });
 
 app.post('/saveTemplate', async (req, res) => {
@@ -276,4 +286,11 @@ app.get('/community/groups/:groupId/posts', authenticate, (req, res) => {
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Server running on port ${PORT}`);
+});
+
+// ────────────────────────────────────────────────────
+// Global error handler (catch unhandled exceptions)
+app.use((err, req, res, next) => {
+  console.error('💥 Uncaught server error:', err);
+  res.status(500).json({ error: 'Internal server error' });
 });
