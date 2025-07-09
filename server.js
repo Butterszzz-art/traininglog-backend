@@ -22,13 +22,14 @@ app.use(
 const PORT = process.env.PORT || 3000;
 const airtableToken = process.env.AIRTABLE_TOKEN?.trim();
 const airtableBaseId = process.env.AIRTABLE_BASE_ID?.trim();
+if (!airtableToken || !airtableBaseId) {
+  console.warn('Missing Airtable environment variables – disabling Airtable routes');
+}
 let airtableBase;
 let base;
 if (airtableToken && airtableBaseId) {
   airtableBase = new Airtable({ apiKey: airtableToken }).base(airtableBaseId);
   base = airtableBase;
-} else {
-  console.warn('Missing Airtable environment variables, Airtable features disabled');
 }
 const usersTableName = 'Users';
 
@@ -83,6 +84,9 @@ app.get('/config', (req, res) => {
 });
 
 app.post('/signup', async (req, res, next) => {
+  if (!airtableToken || !airtableBaseId) {
+    return res.status(503).json({ error: 'Airtable unavailable' });
+  }
   try {
     const { username, password } = req.body;
     const exists = await findUser(username);
@@ -95,6 +99,9 @@ app.post('/signup', async (req, res, next) => {
 });
 
 app.post('/login', async (req, res, next) => {
+  if (!airtableToken || !airtableBaseId) {
+    return res.status(503).json({ error: 'Airtable unavailable' });
+  }
   try {
     const { username, password } = req.body;
     const user = await findUser(username);
@@ -109,6 +116,9 @@ app.post('/login', async (req, res, next) => {
 });
 
 app.post('/saveTemplate', async (req, res) => {
+  if (!airtableToken || !airtableBaseId) {
+    return res.status(503).json({ error: 'Airtable unavailable' });
+  }
   const { username, templateName, templateData } = req.body;
   try {
     await airtableBase('Templates').create({
@@ -125,6 +135,9 @@ app.post('/saveTemplate', async (req, res) => {
 });
 
 app.get('/getTemplates', async (req, res) => {
+  if (!airtableToken || !airtableBaseId) {
+    return res.status(503).json({ error: 'Airtable unavailable' });
+  }
   const username = req.query.username;
   try {
     const records = await airtableBase('Templates').select({
@@ -143,6 +156,9 @@ app.get('/getTemplates', async (req, res) => {
 });
 
 app.post('/saveWorkout', async (req, res) => {
+  if (!airtableToken || !airtableBaseId) {
+    return res.status(503).json({ error: 'Airtable unavailable' });
+  }
   const { username, workout } = req.body;
   if (!username || !workout) return res.status(400).json({ error: 'Missing fields' });
   try {
@@ -160,6 +176,9 @@ app.post('/saveWorkout', async (req, res) => {
 });
 
 app.get('/getWorkouts', async (req, res) => {
+  if (!airtableToken || !airtableBaseId) {
+    return res.status(503).json({ error: 'Airtable unavailable' });
+  }
   const { username } = req.query;
   try {
     const records = await base('Workouts')
@@ -175,6 +194,9 @@ app.get('/getWorkouts', async (req, res) => {
 });
 
 app.post('/saveMacros', async (req, res) => {
+  if (!airtableToken || !airtableBaseId) {
+    return res.status(503).json({ error: 'Airtable unavailable' });
+  }
   const { username, targets } = req.body;
   try {
     await fetch('https://api.airtable.com/v0/appmjr4IgnEH72K1b/MacroTargets', {
@@ -201,6 +223,9 @@ app.post('/saveMacros', async (req, res) => {
 });
 
 app.get('/getMacros', async (req, res) => {
+  if (!airtableToken || !airtableBaseId) {
+    return res.status(503).json({ error: 'Airtable unavailable' });
+  }
   const username = req.query.username;
   try {
     const response = await fetch(
@@ -223,6 +248,9 @@ app.get('/getMacros', async (req, res) => {
 });
 
 app.post('/community/groups/:groupId/invite', authenticate, async (req, res) => {
+  if (!airtableToken || !airtableBaseId) {
+    return res.status(503).json({ error: 'Airtable unavailable' });
+  }
   const { groupId } = req.params;
   const { invitedUserId } = req.body || {};
   if (!invitedUserId) {
