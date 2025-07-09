@@ -11,9 +11,20 @@ const app = express();
 app.use(express.json());
 
 // enable CORS for the frontend application
+// allow additional origins via the CORS_ORIGINS env var
+const defaultOrigins = ['https://butterszzz-art.github.io'];
+const envOrigins = process.env.CORS_ORIGINS?.split(',').map(o => o.trim()).filter(Boolean) || [];
+const allowedOrigins = [...new Set([...defaultOrigins, ...envOrigins])];
+
 app.use(
   cors({
-    origin: ['https://butterszzz-art.github.io'],
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      console.warn('Blocked CORS origin:', origin);
+      callback(new Error('Not allowed by CORS'));
+    },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     credentials: true
   })
@@ -78,6 +89,7 @@ function authenticate(req, res, next) {
 console.log('PORT=', PORT);
 console.log('AIRTABLE_TOKEN set?', !!airtableToken);
 console.log('AIRTABLE_BASE_ID=', airtableBaseId);
+console.log('CORS allowed origins:', allowedOrigins);
 
 // ---- Routes ----
 app.get('/config', (req, res) => {
@@ -90,9 +102,11 @@ app.post('/signup', async (req, res, next) => {
   }
   try {
     const { username, password } = req.body;
+    console.log('Signup attempt:', username);
     const exists = await findUser(username);
     if (exists) return res.status(400).json({ success: false, message: 'User exists' });
     await createUser(username, password);
+    console.log('Signup success:', username);
     res.json({ success: true });
   } catch(err) {
     next(err);
@@ -105,11 +119,14 @@ app.post('/login', async (req, res, next) => {
   }
   try {
     const { username, password } = req.body;
+    console.log('Login attempt:', username);
     const user = await findUser(username);
     if (!user) return res.status(404).json({ success: false, message: 'Not found' });
     if (user.fields.Password !== password) {
+      console.warn('Wrong password for', username);
       return res.status(401).json({ success: false, message: 'Wrong password' });
     }
+    console.log('Login success for', username);
     res.json({ success: true });
   } catch(err) {
     next(err);
