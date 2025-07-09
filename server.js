@@ -21,7 +21,8 @@ app.use(
 
 const PORT = process.env.PORT || 3000;
 const airtableToken = process.env.AIRTABLE_TOKEN?.trim();
-const airtableBaseId = process.env.AIRTABLE_BASE_ID.trim();
+// Guard against undefined AIRTABLE_BASE_ID to avoid runtime errors
+const airtableBaseId = process.env.AIRTABLE_BASE_ID?.trim() || '';
 if (!airtableToken || !airtableBaseId) {
   console.warn('Missing Airtable environment variables – disabling Airtable routes');
 }
