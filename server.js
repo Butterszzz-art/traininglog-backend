@@ -10,6 +10,11 @@ const app = express();
 // parse JSON bodies
 app.use(express.json());
 
+// Example CORS setup allowing origins specified in the CORS_ORIGINS env var
+// const allowedOrigins = (process.env.CORS_ORIGINS || '').split(',');
+// app.use(cors({ origin: allowedOrigins }));
+// … the rest of your middleware/routes …
+
 // enable CORS for the frontend application
 // allow additional origins via the CORS_ORIGINS env var
 const defaultOrigins = ['https://butterszzz-art.github.io'];
