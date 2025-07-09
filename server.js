@@ -312,6 +312,11 @@ app.get('/community/groups/:groupId/posts', authenticate, (req, res) => {
   }
 });
 
+// healthcheck / root route
+app.get('/', (req, res) => {
+  res.status(200).send('🟢 TrainingLog backend is up and running');
+});
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
