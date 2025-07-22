@@ -83,6 +83,36 @@ const groups = {};
 const groupPosts = {};
 const sharedPrograms = {};
 
+// Sample data used when Airtable is not configured
+const sampleUserProfile = {
+  name: 'Sample User',
+  bio: 'Demo profile'
+};
+
+const sampleWorkouts = [
+  {
+    date: '2023-01-01',
+    exercises: [
+      { name: 'Bench Press', sets: [ { reps: 5, weight: 100 }, { reps: 5, weight: 100 } ] },
+      { name: 'Squat', sets: [ { reps: 5, weight: 150 } ] }
+    ]
+  },
+  {
+    date: '2023-01-03',
+    exercises: [
+      { name: 'Bench Press', sets: [ { reps: 5, weight: 105 }, { reps: 5, weight: 105 } ] },
+      { name: 'Deadlift', sets: [ { reps: 5, weight: 180 } ] }
+    ]
+  }
+];
+
+const sampleGroup = {
+  id: 'sample',
+  name: 'Sample Group',
+  description: 'Example training group',
+  members: ['demoUserA', 'demoUserB']
+};
+
 // ────────────────────────────────
 // Helper functions for leaderboard
 
@@ -146,6 +176,36 @@ function workoutVolume(workout) {
     }
   }
   return total;
+}
+
+function buildExerciseSummary(workouts) {
+  const summary = {};
+  for (const w of workouts) {
+    for (const ex of w.exercises || []) {
+      const name = ex.name || 'Unknown';
+      if (!summary[name]) summary[name] = { sets: 0, reps: 0, volume: 0 };
+      for (const s of ex.sets || []) {
+        const reps = Number(s.reps) || 0;
+        const weight = Number(s.weight) || 0;
+        summary[name].sets += 1;
+        summary[name].reps += reps;
+        summary[name].volume += reps * weight;
+      }
+    }
+  }
+  return summary;
+}
+
+function sampleWeeklyVolume(workouts) {
+  const map = {};
+  for (const w of workouts) {
+    if (!w.date) continue;
+    const wk = weekStart(w.date);
+    map[wk] = (map[wk] || 0) + workoutVolume(w);
+  }
+  return Object.entries(map)
+    .sort(([a], [b]) => new Date(a) - new Date(b))
+    .map(([week, volume]) => ({ week, volume }));
 }
 
 function weekStart(date) {
@@ -429,6 +489,70 @@ app.get('/leaderboard/weeklyVolume', async (req, res) => {
   } catch (err) {
     console.error('Failed to compute weekly volume:', err);
     res.status(500).json({ error: 'Failed to compute weekly volume' });
+  }
+});
+
+// ────────────────────────────────
+// Detailed stats endpoints
+
+app.get('/stats/user/:username', async (req, res) => {
+  const { username } = req.params;
+  const { start, end } = req.query;
+  try {
+    let profile = {};
+    let workouts = [];
+    let weeklyVolume = [];
+    if (airtableToken && airtableBaseId) {
+      const userRec = await findUser(username);
+      profile = userRec?.fields || { Username: username };
+      workouts = await fetchUserWorkouts(username, start, end);
+      weeklyVolume = await getWeeklyVolume(username, start, end);
+    } else {
+      profile = { ...sampleUserProfile, username };
+      workouts = sampleWorkouts;
+      weeklyVolume = sampleWeeklyVolume(sampleWorkouts);
+    }
+    const exerciseSummary = buildExerciseSummary(workouts);
+    res.json({ profile, workouts, exerciseSummary, weeklyVolume });
+  } catch (err) {
+    console.error('Failed to build user stats:', err);
+    res.status(500).json({ error: 'Failed to build user stats' });
+  }
+});
+
+app.get('/stats/group/:groupId', async (req, res) => {
+  const { groupId } = req.params;
+  const { start, end } = req.query;
+  try {
+    let group = groups[groupId];
+    if (!group) {
+      if (airtableToken && airtableBaseId) {
+        return res.status(404).json({ error: 'Group not found' });
+      }
+      group = sampleGroup;
+    }
+    const members = group.members || [];
+    const allWorkouts = [];
+    const contributorMap = {};
+    for (const u of members) {
+      let ws = [];
+      if (airtableToken && airtableBaseId) {
+        ws = await fetchUserWorkouts(u, start, end);
+      } else {
+        ws = sampleWorkouts;
+      }
+      allWorkouts.push(...ws);
+      contributorMap[u] = (contributorMap[u] || 0) + ws.reduce((t, w) => t + workoutVolume(w), 0);
+    }
+    const exerciseSummary = buildExerciseSummary(allWorkouts);
+    const weeklyVolume = sampleWeeklyVolume(allWorkouts);
+    const topContributors = Object.entries(contributorMap)
+      .sort((a, b) => b[1] - a[1])
+      .map(([user, volume]) => ({ user, volume }));
+    res.json({ group: { id: groupId, name: group.name, description: group.description }, topContributors, exerciseSummary, weeklyVolume });
+  } catch (err) {
+    console.error('Failed to build group stats:', err);
+    res.status(500).json({ error: 'Failed to build group stats' });
   }
 });
 
