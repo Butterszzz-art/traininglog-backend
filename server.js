@@ -83,6 +83,114 @@ const groups = {};
 const groupPosts = {};
 const sharedPrograms = {};
 
+// ────────────────────────────────
+// Helper functions for leaderboard
+
+async function fetchRecords(table, formula) {
+  const params = new URLSearchParams();
+  if (formula) params.append('filterByFormula', formula);
+  const url = `https://api.airtable.com/v0/${airtableBaseId}/${table}?${params.toString()}`;
+  const resp = await fetch(url, { headers: { Authorization: `Bearer ${airtableToken}` } });
+  if (!resp.ok) {
+    const text = await resp.text();
+    console.error('Airtable error:', text);
+    throw new Error('Airtable request failed');
+  }
+  const data = await resp.json();
+  return data.records || [];
+}
+
+async function fetchUserWorkouts(username, start, end) {
+  if (!airtableToken || !airtableBaseId) return [];
+  let formula = `{Username}='${username}'`;
+  if (start && end) {
+    formula = `AND({Username}='${username}', IS_AFTER({Date}, '${start}'), IS_BEFORE({Date}, '${end}'))`;
+  } else if (start) {
+    formula = `AND({Username}='${username}', IS_AFTER({Date}, '${start}'))`;
+  } else if (end) {
+    formula = `AND({Username}='${username}', IS_BEFORE({Date}, '${end}'))`;
+  }
+  const records = await fetchRecords('Workouts', formula);
+  return records.map(r => {
+    try { return JSON.parse(r.fields.WorkoutData); } catch { return {}; }
+  });
+}
+
+async function fetchUserStudy(username, start, end) {
+  if (!airtableToken || !airtableBaseId) return [];
+  let formula = `{Username}='${username}'`;
+  if (start && end) {
+    formula = `AND({Username}='${username}', IS_AFTER({Date}, '${start}'), IS_BEFORE({Date}, '${end}'))`;
+  }
+  const records = await fetchRecords('StudySessions', formula);
+  return records.map(r => ({ hours: Number(r.fields.Hours) || 0, date: r.fields.Date }));
+}
+
+async function fetchUserActivity(username, start, end) {
+  if (!airtableToken || !airtableBaseId) return [];
+  let formula = `{Username}='${username}'`;
+  if (start && end) {
+    formula = `AND({Username}='${username}', IS_AFTER({Date}, '${start}'), IS_BEFORE({Date}, '${end}'))`;
+  }
+  const records = await fetchRecords('ActivityLogs', formula);
+  return records.map(r => ({ steps: Number(r.fields.Steps) || 0, date: r.fields.Date }));
+}
+
+function workoutVolume(workout) {
+  if (!workout || !Array.isArray(workout.exercises)) return 0;
+  let total = 0;
+  for (const ex of workout.exercises) {
+    const sets = ex.sets || [];
+    for (const s of sets) {
+      total += (Number(s.reps) || 0) * (Number(s.weight) || 0);
+    }
+  }
+  return total;
+}
+
+function weekStart(date) {
+  const d = new Date(date);
+  const day = d.getUTCDay();
+  const diff = d.getUTCDate() - day + (day === 0 ? -6 : 1);
+  d.setUTCDate(diff);
+  d.setUTCHours(0, 0, 0, 0);
+  return d.toISOString().slice(0, 10);
+}
+
+async function getUserStats(username, start, end) {
+  const workouts = await fetchUserWorkouts(username, start, end);
+  const study = await fetchUserStudy(username, start, end);
+  const activity = await fetchUserActivity(username, start, end);
+
+  let volume = 0;
+  for (const w of workouts) volume += workoutVolume(w);
+
+  const hours = study.reduce((sum, s) => sum + s.hours, 0);
+  const steps = activity.reduce((sum, a) => sum + a.steps, 0);
+
+  return {
+    username,
+    workouts: workouts.length,
+    studyHours: hours,
+    activity: steps,
+    volume
+  };
+}
+
+async function getWeeklyVolume(username, start, end) {
+  const workouts = await fetchUserWorkouts(username, start, end);
+  const map = {};
+  for (const w of workouts) {
+    if (!w.date) continue;
+    const wk = weekStart(w.date);
+    map[wk] = (map[wk] || 0) + workoutVolume(w);
+  }
+  return Object.entries(map)
+    .sort(([a], [b]) => new Date(a) - new Date(b))
+    .map(([week, volume]) => ({ week, volume }));
+}
+
+
 function authenticate(req, res, next) {
   if (!req.headers.authorization) {
     return res.status(401).json({ error: 'Unauthorized' });
@@ -267,6 +375,60 @@ app.get('/getMacros', async (req, res) => {
   } catch (err) {
     console.error('Failed to fetch macros:', err);
     res.status(500).json({ error: true });
+  }
+});
+
+// ────────────────────────────────
+// Leaderboard endpoints
+
+app.get('/leaderboard/stats', async (req, res) => {
+  if (!airtableToken || !airtableBaseId) {
+    return res.status(503).json({ error: 'Airtable unavailable' });
+  }
+  const { username, groupId, start, end } = req.query;
+  try {
+    if (!username && !groupId) {
+      return res.status(400).json({ error: 'username or groupId required' });
+    }
+    if (groupId) {
+      const group = groups[groupId];
+      if (!group) return res.status(404).json({ error: 'Group not found' });
+      const results = await Promise.all(
+        (group.members || []).map(u => getUserStats(u, start, end))
+      );
+      return res.json({ groupId, stats: results });
+    }
+    const stats = await getUserStats(username, start, end);
+    res.json({ stats });
+  } catch (err) {
+    console.error('Failed to build leaderboard stats:', err);
+    res.status(500).json({ error: 'Failed to build leaderboard stats' });
+  }
+});
+
+app.get('/leaderboard/weeklyVolume', async (req, res) => {
+  if (!airtableToken || !airtableBaseId) {
+    return res.status(503).json({ error: 'Airtable unavailable' });
+  }
+  const { username, groupId, start, end } = req.query;
+  try {
+    if (!username && !groupId) {
+      return res.status(400).json({ error: 'username or groupId required' });
+    }
+    if (groupId) {
+      const group = groups[groupId];
+      if (!group) return res.status(404).json({ error: 'Group not found' });
+      const out = {};
+      for (const u of group.members || []) {
+        out[u] = await getWeeklyVolume(u, start, end);
+      }
+      return res.json({ groupId, volume: out });
+    }
+    const volume = await getWeeklyVolume(username, start, end);
+    res.json({ username, volume });
+  } catch (err) {
+    console.error('Failed to compute weekly volume:', err);
+    res.status(500).json({ error: 'Failed to compute weekly volume' });
   }
 });
 
