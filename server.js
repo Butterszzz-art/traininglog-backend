@@ -106,6 +106,57 @@ const sampleWorkouts = [
   }
 ];
 
+// Build index for sample workouts to allow efficient filtering
+const sampleWorkoutIndex = buildWorkoutIndex(sampleWorkouts);
+
+function buildWorkoutIndex(workouts) {
+  const byDate = new Map();
+  const byExercise = new Map();
+  for (const w of workouts) {
+    if (w.date) {
+      if (!byDate.has(w.date)) byDate.set(w.date, []);
+      byDate.get(w.date).push(w);
+    }
+    for (const ex of w.exercises || []) {
+      const id = ex.name || 'Unknown';
+      if (!byExercise.has(id)) byExercise.set(id, []);
+      byExercise.get(id).push(w);
+    }
+  }
+  return { byDate, byExercise };
+}
+
+function filterIndexedWorkouts(index, start, end) {
+  const out = [];
+  for (const [date, wos] of index.byDate.entries()) {
+    if ((!start || date >= start) && (!end || date <= end)) {
+      out.push(...wos);
+    }
+  }
+  return out;
+}
+
+function parseTimeframe(tf) {
+  if (!tf) return {};
+  const now = new Date();
+  let start;
+  switch (tf) {
+    case 'weekly':
+      start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      break;
+    case 'monthly':
+      start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      break;
+    case 'all-time':
+      return {};
+    default:
+      return null;
+  }
+  const s = start.toISOString().slice(0, 10);
+  const e = now.toISOString().slice(0, 10);
+  return { start: s, end: e };
+}
+
 const sampleGroup = {
   id: 'sample',
   name: 'Sample Group',
@@ -223,7 +274,17 @@ async function getUserStats(username, start, end) {
   const activity = await fetchUserActivity(username, start, end);
 
   let volume = 0;
-  for (const w of workouts) volume += workoutVolume(w);
+  let sets = 0;
+  let reps = 0;
+  for (const w of workouts) {
+    volume += workoutVolume(w);
+    for (const ex of w.exercises || []) {
+      sets += (ex.sets || []).length;
+      for (const s of ex.sets || []) {
+        reps += Number(s.reps) || 0;
+      }
+    }
+  }
 
   const hours = study.reduce((sum, s) => sum + s.hours, 0);
   const steps = activity.reduce((sum, a) => sum + a.steps, 0);
@@ -233,7 +294,9 @@ async function getUserStats(username, start, end) {
     workouts: workouts.length,
     studyHours: hours,
     activity: steps,
-    volume
+    volume,
+    sets,
+    reps
   };
 }
 
@@ -445,20 +508,34 @@ app.get('/leaderboard/stats', async (req, res) => {
   if (!airtableToken || !airtableBaseId) {
     return res.status(503).json({ error: 'Airtable unavailable' });
   }
-  const { username, groupId, start, end } = req.query;
+  const { username, groupId, start, end, timeframe, sortBy } = req.query;
+  let range = { start, end };
+  if (timeframe) {
+    const tf = parseTimeframe(timeframe);
+    if (!tf) {
+      return res.status(400).json({ error: 'Invalid timeframe' });
+    }
+    range = tf;
+  }
   try {
     if (!username && !groupId) {
       return res.status(400).json({ error: 'username or groupId required' });
+    }
+    const allowedSort = ['volume', 'sets', 'reps'];
+    const sortField = sortBy && allowedSort.includes(sortBy) ? sortBy : 'volume';
+    if (sortBy && !allowedSort.includes(sortBy)) {
+      return res.status(400).json({ error: 'Invalid sortBy value' });
     }
     if (groupId) {
       const group = groups[groupId];
       if (!group) return res.status(404).json({ error: 'Group not found' });
       const results = await Promise.all(
-        (group.members || []).map(u => getUserStats(u, start, end))
+        (group.members || []).map(u => getUserStats(u, range.start, range.end))
       );
+      results.sort((a, b) => b[sortField] - a[sortField]);
       return res.json({ groupId, stats: results });
     }
-    const stats = await getUserStats(username, start, end);
+    const stats = await getUserStats(username, range.start, range.end);
     res.json({ stats });
   } catch (err) {
     console.error('Failed to build leaderboard stats:', err);
@@ -470,7 +547,15 @@ app.get('/leaderboard/weeklyVolume', async (req, res) => {
   if (!airtableToken || !airtableBaseId) {
     return res.status(503).json({ error: 'Airtable unavailable' });
   }
-  const { username, groupId, start, end } = req.query;
+  const { username, groupId, start, end, timeframe } = req.query;
+  let range = { start, end };
+  if (timeframe) {
+    const tf = parseTimeframe(timeframe);
+    if (!tf) {
+      return res.status(400).json({ error: 'Invalid timeframe' });
+    }
+    range = tf;
+  }
   try {
     if (!username && !groupId) {
       return res.status(400).json({ error: 'username or groupId required' });
@@ -480,11 +565,11 @@ app.get('/leaderboard/weeklyVolume', async (req, res) => {
       if (!group) return res.status(404).json({ error: 'Group not found' });
       const out = {};
       for (const u of group.members || []) {
-        out[u] = await getWeeklyVolume(u, start, end);
+        out[u] = await getWeeklyVolume(u, range.start, range.end);
       }
       return res.json({ groupId, volume: out });
     }
-    const volume = await getWeeklyVolume(username, start, end);
+    const volume = await getWeeklyVolume(username, range.start, range.end);
     res.json({ username, volume });
   } catch (err) {
     console.error('Failed to compute weekly volume:', err);
@@ -497,7 +582,15 @@ app.get('/leaderboard/weeklyVolume', async (req, res) => {
 
 app.get('/stats/user/:username', async (req, res) => {
   const { username } = req.params;
-  const { start, end } = req.query;
+  const { start, end, timeframe } = req.query;
+  let range = { start, end };
+  if (timeframe) {
+    const tf = parseTimeframe(timeframe);
+    if (!tf) {
+      return res.status(400).json({ error: 'Invalid timeframe' });
+    }
+    range = tf;
+  }
   try {
     let profile = {};
     let workouts = [];
@@ -505,12 +598,12 @@ app.get('/stats/user/:username', async (req, res) => {
     if (airtableToken && airtableBaseId) {
       const userRec = await findUser(username);
       profile = userRec?.fields || { Username: username };
-      workouts = await fetchUserWorkouts(username, start, end);
-      weeklyVolume = await getWeeklyVolume(username, start, end);
+      workouts = await fetchUserWorkouts(username, range.start, range.end);
+      weeklyVolume = await getWeeklyVolume(username, range.start, range.end);
     } else {
       profile = { ...sampleUserProfile, username };
-      workouts = sampleWorkouts;
-      weeklyVolume = sampleWeeklyVolume(sampleWorkouts);
+      workouts = filterIndexedWorkouts(sampleWorkoutIndex, range.start, range.end);
+      weeklyVolume = sampleWeeklyVolume(workouts);
     }
     const exerciseSummary = buildExerciseSummary(workouts);
     res.json({ profile, workouts, exerciseSummary, weeklyVolume });
@@ -522,7 +615,15 @@ app.get('/stats/user/:username', async (req, res) => {
 
 app.get('/stats/group/:groupId', async (req, res) => {
   const { groupId } = req.params;
-  const { start, end } = req.query;
+  const { start, end, timeframe } = req.query;
+  let range = { start, end };
+  if (timeframe) {
+    const tf = parseTimeframe(timeframe);
+    if (!tf) {
+      return res.status(400).json({ error: 'Invalid timeframe' });
+    }
+    range = tf;
+  }
   try {
     let group = groups[groupId];
     if (!group) {
@@ -537,9 +638,9 @@ app.get('/stats/group/:groupId', async (req, res) => {
     for (const u of members) {
       let ws = [];
       if (airtableToken && airtableBaseId) {
-        ws = await fetchUserWorkouts(u, start, end);
+        ws = await fetchUserWorkouts(u, range.start, range.end);
       } else {
-        ws = sampleWorkouts;
+        ws = filterIndexedWorkouts(sampleWorkoutIndex, range.start, range.end);
       }
       allWorkouts.push(...ws);
       contributorMap[u] = (contributorMap[u] || 0) + ws.reduce((t, w) => t + workoutVolume(w), 0);
