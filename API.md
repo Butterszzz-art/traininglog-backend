@@ -38,3 +38,33 @@ Returns group info, top contributors, exercise summary, and weekly volume aggreg
 ### Notes on Performance
 - Sample data is indexed by workout date and exercise name to speed up filtering when Airtable is unavailable.
 
+## Workout Logging
+
+### `POST /saveWorkout`
+Body:
+```json
+{
+  "username": "userId",
+  "workout": {
+    "date": "YYYY-MM-DD",
+    "exercises": [
+      {
+        "name": "Bench Press",
+        "dropset": false,
+        "restPause": false,
+        "sets": [
+          { "reps": 5, "weight": 100, "dropset": false, "restPause": false }
+        ]
+      }
+    ]
+  }
+}
+```
+`dropset` and `restPause` flags are optional for exercises and sets and default to `false` when omitted.
+
+### `GET /getWorkouts`
+Parameters:
+- `username`
+
+Returns an array of workouts with the same structure as above. Any missing technique flags will be returned as `false` for backward compatibility.
+
