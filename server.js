@@ -93,15 +93,33 @@ const sampleWorkouts = [
   {
     date: '2023-01-01',
     exercises: [
-      { name: 'Bench Press', sets: [ { reps: 5, weight: 100 }, { reps: 5, weight: 100 } ] },
-      { name: 'Squat', sets: [ { reps: 5, weight: 150 } ] }
+      {
+        name: 'Bench Press',
+        sets: [
+          { reps: 5, weight: 100, dropset: false, restPause: false },
+          { reps: 5, weight: 100, dropset: false, restPause: false }
+        ]
+      },
+      {
+        name: 'Squat',
+        sets: [ { reps: 5, weight: 150, dropset: false, restPause: false } ]
+      }
     ]
   },
   {
     date: '2023-01-03',
     exercises: [
-      { name: 'Bench Press', sets: [ { reps: 5, weight: 105 }, { reps: 5, weight: 105 } ] },
-      { name: 'Deadlift', sets: [ { reps: 5, weight: 180 } ] }
+      {
+        name: 'Bench Press',
+        sets: [
+          { reps: 5, weight: 105, dropset: false, restPause: false },
+          { reps: 5, weight: 105, dropset: false, restPause: false }
+        ]
+      },
+      {
+        name: 'Deadlift',
+        sets: [ { reps: 5, weight: 180, dropset: false, restPause: false } ]
+      }
     ]
   }
 ];
@@ -192,9 +210,10 @@ async function fetchUserWorkouts(username, start, end) {
     formula = `AND({Username}='${username}', IS_BEFORE({Date}, '${end}'))`;
   }
   const records = await fetchRecords('Workouts', formula);
-  return records.map(r => {
+  const workouts = records.map(r => {
     try { return JSON.parse(r.fields.WorkoutData); } catch { return {}; }
   });
+  return addTechniqueDefaults(workouts);
 }
 
 async function fetchUserStudy(username, start, end) {
@@ -215,6 +234,22 @@ async function fetchUserActivity(username, start, end) {
   }
   const records = await fetchRecords('ActivityLogs', formula);
   return records.map(r => ({ steps: Number(r.fields.Steps) || 0, date: r.fields.Date }));
+}
+
+function addTechniqueDefaults(workouts) {
+  return (workouts || []).map(w => ({
+    ...w,
+    exercises: (w.exercises || []).map(ex => ({
+      ...ex,
+      dropset: ex.dropset ?? false,
+      restPause: ex.restPause ?? false,
+      sets: (ex.sets || []).map(s => ({
+        ...s,
+        dropset: s.dropset ?? false,
+        restPause: s.restPause ?? false
+      }))
+    }))
+  }));
 }
 
 function workoutVolume(workout) {
@@ -416,10 +451,11 @@ app.post('/saveWorkout', async (req, res) => {
   const { username, workout } = req.body;
   if (!username || !workout) return res.status(400).json({ error: 'Missing fields' });
   try {
+    const sanitized = addTechniqueDefaults([workout])[0];
     await base('Workouts').create({
       fields: {
         Username: username,
-        WorkoutData: JSON.stringify(workout)
+        WorkoutData: JSON.stringify(sanitized)
       }
     });
     res.json({ success: true });
@@ -440,7 +476,7 @@ app.get('/getWorkouts', async (req, res) => {
       .all();
 
     const workouts = records.map(r => JSON.parse(r.fields.WorkoutData));
-    res.json({ workouts });
+    res.json({ workouts: addTechniqueDefaults(workouts) });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Error fetching workouts' });
@@ -602,7 +638,9 @@ app.get('/stats/user/:username', async (req, res) => {
       weeklyVolume = await getWeeklyVolume(username, range.start, range.end);
     } else {
       profile = { ...sampleUserProfile, username };
-      workouts = filterIndexedWorkouts(sampleWorkoutIndex, range.start, range.end);
+      workouts = addTechniqueDefaults(
+        filterIndexedWorkouts(sampleWorkoutIndex, range.start, range.end)
+      );
       weeklyVolume = sampleWeeklyVolume(workouts);
     }
     const exerciseSummary = buildExerciseSummary(workouts);
@@ -640,7 +678,9 @@ app.get('/stats/group/:groupId', async (req, res) => {
       if (airtableToken && airtableBaseId) {
         ws = await fetchUserWorkouts(u, range.start, range.end);
       } else {
-        ws = filterIndexedWorkouts(sampleWorkoutIndex, range.start, range.end);
+        ws = addTechniqueDefaults(
+          filterIndexedWorkouts(sampleWorkoutIndex, range.start, range.end)
+        );
       }
       allWorkouts.push(...ws);
       contributorMap[u] = (contributorMap[u] || 0) + ws.reduce((t, w) => t + workoutVolume(w), 0);
