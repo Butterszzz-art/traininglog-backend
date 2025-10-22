@@ -20,6 +20,19 @@ app.use(cors({
   credentials: true
 }));
 
+// Minimal runtime config for the frontend (no secrets!)
+app.get('/config', (_req, res) => {
+  res.set('Cache-Control', 'public, max-age=300'); // 5 min cache
+  res.json({
+    serverUrl: process.env.PUBLIC_SERVER_URL || 'https://traininglog-backend.onrender.com',
+    airtable: {
+      baseId: process.env.AIRTABLE_BASE_ID || null, // not secret
+      table: process.env.AIRTABLE_TABLE || 'Workouts',
+      tokenProvided: Boolean(process.env.AIRTABLE_API_KEY) // never return the token itself
+    }
+  });
+});
+
 // --- Airtable setup ---
 if (!process.env.AIRTABLE_API_KEY || !process.env.AIRTABLE_BASE_ID) {
   console.warn('[WARN] Missing AIRTABLE_API_KEY or AIRTABLE_BASE_ID env vars.');
