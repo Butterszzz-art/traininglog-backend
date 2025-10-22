@@ -24,8 +24,10 @@ app.use(cors({
 if (!process.env.AIRTABLE_API_KEY || !process.env.AIRTABLE_BASE_ID) {
   console.warn('[WARN] Missing AIRTABLE_API_KEY or AIRTABLE_BASE_ID env vars.');
 }
-const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY })
-  .base(process.env.AIRTABLE_BASE_ID);
+const airtableEnabled = Boolean(process.env.AIRTABLE_API_KEY && process.env.AIRTABLE_BASE_ID);
+const base = airtableEnabled
+  ? new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID)
+  : null;
 
 const TABLE_NAME = process.env.AIRTABLE_TABLE || 'Workouts';
 
@@ -63,6 +65,10 @@ app.use((req, _res, next) => {
 
 // Create workout (called when the Resistance Log reaches its limit)
 app.post('/workouts', async (req, res) => {
+  if (!airtableEnabled) {
+    return res.json({ message: 'Workout saved!', data: req.body });
+  }
+
   try {
     const workout = req.body || {};
     const fields = mapWorkoutToFields(workout);
@@ -78,6 +84,10 @@ app.post('/workouts', async (req, res) => {
 
 // List workouts (for Log History tab)
 app.get('/workouts', async (_req, res) => {
+  if (!airtableEnabled) {
+    return res.json([]);
+  }
+
   try {
     const records = await base(TABLE_NAME)
       .select({
