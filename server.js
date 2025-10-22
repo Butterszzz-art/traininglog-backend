@@ -120,6 +120,37 @@ app.get('/workouts', async (_req, res) => {
 // Health check (Render)
 app.get('/healthz', (_req, res) => res.send('ok'));
 
+// GET /templates?username=29796
+app.get('/templates', async (req, res) => {
+  try {
+    const username = req.query.username || '';
+    if (!username) return res.status(400).json({ error: 'username required' });
+
+    if (!airtableEnabled) {
+      return res.json({ items: [] });
+    }
+
+    const records = await base('Templates')
+      .select({
+        filterByFormula: `({Username}='${username}')`,
+        pageSize: 100,
+        sort: [{ field: 'Name', direction: 'asc' }]
+      })
+      .all();
+
+    const items = records.map(r => ({
+      id: r.id,
+      name: r.get('Name') || '',
+      username: r.get('Username') || ''
+    }));
+
+    res.json({ items });
+  } catch (e) {
+    console.error('GET /templates failed:', e);
+    res.status(500).json({ error: 'Failed to load templates' });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`API listening on :${PORT}`);
