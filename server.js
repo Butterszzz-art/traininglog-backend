@@ -43,6 +43,7 @@ const base = airtableEnabled
   : null;
 
 const TABLE_NAME = process.env.AIRTABLE_TABLE || 'Workouts';
+const DAYS_TABLE = process.env.AIRTABLE_DAYS_TABLE || 'Days';
 
 // You can adapt field names here to your base:
 function mapWorkoutToFields(w) {
@@ -68,6 +69,40 @@ function mapRecordToWorkout(rec) {
     units: f.Units || '',
     sets
   };
+}
+
+function toFieldsFromDay(day) {
+  const f = { Date: day.date };
+  if (day.workout) f.WorkoutJson = JSON.stringify(day.workout);
+  if (day.bodyweight) {
+    f.BodyweightValue = day.bodyweight.value ?? null;
+    f.BodyweightUnit = day.bodyweight.unit ?? null;
+  }
+  if (day.cardio) f.CardioJson = JSON.stringify(day.cardio);
+  if (day.macros) f.MacrosJson = JSON.stringify(day.macros);
+  return f;
+}
+
+function fromRecordToDay(rec) {
+  const f = rec.fields || {};
+  const safeParse = (s) => { try { return s ? JSON.parse(s) : undefined; } catch { return undefined; } };
+  return {
+    id: rec.id,
+    date: f.Date,
+    workout: safeParse(f.WorkoutJson),
+    bodyweight: (f.BodyweightValue || f.BodyweightUnit) ? {
+      value: f.BodyweightValue ?? undefined,
+      unit: f.BodyweightUnit ?? undefined
+    } : undefined,
+    cardio: safeParse(f.CardioJson),
+    macros: safeParse(f.MacrosJson)
+  };
+}
+
+async function findDayRecordId(dateKey) {
+  const formula = `{Date} = '${dateKey}'`;
+  const found = await base(DAYS_TABLE).select({ filterByFormula: formula, maxRecords: 1 }).firstPage();
+  return found[0]?.id || null;
 }
 
 // Fake auth stub (replace with real auth later)
@@ -148,6 +183,67 @@ app.get('/templates', async (req, res) => {
   } catch (e) {
     console.error('GET /templates failed:', e);
     res.status(500).json({ error: 'Failed to load templates' });
+  }
+});
+
+app.post('/days/upsert', async (req, res) => {
+  if (!airtableEnabled) {
+    return res.status(501).json({ error: 'Airtable is not configured' });
+  }
+
+  try {
+    const incoming = req.body || {};
+    if (!incoming.date) return res.status(400).json({ error: 'date required (YYYY-MM-DD)' });
+
+    const recId = await findDayRecordId(incoming.date);
+    if (recId) {
+      const existingRec = await base(DAYS_TABLE).find(recId);
+      const existingDay = fromRecordToDay(existingRec);
+
+      const merged = {
+        date: incoming.date,
+        workout: incoming.workout ?? existingDay.workout,
+        bodyweight: incoming.bodyweight ?? existingDay.bodyweight,
+        cardio: incoming.cardio ?? existingDay.cardio,
+        macros: incoming.macros ?? existingDay.macros
+      };
+
+      const updated = await base(DAYS_TABLE).update([
+        { id: recId, fields: toFieldsFromDay(merged) }
+      ]);
+      return res.json(fromRecordToDay(updated[0]));
+    }
+
+    const created = await base(DAYS_TABLE).create([{ fields: toFieldsFromDay(incoming) }]);
+    return res.status(201).json(fromRecordToDay(created[0]));
+  } catch (e) {
+    console.error('POST /days/upsert failed:', e);
+    res.status(500).json({ error: 'Failed to upsert day' });
+  }
+});
+
+app.get('/days', async (req, res) => {
+  if (!airtableEnabled) {
+    return res.json({ items: [] });
+  }
+
+  try {
+    const { from, to, limit } = req.query;
+    const filter = [];
+    if (from) filter.push(`{Date} >= '${from}'`);
+    if (to) filter.push(`{Date} <= '${to}'`);
+    const filterByFormula = filter.length ? filter.join(' AND ') : undefined;
+
+    const records = await base(DAYS_TABLE).select({
+      ...(filterByFormula ? { filterByFormula } : {}),
+      sort: [{ field: 'Date', direction: 'desc' }],
+      pageSize: Math.min(Number(limit || 50), 100)
+    }).all();
+
+    res.json({ items: records.map(fromRecordToDay) });
+  } catch (e) {
+    console.error('GET /days failed:', e);
+    res.status(500).json({ error: 'Failed to load days' });
   }
 });
 
