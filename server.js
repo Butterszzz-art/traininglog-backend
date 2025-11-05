@@ -105,7 +105,20 @@ async function findDayRecordId(dateKey) {
   return found[0]?.id || null;
 }
 
-// Fake auth stub (replace with real auth later)
+// Simple auth stub: create /login endpoint for demonstration
+app.post('/login', async (req, res) => {
+  const { username, password } = req.body || {};
+  if (!username || !password) {
+    return res.status(400).json({ success: false, message: 'Missing credentials.' });
+  }
+  // TODO: replace with real authentication logic
+  if (password === 'demo') {
+    return res.json({ success: true, username });
+  }
+  return res.status(401).json({ success: false, message: 'Invalid credentials.' });
+});
+
+// Keep a fake user on every request
 app.use((req, _res, next) => {
   req.user = { id: 'demo-user' };
   next();
