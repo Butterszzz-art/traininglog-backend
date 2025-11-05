@@ -6,7 +6,8 @@ const app = express();
 app.use(express.json());
 
 // Allow your GitHub Pages origin (comma-separate for more)
-const allowed = (process.env.CORS_ORIGINS ?? '')
+const defaultOrigins = 'https://butterszzz-art.github.io'; // add your frontend
+const allowed = (process.env.CORS_ORIGINS ?? defaultOrigins)
   .split(',')
   .map(s => s.trim())
   .filter(Boolean);
