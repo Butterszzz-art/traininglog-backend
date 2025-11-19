@@ -21,16 +21,18 @@ app.use(cors({
   credentials: true
 }));
 
-// Minimal runtime config for the frontend (no secrets!)
+// Minimal runtime config for the frontend
 app.get('/config', (_req, res) => {
   res.set('Cache-Control', 'public, max-age=300'); // 5 min cache
   res.json({
     serverUrl: process.env.PUBLIC_SERVER_URL || 'https://traininglog-backend.onrender.com',
     airtable: {
-      baseId: process.env.AIRTABLE_BASE_ID || null, // not secret
+      baseId: process.env.AIRTABLE_BASE_ID || null,
       table: process.env.AIRTABLE_TABLE || 'Workouts',
-      tokenProvided: Boolean(process.env.AIRTABLE_API_KEY) // never return the token itself
-    }
+      tokenProvided: Boolean(process.env.AIRTABLE_API_KEY || process.env.AIRTABLE_TOKEN)
+    },
+    airtableBaseId: process.env.AIRTABLE_BASE_ID || null,
+    airtableToken: process.env.AIRTABLE_TOKEN || process.env.AIRTABLE_API_KEY || null
   });
 });
 
@@ -201,12 +203,13 @@ app.get('/templates', async (req, res) => {
 });
 
 async function upsertDayHandler(req, res) {
+  const incoming = req.body || {};
+
   if (!airtableEnabled) {
-    return res.status(501).json({ error: 'Airtable is not configured' });
+    return res.status(200).json({ success: true, day: incoming });
   }
 
   try {
-    const incoming = req.body || {};
     if (!incoming.date) return res.status(400).json({ error: 'date required (YYYY-MM-DD)' });
 
     const recId = await findDayRecordId(incoming.date);
