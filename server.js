@@ -200,7 +200,7 @@ app.get('/templates', async (req, res) => {
   }
 });
 
-app.post('/days/upsert', async (req, res) => {
+async function upsertDayHandler(req, res) {
   if (!airtableEnabled) {
     return res.status(501).json({ error: 'Airtable is not configured' });
   }
@@ -234,7 +234,10 @@ app.post('/days/upsert', async (req, res) => {
     console.error('POST /days/upsert failed:', e);
     res.status(500).json({ error: 'Failed to upsert day' });
   }
-});
+}
+
+app.post('/days/upsert', upsertDayHandler);
+app.post('/days', upsertDayHandler);
 
 app.get('/days', async (req, res) => {
   if (!airtableEnabled) {
