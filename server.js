@@ -3,7 +3,6 @@ const cors = require('cors');
 const Airtable = require('airtable');
 
 const app = express();
-app.use(express.json());
 
 const airtableToken = process.env.AIRTABLE_TOKEN || process.env.AIRTABLE_API_KEY || null;
 const savedWorkouts = [];
@@ -15,14 +14,31 @@ const allowed = (process.env.CORS_ORIGINS ?? defaultOrigins)
   .map(s => s.trim())
   .filter(Boolean);
 
+const allowAll = allowed.length === 0;
+const allowedSet = new Set(allowed);
+
 app.use(cors({
   origin(origin, cb) {
-    if (!origin) return cb(null, true);          // same-origin / curl
-    if (allowed.length === 0) return cb(null, true); // dev: allow all if not configured
-    return cb(null, allowed.includes(origin));
+    // Allow curl / same-origin requests with no Origin header
+    if (!origin) return cb(null, true);
+
+    if (allowAll) return cb(null, true);
+
+    try {
+      const normalizedOrigin = new URL(origin).origin;
+      if (allowedSet.has(normalizedOrigin)) return cb(null, true);
+
+      console.warn(`Blocked CORS origin: ${origin}`);
+      return cb(null, false);
+    } catch (e) {
+      console.warn('Failed to parse Origin header', { origin, error: e });
+      return cb(null, false);
+    }
   },
   credentials: true
 }));
+
+app.use(express.json());
 
 // Minimal runtime config for the frontend
 app.get('/config', (_req, res) => {
