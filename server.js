@@ -192,10 +192,16 @@ app.get('/templates', async (req, res) => {
   const username = (req.query.username || '').trim();
   if (!username) return res.status(400).json({ error: 'username required' });
 
+
   if (!airtableEnabled) {
     console.error('GET /templates unavailable: Airtable not configured', { username });
     return res.status(503).json({ error: 'Airtable is not configured' });
   }
+
+    if (!airtableEnabled) {
+      return res.json([]);
+    }
+
 
   try {
     const records = await base('Templates')
@@ -212,11 +218,15 @@ app.get('/templates', async (req, res) => {
       username: r.get('Username') || ''
     }));
 
+
     if (items.length === 0) {
       return res.status(404).json({ error: 'No templates found for user', username });
     }
 
     res.json({ items });
+
+    res.json(items);
+
   } catch (e) {
     const statusCode = e?.statusCode;
     const airtableMessage = e?.message || 'Unknown Airtable error';
