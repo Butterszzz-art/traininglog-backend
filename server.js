@@ -194,7 +194,7 @@ app.get('/templates', async (req, res) => {
     if (!username) return res.status(400).json({ error: 'username required' });
 
     if (!airtableEnabled) {
-      return res.json({ items: [] });
+      return res.json([]);
     }
 
     const records = await base('Templates')
@@ -211,7 +211,7 @@ app.get('/templates', async (req, res) => {
       username: r.get('Username') || ''
     }));
 
-    res.json({ items });
+    res.json(items);
   } catch (e) {
     console.error('GET /templates failed:', e);
     res.status(500).json({ error: 'Failed to load templates' });
