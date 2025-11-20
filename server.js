@@ -5,6 +5,9 @@ const Airtable = require('airtable');
 const app = express();
 app.use(express.json());
 
+const airtableToken = process.env.AIRTABLE_TOKEN || process.env.AIRTABLE_API_KEY || null;
+const savedWorkouts = [];
+
 // Allow your GitHub Pages origin (comma-separate for more)
 const defaultOrigins = 'https://butterszzz-art.github.io'; // add your frontend
 const allowed = (process.env.CORS_ORIGINS ?? defaultOrigins)
@@ -23,26 +26,39 @@ app.use(cors({
 
 // Minimal runtime config for the frontend
 app.get('/config', (_req, res) => {
-  res.set('Cache-Control', 'public, max-age=300'); // 5 min cache
   res.json({
-    serverUrl: process.env.PUBLIC_SERVER_URL || 'https://traininglog-backend.onrender.com',
-    airtable: {
-      baseId: process.env.AIRTABLE_BASE_ID || null,
-      table: process.env.AIRTABLE_TABLE || 'Workouts',
-      tokenProvided: Boolean(process.env.AIRTABLE_API_KEY || process.env.AIRTABLE_TOKEN)
-    },
     airtableBaseId: process.env.AIRTABLE_BASE_ID || null,
-    airtableToken: process.env.AIRTABLE_TOKEN || process.env.AIRTABLE_API_KEY || null
+    airtableToken
   });
 });
 
+app.post('/saveWorkout', (req, res) => {
+  const { username, workout } = req.body || {};
+
+  if (!username || !workout) {
+    return res.status(400).json({ success: false, message: 'username and workout are required.' });
+  }
+
+  const entry = {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    username,
+    workout,
+    savedAt: new Date().toISOString()
+  };
+
+  savedWorkouts.push(entry);
+  console.log('Workout saved:', entry);
+
+  res.json({ success: true });
+});
+
 // --- Airtable setup ---
-if (!process.env.AIRTABLE_API_KEY || !process.env.AIRTABLE_BASE_ID) {
-  console.warn('[WARN] Missing AIRTABLE_API_KEY or AIRTABLE_BASE_ID env vars.');
+if (!airtableToken || !process.env.AIRTABLE_BASE_ID) {
+  console.warn('[WARN] Missing AIRTABLE token or AIRTABLE_BASE_ID env vars.');
 }
-const airtableEnabled = Boolean(process.env.AIRTABLE_API_KEY && process.env.AIRTABLE_BASE_ID);
+const airtableEnabled = Boolean(airtableToken && process.env.AIRTABLE_BASE_ID);
 const base = airtableEnabled
-  ? new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID)
+  ? new Airtable({ apiKey: airtableToken }).base(process.env.AIRTABLE_BASE_ID)
   : null;
 
 const TABLE_NAME = process.env.AIRTABLE_TABLE || 'Workouts';
