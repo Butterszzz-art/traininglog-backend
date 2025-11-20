@@ -198,10 +198,6 @@ app.get('/templates', async (req, res) => {
     return res.status(503).json({ error: 'Airtable is not configured' });
   }
 
-    if (!airtableEnabled) {
-      return res.json([]);
-    }
-
 
   try {
     const records = await base('Templates')
@@ -224,8 +220,6 @@ app.get('/templates', async (req, res) => {
     }
 
     res.json({ items });
-
-    res.json(items);
 
   } catch (e) {
     const statusCode = e?.statusCode;
