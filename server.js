@@ -189,14 +189,15 @@ app.get('/healthz', (_req, res) => res.send('ok'));
 
 // GET /templates?username=29796
 app.get('/templates', async (req, res) => {
+  const username = (req.query.username || '').trim();
+  if (!username) return res.status(400).json({ error: 'username required' });
+
+  if (!airtableEnabled) {
+    console.error('GET /templates unavailable: Airtable not configured', { username });
+    return res.status(503).json({ error: 'Airtable is not configured' });
+  }
+
   try {
-    const username = req.query.username || '';
-    if (!username) return res.status(400).json({ error: 'username required' });
-
-    if (!airtableEnabled) {
-      return res.json({ items: [] });
-    }
-
     const records = await base('Templates')
       .select({
         filterByFormula: `({Username}='${username}')`,
@@ -211,10 +212,27 @@ app.get('/templates', async (req, res) => {
       username: r.get('Username') || ''
     }));
 
+    if (items.length === 0) {
+      return res.status(404).json({ error: 'No templates found for user', username });
+    }
+
     res.json({ items });
   } catch (e) {
-    console.error('GET /templates failed:', e);
-    res.status(500).json({ error: 'Failed to load templates' });
+    const statusCode = e?.statusCode;
+    const airtableMessage = e?.message || 'Unknown Airtable error';
+    console.error('GET /templates failed:', { username, airtableMessage, statusCode, error: e });
+
+    let status = 500;
+    let errorMessage = 'Failed to load templates';
+    if (statusCode >= 400 && statusCode < 500) {
+      status = statusCode;
+      errorMessage = 'Airtable rejected the templates request';
+    } else if (statusCode >= 500) {
+      status = 502;
+      errorMessage = 'Upstream Airtable service failed';
+    }
+
+    res.status(status).json({ error: errorMessage, detail: airtableMessage });
   }
 });
 
