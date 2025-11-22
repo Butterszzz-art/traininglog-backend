@@ -1,11 +1,18 @@
 const express = require('express');
 const cors = require('cors');
 const Airtable = require('airtable');
+const jwt = require('jsonwebtoken');
 
 const app = express();
 
 const airtableToken = process.env.AIRTABLE_TOKEN || process.env.AIRTABLE_API_KEY || null;
 const savedWorkouts = [];
+const users = [{ id: 29796, username: '29796', password: 'Butters' }];
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-change-me';
+
+if (!process.env.JWT_SECRET) {
+  console.warn('[WARN] Using fallback JWT secret. Set JWT_SECRET in production.');
+}
 
 // Allow your GitHub Pages origin (comma-separate for more)
 const defaultOrigins = 'https://butterszzz-art.github.io'; // add your frontend
@@ -140,17 +147,26 @@ async function findDayRecordId(dateKey) {
   return found[0]?.id || null;
 }
 
-// Simple auth stub: create /login endpoint for demonstration
+// Simple auth stub with JWT issuance
 app.post('/login', async (req, res) => {
   const { username, password } = req.body || {};
+
   if (!username || !password) {
-    return res.status(400).json({ success: false, message: 'Missing credentials.' });
+    return res.status(400).json({ success: false, message: 'Missing credentials' });
   }
-  // TODO: replace with real authentication logic
-  if (password === 'demo') {
-    return res.json({ success: true, username });
+
+  const user = users.find(u => u.username === username && u.password === password);
+  if (!user) {
+    return res.status(401).json({ success: false, message: 'Invalid credentials.' });
   }
-  return res.status(401).json({ success: false, message: 'Invalid credentials.' });
+
+  try {
+    const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '1h' });
+    return res.json({ success: true, token });
+  } catch (e) {
+    console.error('Failed to sign JWT', e);
+    return res.status(500).json({ success: false, message: 'Failed to create token' });
+  }
 });
 
 // Keep a fake user on every request
