@@ -14,6 +14,24 @@ if (!process.env.JWT_SECRET) {
   console.warn('[WARN] Using fallback JWT secret. Set JWT_SECRET in production.');
 }
 
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ success: false, message: 'No token provided' });
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({ success: false, message: 'Token invalid or expired' });
+    }
+
+    req.user = user;
+    next();
+  });
+}
+
 // Allow your GitHub Pages origin (comma-separate for more)
 const defaultOrigins = 'https://butterszzz-art.github.io'; // add your frontend
 const allowed = (process.env.CORS_ORIGINS ?? defaultOrigins)
@@ -171,7 +189,9 @@ app.post('/login', async (req, res) => {
 
 // Keep a fake user on every request
 app.use((req, _res, next) => {
-  req.user = { id: 'demo-user' };
+  if (!req.user) {
+    req.user = { id: 'demo-user' };
+  }
   next();
 });
 
@@ -220,9 +240,9 @@ app.get('/workouts', async (_req, res) => {
 app.get('/healthz', (_req, res) => res.send('ok'));
 
 // GET /templates?username=29796
-app.get('/templates', async (req, res) => {
+app.get('/templates', authenticateToken, async (req, res) => {
   const username = (req.query.username || '').trim();
-  if (!username) return res.status(400).json({ error: 'username required' });
+  if (!username) return res.status(422).json({ success: false, message: 'username query parameter required' });
 
 
   if (!airtableEnabled) {
