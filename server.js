@@ -10,6 +10,27 @@ const savedWorkouts = [];
 const users = [{ id: 29796, username: '29796', password: 'Butters' }];
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-change-me';
 
+function sendError(res, status, code, message, detail) {
+  const payload = {
+    success: false,
+    error: {
+      code,
+      message
+    }
+  };
+
+  if (detail) payload.error.detail = detail;
+  return res.status(status).json(payload);
+}
+
+function sendSuccess(res, status, data = {}) {
+  return res.status(status).json({ success: true, ...data });
+}
+
+function escapeAirtableFormulaValue(value) {
+  return value.replace(/'/g, "''");
+}
+
 if (!process.env.JWT_SECRET) {
   console.warn('[WARN] Using fallback JWT secret. Set JWT_SECRET in production.');
 }
@@ -19,12 +40,14 @@ function authenticateToken(req, res, next) {
   const token = authHeader && authHeader.split(' ')[1];
 
   if (!token) {
-    return res.status(401).json({ success: false, message: 'No token provided' });
+    console.warn('[AUTH] Missing Authorization header');
+    return sendError(res, 401, 'auth.missing_token', 'Authorization token is required. Include a Bearer token.');
   }
 
   jwt.verify(token, JWT_SECRET, (err, user) => {
     if (err) {
-      return res.status(403).json({ success: false, message: 'Token invalid or expired' });
+      console.warn('[AUTH] Invalid or expired token', { error: err?.message });
+      return sendError(res, 403, 'auth.invalid_token', 'Token invalid or expired. Please re-authenticate.');
     }
 
     req.user = user;
@@ -33,7 +56,7 @@ function authenticateToken(req, res, next) {
 }
 
 // Allow your GitHub Pages origin (comma-separate for more)
-const defaultOrigins = 'https://butterszzz-art.github.io'; // add your frontend
+const defaultOrigins = 'https://butterszzz-art.github.io,http://localhost:5173'; // add your frontend
 const allowed = (process.env.CORS_ORIGINS ?? defaultOrigins)
   .split(',')
   .map(s => s.trim())
@@ -77,7 +100,7 @@ app.post('/saveWorkout', (req, res) => {
   const { username, workout } = req.body || {};
 
   if (!username || !workout) {
-    return res.status(400).json({ success: false, message: 'username and workout are required.' });
+    return sendError(res, 400, 'workout.validation', 'username and workout are required.');
   }
 
   const entry = {
@@ -90,7 +113,7 @@ app.post('/saveWorkout', (req, res) => {
   savedWorkouts.push(entry);
   console.log('Workout saved:', entry);
 
-  res.json({ success: true });
+  sendSuccess(res, 200, { message: 'Workout saved' });
 });
 
 // --- Airtable setup ---
@@ -170,20 +193,20 @@ app.post('/login', async (req, res) => {
   const { username, password } = req.body || {};
 
   if (!username || !password) {
-    return res.status(400).json({ success: false, message: 'Missing credentials' });
+    return sendError(res, 400, 'auth.missing_credentials', 'Username and password are required.');
   }
 
   const user = users.find(u => u.username === username && u.password === password);
   if (!user) {
-    return res.status(401).json({ success: false, message: 'Invalid credentials.' });
+    return sendError(res, 401, 'auth.invalid_credentials', 'Invalid credentials.');
   }
 
   try {
     const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '1h' });
-    return res.json({ success: true, token });
+    return sendSuccess(res, 200, { token });
   } catch (e) {
     console.error('Failed to sign JWT', e);
-    return res.status(500).json({ success: false, message: 'Failed to create token' });
+    return sendError(res, 500, 'auth.token_failure', 'Failed to create token');
   }
 });
 
@@ -210,7 +233,7 @@ app.post('/workouts', async (req, res) => {
     res.status(201).json(item);
   } catch (e) {
     console.error('POST /workouts failed:', e);
-    res.status(500).json({ error: 'Failed to create workout' });
+    sendError(res, 500, 'workouts.create_failed', 'Failed to create workout', e?.message);
   }
 });
 
@@ -232,7 +255,7 @@ app.get('/workouts', async (_req, res) => {
     res.json(items);
   } catch (e) {
     console.error('GET /workouts failed:', e);
-    res.status(500).json({ error: 'Failed to load workouts' });
+    sendError(res, 500, 'workouts.fetch_failed', 'Failed to load workouts', e?.message);
   }
 });
 
@@ -241,20 +264,34 @@ app.get('/healthz', (_req, res) => res.send('ok'));
 
 // GET /templates?username=29796
 app.get('/templates', authenticateToken, async (req, res) => {
-  const username = (req.query.username || '').trim();
-  if (!username) return res.status(422).json({ success: false, message: 'username query parameter required' });
+  const usernameParam = typeof req.query.username === 'string' ? req.query.username.trim() : '';
+  const username = usernameParam || req.user?.username || '';
 
+  if (!username) {
+    console.warn('GET /templates missing username; returning empty list', { query: req.query });
+    return sendSuccess(res, 200, {
+      items: [],
+      username: null,
+      message: 'Username was not provided. Pass ?username=XYZ or use a token that includes username.'
+    });
+  }
 
   if (!airtableEnabled) {
     console.error('GET /templates unavailable: Airtable not configured', { username });
-    return res.status(503).json({ error: 'Airtable is not configured' });
+    return sendError(
+      res,
+      503,
+      'templates.airtable_disabled',
+      'Airtable is not configured for template retrieval.',
+      'Set AIRTABLE_TOKEN (or AIRTABLE_API_KEY) and AIRTABLE_BASE_ID environment variables.'
+    );
   }
 
-
   try {
+    const safeUsername = escapeAirtableFormulaValue(username);
     const records = await base('Templates')
       .select({
-        filterByFormula: `({Username}='${username}')`,
+        filterByFormula: `({Username}='${safeUsername}')`,
         pageSize: 100,
         sort: [{ field: 'Name', direction: 'asc' }]
       })
@@ -266,13 +303,11 @@ app.get('/templates', authenticateToken, async (req, res) => {
       username: r.get('Username') || ''
     }));
 
-
     if (items.length === 0) {
-      return res.status(404).json({ error: 'No templates found for user', username });
+      console.info('GET /templates returned no rows', { username });
     }
 
-    res.json({ items });
-
+    sendSuccess(res, 200, { items, username });
   } catch (e) {
     const statusCode = e?.statusCode;
     const airtableMessage = e?.message || 'Unknown Airtable error';
@@ -280,15 +315,21 @@ app.get('/templates', authenticateToken, async (req, res) => {
 
     let status = 500;
     let errorMessage = 'Failed to load templates';
+    let code = 'templates.fetch_failed';
+
     if (statusCode >= 400 && statusCode < 500) {
-      status = statusCode;
-      errorMessage = 'Airtable rejected the templates request';
+      status = statusCode === 403 ? 401 : statusCode; // present as unauthorized when Airtable rejects creds
+      code = statusCode === 403 ? 'templates.airtable_forbidden' : 'templates.airtable_rejected';
+      errorMessage = statusCode === 403
+        ? 'Airtable credentials were rejected. Confirm AIRTABLE_TOKEN/API_KEY and AIRTABLE_BASE_ID.'
+        : 'Airtable rejected the templates request.';
     } else if (statusCode >= 500) {
       status = 502;
-      errorMessage = 'Upstream Airtable service failed';
+      code = 'templates.airtable_unavailable';
+      errorMessage = 'Upstream Airtable service failed.';
     }
 
-    res.status(status).json({ error: errorMessage, detail: airtableMessage });
+    sendError(res, status, code, errorMessage, airtableMessage);
   }
 });
 
@@ -296,11 +337,11 @@ async function upsertDayHandler(req, res) {
   const incoming = req.body || {};
 
   if (!airtableEnabled) {
-    return res.status(200).json({ success: true, day: incoming });
+    return sendSuccess(res, 200, { day: incoming });
   }
 
   try {
-    if (!incoming.date) return res.status(400).json({ error: 'date required (YYYY-MM-DD)' });
+    if (!incoming.date) return sendError(res, 400, 'days.validation', 'date required (YYYY-MM-DD)');
 
     const recId = await findDayRecordId(incoming.date);
     if (recId) {
@@ -325,7 +366,7 @@ async function upsertDayHandler(req, res) {
     return res.status(201).json(fromRecordToDay(created[0]));
   } catch (e) {
     console.error('POST /days/upsert failed:', e);
-    res.status(500).json({ error: 'Failed to upsert day' });
+    sendError(res, 500, 'days.upsert_failed', 'Failed to upsert day', e?.message);
   }
 }
 
@@ -353,7 +394,7 @@ app.get('/days', async (req, res) => {
     res.json({ items: records.map(fromRecordToDay) });
   } catch (e) {
     console.error('GET /days failed:', e);
-    res.status(500).json({ error: 'Failed to load days' });
+    sendError(res, 500, 'days.fetch_failed', 'Failed to load days', e?.message);
   }
 });
 
