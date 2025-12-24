@@ -5,6 +5,14 @@ const jwt = require('jsonwebtoken');
 
 const app = express();
 
+// Check that required Airtable environment variables are present
+if (!process.env.AIRTABLE_TOKEN || !process.env.AIRTABLE_BASE_ID) {
+  console.warn(
+    'Warning: AIRTABLE_TOKEN or AIRTABLE_BASE_ID is not set in environment variables. ' +
+      'Ensure these are defined in your Render environment.'
+  );
+}
+
 const airtableToken = process.env.AIRTABLE_TOKEN || process.env.AIRTABLE_API_KEY || null;
 const savedWorkouts = [];
 const users = [{ id: 29796, username: '29796', password: 'Butters' }];
@@ -94,6 +102,13 @@ app.get('/config', (_req, res) => {
     airtableBaseId: process.env.AIRTABLE_BASE_ID || null,
     airtableToken
   });
+});
+
+app.get('/envcheck', (_req, res) => {
+  const airtableConfigured =
+    Boolean(process.env.AIRTABLE_TOKEN) && Boolean(process.env.AIRTABLE_BASE_ID);
+  // Respond with a simple object; do NOT return the actual token
+  res.json({ success: true, airtableConfigured });
 });
 
 app.post('/saveWorkout', (req, res) => {
