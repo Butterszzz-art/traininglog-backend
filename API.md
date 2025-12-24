@@ -38,6 +38,13 @@ Returns group info, top contributors, exercise summary, and weekly volume aggreg
 ### Notes on Performance
 - Sample data is indexed by workout date and exercise name to speed up filtering when Airtable is unavailable.
 
+## Environment
+
+### `GET /envcheck`
+Returns `{ "success": true, "airtableConfigured": boolean }`.
+Use this to verify that the server has read `AIRTABLE_TOKEN` and `AIRTABLE_BASE_ID`
+from the environment. It does not expose the actual values.
+
 ## Workout Logging
 
 ### `POST /saveWorkout`
