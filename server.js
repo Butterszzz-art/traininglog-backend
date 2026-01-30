@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const Airtable = require('airtable');
+const fetch = require('node-fetch');
 const jwt = require('jsonwebtoken');
 
 const app = express();
@@ -276,6 +277,52 @@ app.get('/workouts', async (_req, res) => {
 
 // Health check (Render)
 app.get('/healthz', (_req, res) => res.send('ok'));
+
+// POST /templates
+app.post('/templates', authenticateToken, async (req, res) => {
+  const { username, templateName, templateData } = req.body || {};
+
+  if (!username || !templateName || !templateData) {
+    return res.status(400).json({ success: false, message: 'Missing required fields' });
+  }
+
+  const apiKey = process.env.AIRTABLE_TOKEN || process.env.AIRTABLE_API_KEY;
+  const baseId = process.env.AIRTABLE_BASE_ID;
+  const tableName = process.env.AIRTABLE_TEMPLATES_TABLE || 'Templates';
+
+  if (!apiKey || !baseId) {
+    return res.status(500).json({ success: false, message: 'Airtable not configured' });
+  }
+
+  try {
+    const url = `https://api.airtable.com/v0/${baseId}/${tableName}`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        fields: {
+          Username: username,
+          TemplateName: templateName,
+          TemplateData: JSON.stringify(templateData)
+        }
+      })
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      return res.status(response.status).json({ success: false, message: text });
+    }
+
+    const result = await response.json();
+    return res.json({ success: true, record: result });
+  } catch (err) {
+    console.error('POST /templates failed:', err);
+    return res.status(500).json({ success: false, message: 'Server error saving template' });
+  }
+});
 
 // GET /templates?username=29796
 app.get('/templates', authenticateToken, async (req, res) => {
