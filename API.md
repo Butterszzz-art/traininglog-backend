@@ -78,9 +78,9 @@ Returns an array of workouts with the same structure as above. Any missing techn
 ## Templates
 
 ### `GET /templates?username=:username`
-- Requires `Authorization: Bearer <JWT>` header. When `username` is omitted, the value embedded in the token is used.
+- Requires `Authorization: Bearer <JWT>` header. When `username` or `userId` is omitted, the value embedded in the token is used.
 - When the Airtable base is missing, the API responds with a `503` JSON error explaining which environment variables are required.
-- Returns `200` with `{ "items": [] }` when the user has no templates or when `username` is blank, instead of a 4xx error.
+- Returns `200` with `{ "items": [] }` when the user has no templates.
 
 Example success:
 ```json
