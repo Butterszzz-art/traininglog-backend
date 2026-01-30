@@ -348,17 +348,19 @@ app.get('/templates', authenticateToken, async (req, res) => {
 
   try {
     const safeOwner = escapeAirtableFormulaValue(owner);
+    // Sort by TemplateName (preferred) or fall back to Name if specified via env.
+    const sortField = process.env.AIRTABLE_TEMPLATE_NAME_FIELD || 'TemplateName';
     const records = await base('Templates')
       .select({
         filterByFormula: `({Username}='${safeOwner}')`,
         pageSize: 100,
-        sort: [{ field: 'Name', direction: 'asc' }]
+        sort: [{ field: sortField, direction: 'asc' }]
       })
       .all();
 
     const items = records.map(r => ({
       id: r.id,
-      name: r.get('Name') || '',
+      name: r.get('TemplateName') || r.get('Name') || 'Untitled Template',
       username: r.get('Username') || ''
     }));
 
