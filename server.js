@@ -324,22 +324,19 @@ app.post('/templates', authenticateToken, async (req, res) => {
   }
 });
 
-// GET /templates?username=29796
+// GET /templates?username=29796 or /templates?userId=29796
 app.get('/templates', authenticateToken, async (req, res) => {
   const usernameParam = typeof req.query.username === 'string' ? req.query.username.trim() : '';
-  const username = usernameParam || req.user?.username || '';
+  const userIdParam = typeof req.query.userId === 'string' ? req.query.userId.trim() : '';
+  const owner = usernameParam || userIdParam || '';
 
-  if (!username) {
-    console.warn('GET /templates missing username; returning empty list', { query: req.query });
-    return sendSuccess(res, 200, {
-      items: [],
-      username: null,
-      message: 'Username was not provided. Pass ?username=XYZ or use a token that includes username.'
-    });
+  if (!owner) {
+    console.warn('GET /templates missing username or userId', { query: req.query });
+    return sendError(res, 422, 'templates.validation', 'Missing username or userId.');
   }
 
   if (!airtableEnabled) {
-    console.error('GET /templates unavailable: Airtable not configured', { username });
+    console.error('GET /templates unavailable: Airtable not configured', { owner });
     return sendError(
       res,
       503,
@@ -350,10 +347,10 @@ app.get('/templates', authenticateToken, async (req, res) => {
   }
 
   try {
-    const safeUsername = escapeAirtableFormulaValue(username);
+    const safeOwner = escapeAirtableFormulaValue(owner);
     const records = await base('Templates')
       .select({
-        filterByFormula: `({Username}='${safeUsername}')`,
+        filterByFormula: `({Username}='${safeOwner}')`,
         pageSize: 100,
         sort: [{ field: 'Name', direction: 'asc' }]
       })
@@ -366,14 +363,14 @@ app.get('/templates', authenticateToken, async (req, res) => {
     }));
 
     if (items.length === 0) {
-      console.info('GET /templates returned no rows', { username });
+      console.info('GET /templates returned no rows', { owner });
     }
 
-    sendSuccess(res, 200, { items, username });
+    sendSuccess(res, 200, { items, owner });
   } catch (e) {
     const statusCode = e?.statusCode;
     const airtableMessage = e?.message || 'Unknown Airtable error';
-    console.error('GET /templates failed:', { username, airtableMessage, statusCode, error: e });
+    console.error('GET /templates failed:', { owner, airtableMessage, statusCode, error: e });
 
     let status = 500;
     let errorMessage = 'Failed to load templates';
