@@ -365,7 +365,8 @@ app.get('/templates', authenticateToken, async (req, res) => {
     const items = records.map(r => ({
       id: r.id,
       name: r.get('TemplateName') || r.get('Name') || 'Untitled Template',
-      username: r.get('Username') || ''
+      username: r.get('Username') || '',
+      data: r.get('TemplateData') // include the template data
     }));
 
     if (items.length === 0) {
