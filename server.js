@@ -328,18 +328,17 @@ app.post('/templates', authenticateToken, async (req, res) => {
 app.get('/templates', authenticateToken, async (req, res) => {
   const usernameParam = typeof req.query.username === 'string' ? req.query.username.trim() : '';
   const userIdParam = typeof req.query.userId === 'string' ? req.query.userId.trim() : '';
-  const tokenUsername = typeof req.user?.username === 'string' ? req.user.username.trim() : '';
-  const tokenUserId = typeof req.user?.id === 'string' ? req.user.id.trim() : '';
-  const owner = usernameParam || userIdParam || tokenUsername || tokenUserId || '';
+  const owner = usernameParam || userIdParam || '';
 
   if (!owner) {
-    console.warn('GET /templates missing username/userId and token identity', { query: req.query });
-    return sendError(
-      res,
-      422,
-      'templates.validation',
-      'Missing username or userId. Provide query param or authenticate with a token.'
-    );
+    console.warn('GET /templates missing username/userId', { query: req.query });
+    return res.status(422).json({
+      success: false,
+      error: {
+        code: 'templates.missing_owner',
+        message: 'Missing username or userId'
+      }
+    });
   }
 
   if (!airtableEnabled) {
@@ -355,19 +354,17 @@ app.get('/templates', authenticateToken, async (req, res) => {
 
   try {
     const safeOwner = escapeAirtableFormulaValue(owner);
-    // Sort by TemplateName (preferred) or override with env when using a different field name.
-    const templateNameField = process.env.AIRTABLE_TEMPLATE_NAME_FIELD || 'TemplateName';
     const records = await base('Templates')
       .select({
         filterByFormula: `({Username}='${safeOwner}')`,
         pageSize: 100,
-        sort: [{ field: templateNameField, direction: 'asc' }]
+        sort: [{ field: 'TemplateName', direction: 'asc' }]
       })
       .all();
 
     const items = records.map(r => ({
       id: r.id,
-      name: r.get(templateNameField) || r.get('TemplateName') || r.get('Name') || 'Untitled Template',
+      name: r.get('TemplateName') || r.get('Name') || 'Untitled Template',
       username: r.get('Username') || ''
     }));
 
