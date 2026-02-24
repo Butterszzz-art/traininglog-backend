@@ -154,6 +154,56 @@ const base = airtableEnabled
 
 const TABLE_NAME = process.env.AIRTABLE_TABLE || 'Workouts';
 const DAYS_TABLE = process.env.AIRTABLE_DAYS_TABLE || 'Days';
+const WORKOUTS_TABLE = 'Workouts';
+const MACRO_TARGETS_TABLE = 'MacroTargets';
+const USERNAME_FIELD = 'Username';
+
+async function verifyAirtableModelDefinitions() {
+  if (!AIRTABLE_BASE_ID || !AIRTABLE_API_TOKEN) return;
+
+  try {
+    const schemaUrl = `https://api.airtable.com/v0/meta/bases/${AIRTABLE_BASE_ID}/tables`;
+    const response = await fetch(schemaUrl, { headers: airtableHeaders() });
+    if (!response.ok) {
+      const text = await response.text();
+      console.warn('[Airtable Model Check] Could not read Airtable schema metadata.', text);
+      return;
+    }
+
+    const schema = await response.json();
+    const tables = schema?.tables || [];
+    const workoutsTable = tables.find(table => table.name === WORKOUTS_TABLE);
+    const macroTargetsTable = tables.find(table => table.name === MACRO_TARGETS_TABLE);
+
+    if (!workoutsTable) {
+      console.warn(`[Airtable Model Check] Missing table with exact name: ${WORKOUTS_TABLE}`);
+    }
+
+    if (!macroTargetsTable) {
+      console.warn(`[Airtable Model Check] Missing table with exact name: ${MACRO_TARGETS_TABLE}`);
+    }
+
+    [workoutsTable, macroTargetsTable]
+      .filter(Boolean)
+      .forEach((table) => {
+        const usernameField = (table.fields || []).find(field => field.name === USERNAME_FIELD);
+        if (!usernameField) {
+          console.warn(`[Airtable Model Check] ${table.name} is missing a ${USERNAME_FIELD} field.`);
+          return;
+        }
+
+        if (usernameField.type !== 'singleLineText') {
+          console.warn(
+            `[Airtable Model Check] ${table.name}.${USERNAME_FIELD} must be singleLineText (found ${usernameField.type}).`
+          );
+        }
+      });
+  } catch (error) {
+    console.warn('[Airtable Model Check] Failed to verify Airtable model definitions.', error?.message || error);
+  }
+}
+
+verifyAirtableModelDefinitions();
 
 // You can adapt field names here to your base:
 function mapWorkoutToFields(w) {
@@ -246,7 +296,7 @@ app.use((req, _res, next) => {
 });
 
 // Workout History (JSON blob in Airtable)
-// Table: WorkoutHistory
+// Table: Workouts
 // Fields: Username, Date, Title, WorkoutJSON
 app.post('/workouts', authenticateToken, async (req, res) => {
   try {
@@ -274,7 +324,7 @@ app.post('/workouts', authenticateToken, async (req, res) => {
       records: [
         {
           fields: {
-            Username: String(username),
+            [USERNAME_FIELD]: String(username),
             Date: String(date),
             Title: String(title || 'Workout'),
             WorkoutJSON: JSON.stringify(workout)
@@ -283,7 +333,7 @@ app.post('/workouts', authenticateToken, async (req, res) => {
       ]
     };
 
-    const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/WorkoutHistory`;
+    const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(WORKOUTS_TABLE)}`;
     const response = await fetch(url, {
       method: 'POST',
       headers: airtableHeaders(),
@@ -330,9 +380,9 @@ app.get('/workouts', authenticateToken, async (req, res) => {
     }
 
     const safeUsername = escapeAirtableFormulaValue(String(username));
-    const filter = encodeURIComponent(`{Username}='${safeUsername}'`);
+    const filter = encodeURIComponent(`{${USERNAME_FIELD}}='${safeUsername}'`);
     const sort = '&sort%5B0%5D%5Bfield%5D=Date&sort%5B0%5D%5Bdirection%5D=desc';
-    const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/WorkoutHistory?filterByFormula=${filter}${sort}`;
+    const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(WORKOUTS_TABLE)}?filterByFormula=${filter}${sort}`;
 
     const response = await fetch(url, { headers: airtableHeaders() });
     const data = await response.json();
