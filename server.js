@@ -19,7 +19,8 @@ const AIRTABLE_API_TOKEN = process.env.AIRTABLE_API_TOKEN || process.env.AIRTABL
 const airtableToken = AIRTABLE_API_TOKEN;
 const savedWorkouts = [];
 const users = [{ id: 29796, username: '29796', password: 'Butters' }];
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-change-me';
+if (!process.env.JWT_SECRET) throw new Error("JWT_SECRET missing");
+const JWT_SECRET = process.env.JWT_SECRET;
 
 function sendError(res, status, code, message, detail) {
   const payload = {
@@ -49,9 +50,6 @@ function airtableHeaders() {
   };
 }
 
-if (!process.env.JWT_SECRET) {
-  console.warn('[WARN] Using fallback JWT secret. Set JWT_SECRET in production.');
-}
 
 function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
