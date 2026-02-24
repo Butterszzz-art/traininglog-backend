@@ -19,6 +19,8 @@ const AIRTABLE_API_TOKEN = process.env.AIRTABLE_API_TOKEN || process.env.AIRTABL
 const airtableToken = AIRTABLE_API_TOKEN;
 const savedWorkouts = [];
 const users = [{ id: 29796, username: '29796', password: 'Butters' }];
+if (!process.env.JWT_SECRET) throw new Error("JWT_SECRET missing");
+const JWT_SECRET = process.env.JWT_SECRET;
 if (!process.env.JWT_SECRET) {
   throw new Error('JWT_SECRET environment variable is required for signing and verifying JWTs.');
 }
@@ -50,6 +52,7 @@ function airtableHeaders() {
     'Content-Type': 'application/json'
   };
 }
+
 
 function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
