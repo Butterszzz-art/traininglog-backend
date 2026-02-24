@@ -21,6 +21,9 @@ const savedWorkouts = [];
 const users = [{ id: 29796, username: '29796', password: 'Butters' }];
 if (!process.env.JWT_SECRET) throw new Error("JWT_SECRET missing");
 const JWT_SECRET = process.env.JWT_SECRET;
+if (!process.env.JWT_SECRET) {
+  throw new Error('JWT_SECRET environment variable is required for signing and verifying JWTs.');
+}
 
 function sendError(res, status, code, message, detail) {
   const payload = {
@@ -60,7 +63,7 @@ function authenticateToken(req, res, next) {
     return sendError(res, 401, 'auth.missing_token', 'Authorization token is required. Include a Bearer token.');
   }
 
-  jwt.verify(token, JWT_SECRET, (err, user) => {
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
     if (err) {
       console.warn('[AUTH] Invalid or expired token', { error: err?.message });
       return sendError(res, 403, 'auth.invalid_token', 'Token invalid or expired. Please re-authenticate.');
@@ -277,7 +280,7 @@ app.post('/login', async (req, res) => {
   }
 
   try {
-    const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '1h' });
+    const token = jwt.sign({ id: user.id, username: user.username }, process.env.JWT_SECRET, { expiresIn: '1h' });
     return sendSuccess(res, 200, { token });
   } catch (e) {
     console.error('Failed to sign JWT', e);
