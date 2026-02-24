@@ -104,3 +104,18 @@ Example structured error:
   }
 }
 ```
+
+## Auth error note after JWT secret rotation
+
+If the server JWT secret changes, previously issued browser tokens become invalid and requests can fail with:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "auth.invalid_signature",
+    "message": "Token signature is invalid. Clear localStorage jwt and sign in again.",
+    "detail": "Run localStorage.removeItem(\"jwt\") in the browser console, then log in again to get a fresh token."
+  }
+}
+```

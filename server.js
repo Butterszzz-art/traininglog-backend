@@ -66,6 +66,16 @@ function authenticateToken(req, res, next) {
   jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
     if (err) {
       console.warn('[AUTH] Invalid or expired token', { error: err?.message });
+      if (err?.name === 'JsonWebTokenError' && err?.message === 'invalid signature') {
+        return sendError(
+          res,
+          403,
+          'auth.invalid_signature',
+          'Token signature is invalid. Clear localStorage jwt and sign in again.',
+          'Run localStorage.removeItem("jwt") in the browser console, then log in again to get a fresh token.'
+        );
+      }
+
       return sendError(res, 403, 'auth.invalid_token', 'Token invalid or expired. Please re-authenticate.');
     }
 
