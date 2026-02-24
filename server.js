@@ -14,7 +14,9 @@ if (!process.env.AIRTABLE_TOKEN || !process.env.AIRTABLE_BASE_ID) {
   );
 }
 
-const airtableToken = process.env.AIRTABLE_TOKEN || process.env.AIRTABLE_API_KEY || null;
+const AIRTABLE_BASE_ID = process.env.AIRTABLE_BASE_ID;
+const AIRTABLE_API_TOKEN = process.env.AIRTABLE_API_TOKEN || process.env.AIRTABLE_TOKEN || process.env.AIRTABLE_API_KEY || null;
+const airtableToken = AIRTABLE_API_TOKEN;
 const savedWorkouts = [];
 const users = [{ id: 29796, username: '29796', password: 'Butters' }];
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-change-me';
@@ -38,6 +40,13 @@ function sendSuccess(res, status, data = {}) {
 
 function escapeAirtableFormulaValue(value) {
   return value.replace(/'/g, "''");
+}
+
+function airtableHeaders() {
+  return {
+    Authorization: `Bearer ${AIRTABLE_API_TOKEN}`,
+    'Content-Type': 'application/json'
+  };
 }
 
 if (!process.env.JWT_SECRET) {
@@ -234,44 +243,129 @@ app.use((req, _res, next) => {
   next();
 });
 
-// Create workout (called when the Resistance Log reaches its limit)
-app.post('/workouts', async (req, res) => {
-  if (!airtableEnabled) {
-    return res.json({ message: 'Workout saved!', data: req.body });
-  }
-
+// Workout History (JSON blob in Airtable)
+// Table: WorkoutHistory
+// Fields: Username, Date, Title, WorkoutJSON
+app.post('/workouts', authenticateToken, async (req, res) => {
   try {
-    const workout = req.body || {};
-    const fields = mapWorkoutToFields(workout);
+    const { username, date, title, workout } = req.body || {};
+    if (!username || !date || !workout) {
+      return sendError(
+        res,
+        422,
+        'workouts.invalid_payload',
+        'username, date, and workout are required.'
+      );
+    }
 
-    const created = await base(TABLE_NAME).create([{ fields }]);
-    const item = mapRecordToWorkout(created[0]);
-    res.status(201).json(item);
-  } catch (e) {
-    console.error('POST /workouts failed:', e);
-    sendError(res, 500, 'workouts.create_failed', 'Failed to create workout', e?.message);
+    if (!AIRTABLE_BASE_ID || !AIRTABLE_API_TOKEN) {
+      return sendError(
+        res,
+        503,
+        'workouts.airtable_disabled',
+        'Airtable is not configured for workout history storage.',
+        'Set AIRTABLE_BASE_ID and AIRTABLE_API_TOKEN in environment variables.'
+      );
+    }
+
+    const payload = {
+      records: [
+        {
+          fields: {
+            Username: String(username),
+            Date: String(date),
+            Title: String(title || 'Workout'),
+            WorkoutJSON: JSON.stringify(workout)
+          }
+        }
+      ]
+    };
+
+    const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/WorkoutHistory`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: airtableHeaders(),
+      body: JSON.stringify(payload)
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      return sendError(
+        res,
+        422,
+        'workouts.airtable_rejected',
+        'Airtable rejected the workouts request.',
+        data?.error?.message || JSON.stringify(data)
+      );
+    }
+
+    return sendSuccess(res, 200, { recordId: data?.records?.[0]?.id || null });
+  } catch (err) {
+    return sendError(res, 500, 'workouts.server_error', String(err));
   }
 });
 
-// List workouts (for Log History tab)
-app.get('/workouts', async (_req, res) => {
-  if (!airtableEnabled) {
-    return res.json([]);
-  }
-
+app.get('/workouts', authenticateToken, async (req, res) => {
   try {
-    const records = await base(TABLE_NAME)
-      .select({
-        sort: [{ field: 'CreatedAt', direction: 'desc' }],
-        pageSize: 50
-      })
-      .all();
+    const username = req.query.username;
+    if (!username) {
+      return sendError(
+        res,
+        422,
+        'workouts.missing_username',
+        'username query param is required.'
+      );
+    }
 
-    const items = records.map(mapRecordToWorkout);
-    res.json(items);
-  } catch (e) {
-    console.error('GET /workouts failed:', e);
-    sendError(res, 500, 'workouts.fetch_failed', 'Failed to load workouts', e?.message);
+    if (!AIRTABLE_BASE_ID || !AIRTABLE_API_TOKEN) {
+      return sendError(
+        res,
+        503,
+        'workouts.airtable_disabled',
+        'Airtable is not configured for workout history retrieval.',
+        'Set AIRTABLE_BASE_ID and AIRTABLE_API_TOKEN in environment variables.'
+      );
+    }
+
+    const safeUsername = escapeAirtableFormulaValue(String(username));
+    const filter = encodeURIComponent(`{Username}='${safeUsername}'`);
+    const sort = '&sort%5B0%5D%5Bfield%5D=Date&sort%5B0%5D%5Bdirection%5D=desc';
+    const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/WorkoutHistory?filterByFormula=${filter}${sort}`;
+
+    const response = await fetch(url, { headers: airtableHeaders() });
+    const data = await response.json();
+
+    if (!response.ok) {
+      return sendError(
+        res,
+        422,
+        'workouts.airtable_rejected',
+        'Airtable rejected the workouts request.',
+        data?.error?.message || JSON.stringify(data)
+      );
+    }
+
+    const items = (data.records || []).map(rec => {
+      const f = rec.fields || {};
+      let parsed = null;
+      try {
+        parsed = JSON.parse(f.WorkoutJSON || '{}');
+      } catch {
+        parsed = null;
+      }
+
+      return {
+        id: rec.id,
+        username: f.Username,
+        date: f.Date,
+        title: f.Title,
+        workout: parsed
+      };
+    });
+
+    return sendSuccess(res, 200, { items });
+  } catch (err) {
+    return sendError(res, 500, 'workouts.server_error', String(err));
   }
 });
 
