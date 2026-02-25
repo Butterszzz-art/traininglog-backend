@@ -167,6 +167,7 @@ const TABLE_NAME = process.env.AIRTABLE_TABLE || 'Workouts';
 const DAYS_TABLE = process.env.AIRTABLE_DAYS_TABLE || 'Days';
 const WORKOUTS_TABLE = 'Workouts';
 const MACRO_TARGETS_TABLE = 'MacroTargets';
+const DAILY_LOGS_TABLE = process.env.AIRTABLE_DAILY_LOGS_TABLE || 'DailyLogs';
 const USERNAME_FIELD = 'Username';
 
 async function verifyAirtableModelDefinitions() {
@@ -429,6 +430,44 @@ app.get('/workouts', authenticateToken, async (req, res) => {
     return sendSuccess(res, 200, { items });
   } catch (err) {
     return sendError(res, 500, 'workouts.server_error', String(err));
+  }
+});
+
+app.post('/dailylogs', authenticateToken, async (req, res) => {
+  try {
+    if (!airtableEnabled) {
+      return res.status(503).json({
+        success: false,
+        error: 'Airtable is not configured. Set AIRTABLE_BASE_ID and AIRTABLE_API_TOKEN.'
+      });
+    }
+
+    const payload = req.body || {};
+    const { date, username, macros, calories, ...rest } = payload;
+
+    if (!date || !username) {
+      return res.status(422).json({
+        success: false,
+        error: 'date and username are required.'
+      });
+    }
+
+    const fields = {
+      Date: String(date),
+      [USERNAME_FIELD]: String(username),
+      Calories: calories ?? null,
+      ...(macros !== undefined ? { Macros: typeof macros === 'string' ? macros : JSON.stringify(macros) } : {}),
+      ...rest
+    };
+
+    const [record] = await base(DAILY_LOGS_TABLE).create([{ fields }]);
+    return res.status(201).json({ success: true, id: record.id });
+  } catch (err) {
+    console.error('POST /dailylogs failed:', err);
+    return res.status(500).json({
+      success: false,
+      error: err?.message || 'Failed to create daily log.'
+    });
   }
 });
 
