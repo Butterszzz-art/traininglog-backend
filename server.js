@@ -433,6 +433,70 @@ app.get('/workouts', authenticateToken, async (req, res) => {
   }
 });
 
+// Macro targets history
+// Table: MacroTargets
+// Fields: Username, Date (+ macro target fields)
+app.get('/macrotargets', authenticateToken, async (req, res) => {
+  try {
+    const username = typeof req.query.username === 'string' ? req.query.username.trim() : '';
+    if (!username) {
+      return sendError(
+        res,
+        422,
+        'macrotargets.missing_username',
+        'username query param is required.'
+      );
+    }
+
+    if (!AIRTABLE_BASE_ID || !AIRTABLE_API_TOKEN) {
+      return sendError(
+        res,
+        503,
+        'macrotargets.airtable_disabled',
+        'Airtable is not configured for macro target retrieval.',
+        'Set AIRTABLE_BASE_ID and AIRTABLE_API_TOKEN in environment variables.'
+      );
+    }
+
+    const safeUsername = escapeAirtableFormulaValue(username);
+    const params = new URLSearchParams({
+      filterByFormula: `{${USERNAME_FIELD}}='${safeUsername}'`,
+      maxRecords: '1',
+      'sort[0][field]': 'Date',
+      'sort[0][direction]': 'desc'
+    });
+
+    const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(MACRO_TARGETS_TABLE)}?${params.toString()}`;
+    const response = await fetch(url, { headers: airtableHeaders() });
+    const data = await response.json();
+
+    if (!response.ok) {
+      return sendError(
+        res,
+        422,
+        'macrotargets.airtable_rejected',
+        'Airtable rejected the macro targets request.',
+        data?.error?.message || JSON.stringify(data)
+      );
+    }
+
+    const latestRecord = data?.records?.[0] || null;
+    if (!latestRecord) {
+      return sendSuccess(res, 200, { item: null });
+    }
+
+    return sendSuccess(res, 200, {
+      item: {
+        id: latestRecord.id,
+        createdTime: latestRecord.createdTime,
+        ...latestRecord.fields
+      }
+    });
+  } catch (err) {
+    return sendError(res, 500, 'macrotargets.server_error', String(err));
+  }
+});
+
 app.post('/dailylogs', authenticateToken, async (req, res) => {
   try {
     if (!airtableEnabled) {

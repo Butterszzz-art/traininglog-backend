@@ -105,6 +105,33 @@ Example structured error:
 }
 ```
 
+
+## Macro Targets
+
+### `GET /macrotargets?username=:username`
+- Requires `Authorization: Bearer <JWT>` header.
+- Requires `username` query parameter.
+- Reads from the `MacroTargets` Airtable table using server-side Airtable PAT credentials.
+- Returns only the latest record for that username (sorted by `Date` descending).
+
+Example success:
+```json
+{
+  "success": true,
+  "item": {
+    "id": "rec123",
+    "createdTime": "2026-01-01T00:00:00.000Z",
+    "Username": "29796",
+    "Date": "2026-01-01",
+    "Calories": 2200,
+    "Protein": 180
+  }
+}
+```
+
+Frontend usage note:
+- The frontend should call this backend route instead of calling Airtable directly, so Airtable PAT credentials remain server-side.
+
 ## Auth error note after JWT secret rotation
 
 If the server JWT secret changes, previously issued browser tokens become invalid and requests can fail with:
