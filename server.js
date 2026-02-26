@@ -3,6 +3,7 @@ const cors = require('cors');
 const Airtable = require('airtable');
 const fetch = require('node-fetch');
 const jwt = require('jsonwebtoken');
+const leaderboardRoute = require('./leaderboard');
 
 const app = express();
 
@@ -271,6 +272,23 @@ function fromRecordToDay(rec) {
   };
 }
 
+function computeSessionVolume(workout) {
+  if (!workout || typeof workout !== 'object') return 0;
+
+  const sets = Array.isArray(workout.sets)
+    ? workout.sets
+    : Array.isArray(workout.exercises)
+      ? workout.exercises.flatMap(ex => (Array.isArray(ex.sets) ? ex.sets : []))
+      : [];
+
+  return sets.reduce((total, set) => {
+    const weight = Number(set?.weight || 0);
+    const reps = Number(set?.reps || 0);
+    if (!Number.isFinite(weight) || !Number.isFinite(reps)) return total;
+    return total + (weight * reps);
+  }, 0);
+}
+
 async function findDayRecordId(dateKey) {
   const formula = `{Date} = '${dateKey}'`;
   const found = await base(DAYS_TABLE).select({ filterByFormula: formula, maxRecords: 1 }).firstPage();
@@ -332,6 +350,7 @@ app.post('/workouts', authenticateToken, async (req, res) => {
       );
     }
 
+    const sessionVolume = computeSessionVolume(workout);
     const payload = {
       records: [
         {
@@ -339,7 +358,8 @@ app.post('/workouts', authenticateToken, async (req, res) => {
             [USERNAME_FIELD]: String(username),
             Date: String(date),
             Title: String(title || 'Workout'),
-            WorkoutJSON: JSON.stringify(workout)
+            WorkoutJSON: JSON.stringify(workout),
+            SessionVolume: sessionVolume
           }
         }
       ]
@@ -723,6 +743,8 @@ app.get('/days', async (req, res) => {
     sendError(res, 500, 'days.fetch_failed', 'Failed to load days', e?.message);
   }
 });
+
+app.use('/', leaderboardRoute);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
