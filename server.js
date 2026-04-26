@@ -10,7 +10,7 @@ const leaderboardRoute = require('./leaderboard');
 const app = express();
 
 // ── Environment validation ────────────────────────────────────────────────────
-const missing = ['AIRTABLE_TOKEN', 'AIRTABLE_BASE_ID', 'JWT_SECRET', 'AUTH_USERNAME', 'AUTH_PASSWORD_HASH']
+const missing = ['AIRTABLE_TOKEN', 'AIRTABLE_BASE_ID', 'JWT_SECRET']
   .filter(k => !process.env[k]);
 if (missing.length) {
   console.warn(`[WARN] Missing env vars: ${missing.join(', ')}`);
@@ -22,12 +22,13 @@ const AIRTABLE_API_TOKEN = process.env.AIRTABLE_API_TOKEN || process.env.AIRTABL
 const JWT_SECRET         = process.env.JWT_SECRET;
 
 // ── Tables ────────────────────────────────────────────────────────────────────
-const TABLE_NAME         = process.env.AIRTABLE_TABLE        || 'Workouts';
-const DAYS_TABLE         = process.env.AIRTABLE_DAYS_TABLE   || 'Days';
-const WORKOUTS_TABLE     = 'Workouts';
+const TABLE_NAME          = process.env.AIRTABLE_TABLE        || 'Workouts';
+const DAYS_TABLE          = process.env.AIRTABLE_DAYS_TABLE   || 'Days';
+const WORKOUTS_TABLE      = 'Workouts';
 const MACRO_TARGETS_TABLE = 'MacroTargets';
-const DAILY_LOGS_TABLE   = process.env.AIRTABLE_DAILY_LOGS_TABLE || 'DailyLogs';
-const USERNAME_FIELD     = 'Username';
+const DAILY_LOGS_TABLE    = process.env.AIRTABLE_DAILY_LOGS_TABLE || 'DailyLogs';
+const USERS_TABLE         = process.env.AIRTABLE_USERS_TABLE  || 'Users';
+const USERNAME_FIELD      = 'Username';
 
 // ── Airtable client ───────────────────────────────────────────────────────────
 const airtableEnabled = Boolean(AIRTABLE_API_TOKEN && AIRTABLE_BASE_ID);
@@ -223,6 +224,54 @@ app.get('/config', authenticateToken, (_req, res) => {
   res.json({ airtableBaseId: AIRTABLE_BASE_ID || null });
 });
 
+// ── User lookup helper ────────────────────────────────────────────────────────
+async function findUserByUsername(username) {
+  if (!airtableEnabled) return null;
+  const safe = escapeAirtableFormulaValue(username);
+  const records = await base(USERS_TABLE)
+    .select({ filterByFormula: `{Username}='${safe}'`, maxRecords: 1 })
+    .firstPage();
+  if (!records.length) return null;
+  const f = records[0].fields;
+  return { id: records[0].id, username: f.Username, passwordHash: f.PasswordHash };
+}
+
+// Register
+app.post('/register', loginLimiter, async (req, res) => {
+  const { username, password } = req.body || {};
+
+  if (!username || !password) {
+    return sendError(res, 400, 'auth.missing_credentials', 'Username and password are required.');
+  }
+  if (String(username).length < 3 || String(username).length > 50) {
+    return sendError(res, 400, 'auth.invalid_username', 'Username must be between 3 and 50 characters.');
+  }
+  if (String(password).length < 6) {
+    return sendError(res, 400, 'auth.weak_password', 'Password must be at least 6 characters.');
+  }
+  if (!airtableEnabled) {
+    return sendError(res, 503, 'auth.not_configured', 'User storage is not configured.');
+  }
+
+  try {
+    const existing = await findUserByUsername(username);
+    if (existing) {
+      return sendError(res, 409, 'auth.username_taken', 'That username is already taken.');
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    const [record] = await base(USERS_TABLE).create([{
+      fields: { Username: String(username), PasswordHash: passwordHash, CreatedAt: new Date().toISOString() }
+    }]);
+
+    const token = jwt.sign({ id: record.id, username: String(username) }, JWT_SECRET, { expiresIn: '7d' });
+    return sendSuccess(res, 201, { token, username: String(username) });
+  } catch (e) {
+    console.error('[REGISTER] Failed:', e);
+    return sendError(res, 500, 'auth.register_failed', 'Failed to create account.');
+  }
+});
+
 // Login
 app.post('/login', loginLimiter, async (req, res) => {
   const { username, password } = req.body || {};
@@ -230,29 +279,25 @@ app.post('/login', loginLimiter, async (req, res) => {
   if (!username || !password) {
     return sendError(res, 400, 'auth.missing_credentials', 'Username and password are required.');
   }
-
-  const storedUsername = process.env.AUTH_USERNAME;
-  const storedHash     = process.env.AUTH_PASSWORD_HASH;
-
-  if (!storedUsername || !storedHash) {
-    console.error('[LOGIN] AUTH_USERNAME or AUTH_PASSWORD_HASH not configured');
-    return sendError(res, 503, 'auth.not_configured', 'Authentication is not configured on this server.');
-  }
-
-  const usernameMatch = username === storedUsername;
-  // Always run bcrypt compare to prevent timing attacks, even on username mismatch
-  const passwordMatch = await bcrypt.compare(password, storedHash);
-
-  if (!usernameMatch || !passwordMatch) {
-    return sendError(res, 401, 'auth.invalid_credentials', 'Invalid credentials.');
+  if (!airtableEnabled) {
+    return sendError(res, 503, 'auth.not_configured', 'User storage is not configured.');
   }
 
   try {
-    const token = jwt.sign({ id: storedUsername, username: storedUsername }, JWT_SECRET, { expiresIn: '7d' });
-    return sendSuccess(res, 200, { token });
+    const user = await findUserByUsername(username);
+    // Always run bcrypt even if user not found to prevent timing attacks
+    const dummyHash = '$2a$12$invalidhashpaddingtomatchbcryptlength000000000000000000000';
+    const passwordMatch = await bcrypt.compare(password, user?.passwordHash || dummyHash);
+
+    if (!user || !passwordMatch) {
+      return sendError(res, 401, 'auth.invalid_credentials', 'Invalid credentials.');
+    }
+
+    const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '7d' });
+    return sendSuccess(res, 200, { token, username: user.username });
   } catch (e) {
-    console.error('[LOGIN] Failed to sign JWT', e);
-    return sendError(res, 500, 'auth.token_failure', 'Failed to create token.');
+    console.error('[LOGIN] Failed:', e);
+    return sendError(res, 500, 'auth.token_failure', 'Failed to sign in.');
   }
 });
 
