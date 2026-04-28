@@ -219,8 +219,8 @@ app.get('/envcheck', (_req, res) => {
   res.json({ success: true, airtableConfigured: airtableEnabled });
 });
 
-// Config — base ID only, never the token
-app.get('/config', authenticateToken, (_req, res) => {
+// Config — base ID only, no token exposed, safe to be public
+app.get('/config', (_req, res) => {
   res.json({ airtableBaseId: AIRTABLE_BASE_ID || null });
 });
 
