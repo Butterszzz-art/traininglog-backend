@@ -26,7 +26,7 @@ const TABLE_NAME          = process.env.AIRTABLE_TABLE        || 'Workouts';
 const DAYS_TABLE          = process.env.AIRTABLE_DAYS_TABLE   || 'Days';
 const WORKOUTS_TABLE      = 'Workouts';
 const MACRO_TARGETS_TABLE = 'MacroTargets';
-const DAILY_LOGS_TABLE    = process.env.AIRTABLE_DAILY_LOGS_TABLE || 'DailyLogs';
+const DAILY_LOGS_TABLE    = process.env.AIRTABLE_DAILY_LOGS_TABLE || 'DailyMacros';
 const USERS_TABLE         = process.env.AIRTABLE_USERS_TABLE  || 'Users';
 const USERNAME_FIELD      = 'Username';
 
@@ -459,31 +459,77 @@ app.get('/macrotargets', authenticateToken, async (req, res) => {
   }
 });
 
-// POST /dailylogs
-const ALLOWED_DAILYLOG_FIELDS = new Set(['date', 'username', 'macros', 'calories', 'notes', 'steps', 'sleep', 'water']);
+// POST /macrotargets — save macro targets for a user
+app.post('/macrotargets', authenticateToken, async (req, res) => {
+  try {
+    if (!airtableEnabled) {
+      return sendError(res, 503, 'macrotargets.airtable_disabled', 'Airtable is not configured.');
+    }
+    const { username, calories, protein, fat, carbs } = req.body || {};
+    if (!username) {
+      return sendError(res, 422, 'macrotargets.missing_username', 'username is required.');
+    }
 
+    const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(MACRO_TARGETS_TABLE)}`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: airtableHeaders(),
+      body: JSON.stringify({
+        records: [{
+          fields: {
+            [USERNAME_FIELD]: String(username),
+            Calories: calories != null ? Number(calories) : null,
+            Protein:  protein  != null ? Number(protein)  : null,
+            Fat:      fat      != null ? Number(fat)      : null,
+            Carbs:    carbs    != null ? Number(carbs)    : null
+          }
+        }]
+      })
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      return sendError(res, 422, 'macrotargets.airtable_rejected', 'Airtable rejected the request.',
+        data?.error?.message || JSON.stringify(data));
+    }
+    return sendSuccess(res, 201, { recordId: data?.records?.[0]?.id || null });
+  } catch (err) {
+    return sendError(res, 500, 'macrotargets.server_error', String(err));
+  }
+});
+
+// POST /dailylogs — save daily macro log
 app.post('/dailylogs', authenticateToken, async (req, res) => {
   try {
     if (!airtableEnabled) {
       return sendError(res, 503, 'dailylogs.airtable_disabled', 'Airtable is not configured.');
     }
 
-    const { date, username, macros, calories, ...rest } = req.body || {};
+    // Support both flat body and legacy { fields: { ... } } wrapper from frontend
+    const body = req.body?.fields ? req.body.fields : req.body || {};
+
+    const date     = body.Date     || body.date;
+    const username = body.Username || body.username;
+
     if (!date || !username) {
       return sendError(res, 422, 'dailylogs.invalid_payload', 'date and username are required.');
     }
 
-    // Only allow known fields from ...rest — no arbitrary data passthrough
-    const safeRest = Object.fromEntries(
-      Object.entries(rest).filter(([k]) => ALLOWED_DAILYLOG_FIELDS.has(k))
-    );
+    // Accept both naming conventions the frontend uses
+    const calories     = body.CaloriesTotal ?? body.Calories     ?? body.calories     ?? null;
+    const proteinGrams = body.ProteinTotal  ?? body.ProteinGrams ?? body.protein       ?? null;
+    const carbGrams    = body.CarbsTotal    ?? body.CarbGrams    ?? body.carbs         ?? null;
+    const fatGrams     = body.FatTotal      ?? body.FatGrams     ?? body.fat           ?? null;
 
     const fields = {
-      Date:          String(date),
+      Date:             String(date),
       [USERNAME_FIELD]: String(username),
-      Calories:      calories != null ? Number(calories) : null,
-      ...(macros !== undefined ? { Macros: typeof macros === 'string' ? macros : JSON.stringify(macros) } : {}),
-      ...safeRest
+      Calories:         calories     != null ? Number(calories)     : null,
+      ProteinGrams:     proteinGrams != null ? Number(proteinGrams) : null,
+      CarbGrams:        carbGrams    != null ? Number(carbGrams)    : null,
+      FatGrams:         fatGrams     != null ? Number(fatGrams)     : null,
+      ...(body.Type    ? { Type:    String(body.Type)                        } : {}),
+      ...(body.LogData ? { LogData: typeof body.LogData === 'string'
+                                    ? body.LogData : JSON.stringify(body.LogData) } : {})
     };
 
     const [record] = await base(DAILY_LOGS_TABLE).create([{ fields }]);
@@ -491,6 +537,29 @@ app.post('/dailylogs', authenticateToken, async (req, res) => {
   } catch (err) {
     console.error('POST /dailylogs failed:', err);
     return sendError(res, 500, 'dailylogs.server_error', err?.message || 'Failed to create daily log.');
+  }
+});
+
+// GET /dailylogs — fetch daily logs for a user
+app.get('/dailylogs', authenticateToken, async (req, res) => {
+  try {
+    if (!airtableEnabled) return res.json({ records: [] });
+    const username = typeof req.query.username === 'string' ? req.query.username.trim() : '';
+    if (!username) return sendError(res, 422, 'dailylogs.missing_username', 'username query param is required.');
+
+    const safeUsername = escapeAirtableFormulaValue(username);
+    const records = await base(DAILY_LOGS_TABLE)
+      .select({
+        filterByFormula: `{${USERNAME_FIELD}}='${safeUsername}'`,
+        sort: [{ field: 'Date', direction: 'desc' }],
+        pageSize: 100
+      })
+      .all();
+
+    return res.json({ success: true, records: records.map(r => ({ id: r.id, ...r.fields })) });
+  } catch (err) {
+    console.error('GET /dailylogs failed:', err);
+    return sendError(res, 500, 'dailylogs.server_error', err?.message || 'Failed to fetch daily logs.');
   }
 });
 
