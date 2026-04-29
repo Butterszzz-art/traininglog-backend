@@ -231,9 +231,17 @@ async function findUserByUsername(username) {
   const records = await base(USERS_TABLE)
     .select({ filterByFormula: `{Username}='${safe}'`, maxRecords: 1 })
     .firstPage();
-  if (!records.length) return null;
+  if (!records.length) {
+    console.warn(`[AUTH] No user found for username: "${username}"`);
+    return null;
+  }
   const f = records[0].fields;
-  return { id: records[0].id, username: f.Username, passwordHash: f.PasswordHash };
+  // Support both 'PasswordHash' and 'Password' field names in Airtable
+  const passwordHash = f.PasswordHash || f.Password || null;
+  if (!passwordHash) {
+    console.error(`[AUTH] User "${username}" found but has no PasswordHash/Password field. Check Airtable field names.`);
+  }
+  return { id: records[0].id, username: f.Username, passwordHash };
 }
 
 // Register
@@ -285,15 +293,24 @@ app.post('/login', loginLimiter, async (req, res) => {
 
   try {
     const user = await findUserByUsername(username);
-    // Always run bcrypt even if user not found to prevent timing attacks
-    const dummyHash = '$2a$12$invalidhashpaddingtomatchbcryptlength000000000000000000000';
-    const passwordMatch = await bcrypt.compare(password, user?.passwordHash || dummyHash);
+
+    // If user found but has no hash — misconfigured Airtable field name
+    if (user && !user.passwordHash) {
+      console.error(`[LOGIN] User "${username}" has no password hash stored. Airtable Users table may be missing the PasswordHash field.`);
+      return sendError(res, 500, 'auth.config_error', 'Account configuration error. Please contact support.');
+    }
+
+    // Use a real pre-hashed dummy so bcrypt timing stays constant when user not found
+    const DUMMY_HASH = '$2a$12$KIXBMmh9YkCHEffMFBkJXOyAMFuaUCsqMomSAZqYvVPNTsGzHEAuO';
+    const passwordMatch = await bcrypt.compare(password, user?.passwordHash || DUMMY_HASH);
 
     if (!user || !passwordMatch) {
+      console.warn(`[LOGIN] Failed login attempt for username: "${username}" — user found: ${!!user}`);
       return sendError(res, 401, 'auth.invalid_credentials', 'Invalid credentials.');
     }
 
     const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '7d' });
+    console.info(`[LOGIN] Success for username: "${username}"`);
     return sendSuccess(res, 200, { token, username: user.username });
   } catch (e) {
     console.error('[LOGIN] Failed:', e);
