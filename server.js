@@ -300,12 +300,31 @@ app.post('/login', loginLimiter, async (req, res) => {
       return sendError(res, 500, 'auth.config_error', 'Account configuration error. Please contact support.');
     }
 
-    // Use a real pre-hashed dummy so bcrypt timing stays constant when user not found
     const DUMMY_HASH = '$2a$12$KIXBMmh9YkCHEffMFBkJXOyAMFuaUCsqMomSAZqYvVPNTsGzHEAuO';
-    const passwordMatch = await bcrypt.compare(password, user?.passwordHash || DUMMY_HASH);
+    const storedHash = user?.passwordHash || DUMMY_HASH;
+    const isBcrypt = storedHash.startsWith('$2a$') || storedHash.startsWith('$2b$');
+
+    let passwordMatch = false;
+    if (isBcrypt) {
+      // Properly hashed — compare normally
+      passwordMatch = await bcrypt.compare(password, storedHash);
+    } else {
+      // Legacy plaintext password — direct compare, then migrate to bcrypt
+      passwordMatch = (password === storedHash);
+      if (passwordMatch && user) {
+        console.info(`[LOGIN] Migrating plaintext password to bcrypt for user "${username}"`);
+        try {
+          const newHash = await bcrypt.hash(password, 12);
+          await base(USERS_TABLE).update([{ id: user.id, fields: { PasswordHash: newHash } }]);
+        } catch (migrateErr) {
+          // Non-fatal — user can still log in, just not migrated yet
+          console.error(`[LOGIN] Failed to migrate password for "${username}":`, migrateErr?.message);
+        }
+      }
+    }
 
     if (!user || !passwordMatch) {
-      console.warn(`[LOGIN] Failed login attempt for username: "${username}" — user found: ${!!user}`);
+      console.warn(`[LOGIN] Failed login for "${username}" — user found: ${!!user}, bcrypt: ${isBcrypt}`);
       return sendError(res, 401, 'auth.invalid_credentials', 'Invalid credentials.');
     }
 
