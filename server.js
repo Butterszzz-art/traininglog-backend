@@ -648,6 +648,65 @@ app.get('/templates', authenticateToken, async (req, res) => {
   }
 });
 
+// POST /sendTemplate — share a template with another user by copying it to their record
+app.post('/sendTemplate', authenticateToken, async (req, res) => {
+  const { fromUser, toUser, templateName, templateData } = req.body || {};
+  if (!fromUser || !toUser || !templateName || !templateData) {
+    return sendError(res, 400, 'templates.invalid_payload', 'fromUser, toUser, templateName, and templateData are required.');
+  }
+  if (!airtableEnabled) {
+    return sendError(res, 503, 'templates.airtable_disabled', 'Airtable is not configured.');
+  }
+
+  try {
+    const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/Templates`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: airtableHeaders(),
+      body: JSON.stringify({
+        fields: {
+          Username:     String(toUser),
+          TemplateName: String(templateName),
+          TemplateData: JSON.stringify(templateData)
+        }
+      })
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      return sendError(res, response.status, 'templates.airtable_rejected', 'Airtable rejected the request.', text);
+    }
+
+    const result = await response.json();
+    return sendSuccess(res, 200, { record: result });
+  } catch (err) {
+    console.error('POST /sendTemplate failed:', err);
+    return sendError(res, 500, 'templates.server_error', 'Server error sharing template.');
+  }
+});
+
+// DELETE /templates/:id — delete a template record by Airtable record ID
+app.delete('/templates/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  if (!id) return sendError(res, 400, 'templates.missing_id', 'Record ID is required.');
+  if (!airtableEnabled) return sendError(res, 503, 'templates.airtable_disabled', 'Airtable is not configured.');
+
+  try {
+    const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/Templates/${encodeURIComponent(id)}`;
+    const response = await fetch(url, { method: 'DELETE', headers: airtableHeaders() });
+
+    if (!response.ok) {
+      const text = await response.text();
+      return sendError(res, response.status, 'templates.airtable_rejected', 'Airtable rejected the delete.', text);
+    }
+
+    return sendSuccess(res, 200, { deleted: id });
+  } catch (err) {
+    console.error('DELETE /templates/:id failed:', err);
+    return sendError(res, 500, 'templates.server_error', 'Server error deleting template.');
+  }
+});
+
 // POST /days/upsert + POST /days
 async function upsertDayHandler(req, res) {
   const incoming = req.body || {};
