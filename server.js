@@ -648,6 +648,143 @@ app.get('/templates', authenticateToken, async (req, res) => {
   }
 });
 
+// ── Programs ──────────────────────────────────────────────────────────────────
+const PROGRAMS_TABLE = process.env.AIRTABLE_PROGRAMS_TABLE || 'Programs';
+
+// POST /programs — save a new program
+// POST /saveProgram — legacy alias used by ProgramTab.js
+async function saveProgramHandler(req, res) {
+  try {
+    if (!airtableEnabled) return sendError(res, 503, 'programs.airtable_disabled', 'Airtable is not configured.');
+
+    // Accept both { program } and { draft } shapes from the frontend
+    const body = req.body || {};
+    const program = body.program || body.draft || body;
+    const username = program.userId || program.username || body.userId || body.username;
+
+    if (!username) return sendError(res, 422, 'programs.missing_username', 'username / userId is required.');
+    if (!program.name) return sendError(res, 422, 'programs.missing_name', 'Program name is required.');
+
+    const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(PROGRAMS_TABLE)}`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: airtableHeaders(),
+      body: JSON.stringify({
+        records: [{
+          fields: {
+            [USERNAME_FIELD]: String(username),
+            ProgramName:  String(program.name),
+            ProgramData:  JSON.stringify(program),
+            StartDate:    program.startDate ? String(program.startDate) : '',
+            IsActive:     true,
+            CreatedAt:    new Date().toISOString()
+          }
+        }]
+      })
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      return sendError(res, 422, 'programs.airtable_rejected', 'Airtable rejected the request.',
+        data?.error?.message || JSON.stringify(data));
+    }
+
+    return sendSuccess(res, 201, { recordId: data?.records?.[0]?.id || null });
+  } catch (err) {
+    console.error('POST /programs failed:', err);
+    return sendError(res, 500, 'programs.server_error', String(err));
+  }
+}
+
+app.post('/programs',    authenticateToken, saveProgramHandler);
+app.post('/saveProgram', authenticateToken, saveProgramHandler); // legacy alias
+
+// GET /programs?username=... — load all programs for a user
+app.get('/programs', authenticateToken, async (req, res) => {
+  try {
+    if (!airtableEnabled) return res.json({ success: true, items: [] });
+
+    const username = typeof req.query.username === 'string' ? req.query.username.trim() : '';
+    if (!username) return sendError(res, 422, 'programs.missing_username', 'username query param is required.');
+
+    const safeUsername = escapeAirtableFormulaValue(username);
+    const records = await base(PROGRAMS_TABLE)
+      .select({
+        filterByFormula: `{${USERNAME_FIELD}}='${safeUsername}'`,
+        sort: [{ field: 'CreatedAt', direction: 'desc' }],
+        pageSize: 100
+      })
+      .all();
+
+    const items = records.map(r => {
+      let programData = null;
+      try { programData = r.get('ProgramData') ? JSON.parse(r.get('ProgramData')) : null; } catch {}
+      return {
+        id:          r.id,
+        name:        r.get('ProgramName') || programData?.name || 'Unnamed',
+        startDate:   r.get('StartDate')   || programData?.startDate || '',
+        isActive:    r.get('IsActive')    || false,
+        createdAt:   r.get('CreatedAt')   || '',
+        programData
+      };
+    });
+
+    return sendSuccess(res, 200, { items });
+  } catch (err) {
+    console.error('GET /programs failed:', err);
+    return sendError(res, 500, 'programs.server_error', String(err));
+  }
+});
+
+// PATCH /programs/:id/active — set a program as active (clears others)
+app.patch('/programs/:id/active', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const username = typeof req.query.username === 'string' ? req.query.username.trim()
+    : (req.body?.username || '');
+  if (!id) return sendError(res, 400, 'programs.missing_id', 'Record ID is required.');
+  if (!airtableEnabled) return sendError(res, 503, 'programs.airtable_disabled', 'Airtable is not configured.');
+
+  try {
+    // First clear all active flags for this user
+    if (username) {
+      const safeUsername = escapeAirtableFormulaValue(username);
+      const existing = await base(PROGRAMS_TABLE)
+        .select({ filterByFormula: `AND({${USERNAME_FIELD}}='${safeUsername}',{IsActive}=1)` })
+        .all();
+      if (existing.length) {
+        await base(PROGRAMS_TABLE).update(existing.map(r => ({ id: r.id, fields: { IsActive: false } })));
+      }
+    }
+
+    // Set the target program as active
+    const updated = await base(PROGRAMS_TABLE).update([{ id, fields: { IsActive: true } }]);
+    return sendSuccess(res, 200, { recordId: updated[0]?.id });
+  } catch (err) {
+    console.error('PATCH /programs/:id/active failed:', err);
+    return sendError(res, 500, 'programs.server_error', String(err));
+  }
+});
+
+// DELETE /programs/:id
+app.delete('/programs/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  if (!id) return sendError(res, 400, 'programs.missing_id', 'Record ID is required.');
+  if (!airtableEnabled) return sendError(res, 503, 'programs.airtable_disabled', 'Airtable is not configured.');
+
+  try {
+    const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(PROGRAMS_TABLE)}/${encodeURIComponent(id)}`;
+    const response = await fetch(url, { method: 'DELETE', headers: airtableHeaders() });
+    if (!response.ok) {
+      const text = await response.text();
+      return sendError(res, response.status, 'programs.airtable_rejected', 'Airtable rejected the delete.', text);
+    }
+    return sendSuccess(res, 200, { deleted: id });
+  } catch (err) {
+    console.error('DELETE /programs/:id failed:', err);
+    return sendError(res, 500, 'programs.server_error', String(err));
+  }
+});
+
 // POST /sendTemplate — share a template with another user by copying it to their record
 app.post('/sendTemplate', authenticateToken, async (req, res) => {
   const { fromUser, toUser, templateName, templateData } = req.body || {};
