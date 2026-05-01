@@ -835,6 +835,182 @@ app.get('/measurements', authenticateToken, async (req, res) => {
   }
 });
 
+// ── Cardio & CrossFit ─────────────────────────────────────────────────────────
+const CARDIO_TABLE   = process.env.AIRTABLE_CARDIO_TABLE   || 'CardioLog';
+const CROSSFIT_TABLE = process.env.AIRTABLE_CROSSFIT_TABLE || 'CrossFitLog';
+
+// POST /cardio/sync — sync individual cardio entries (4-week cadence from frontend)
+app.post('/cardio/sync', authenticateToken, async (req, res) => {
+  try {
+    if (!airtableEnabled) return sendError(res, 503, 'cardio.airtable_disabled', 'Airtable is not configured.');
+
+    const { username, entries } = req.body || {};
+    if (!username || !Array.isArray(entries) || !entries.length) {
+      return sendError(res, 422, 'cardio.invalid_payload', 'username and entries array are required.');
+    }
+
+    const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(CARDIO_TABLE)}`;
+    const batches = [];
+    for (let i = 0; i < entries.length; i += 10) batches.push(entries.slice(i, i + 10));
+
+    const recordIds = [];
+    for (const batch of batches) {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: airtableHeaders(),
+        body: JSON.stringify({
+          records: batch.map(e => ({
+            fields: {
+              [USERNAME_FIELD]:   String(username),
+              Date:               String(e.date || ''),
+              Type:               String(e.type || ''),
+              Duration:           e.duration          != null ? Number(e.duration)          : null,
+              Distance:           e.distance          != null ? Number(e.distance)          : null,
+              Calories:           e.calories          != null ? Number(e.calories)          : null,
+              EstimatedCalories:  e.estimatedCalories != null ? Number(e.estimatedCalories) : null,
+              MET:                e.met               != null ? Number(e.met)               : null,
+              Notes:              e.notes ? String(e.notes) : '',
+              SyncedAt:           new Date().toISOString()
+            }
+          }))
+        })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        return sendError(res, 422, 'cardio.airtable_rejected', 'Airtable rejected the request.',
+          data?.error?.message || JSON.stringify(data));
+      }
+      (data.records || []).forEach(r => recordIds.push(r.id));
+    }
+
+    return sendSuccess(res, 201, { count: recordIds.length, recordIds });
+  } catch (err) {
+    console.error('POST /cardio/sync failed:', err);
+    return sendError(res, 500, 'cardio.server_error', String(err));
+  }
+});
+
+// GET /cardio?username= — fetch synced cardio history
+app.get('/cardio', authenticateToken, async (req, res) => {
+  try {
+    if (!airtableEnabled) return res.json({ success: true, items: [] });
+    const username = typeof req.query.username === 'string' ? req.query.username.trim() : '';
+    if (!username) return sendError(res, 422, 'cardio.missing_username', 'username is required.');
+
+    const safeUsername = escapeAirtableFormulaValue(username);
+    const records = await base(CARDIO_TABLE)
+      .select({
+        filterByFormula: `{${USERNAME_FIELD}}='${safeUsername}'`,
+        sort: [{ field: 'Date', direction: 'desc' }],
+        pageSize: 100
+      })
+      .all();
+
+    const items = records.map(r => ({
+      id:                 r.id,
+      date:               r.get('Date'),
+      type:               r.get('Type'),
+      duration:           r.get('Duration'),
+      distance:           r.get('Distance'),
+      calories:           r.get('Calories'),
+      estimatedCalories:  r.get('EstimatedCalories'),
+      met:                r.get('MET'),
+      notes:              r.get('Notes'),
+      syncedAt:           r.get('SyncedAt')
+    }));
+
+    return sendSuccess(res, 200, { items });
+  } catch (err) {
+    console.error('GET /cardio failed:', err);
+    return sendError(res, 500, 'cardio.server_error', String(err));
+  }
+});
+
+// POST /crossfit/sync — sync CrossFit WOD entries (4-week cadence from frontend)
+app.post('/crossfit/sync', authenticateToken, async (req, res) => {
+  try {
+    if (!airtableEnabled) return sendError(res, 503, 'crossfit.airtable_disabled', 'Airtable is not configured.');
+
+    const { username, entries } = req.body || {};
+    if (!username || !Array.isArray(entries) || !entries.length) {
+      return sendError(res, 422, 'crossfit.invalid_payload', 'username and entries array are required.');
+    }
+
+    const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(CROSSFIT_TABLE)}`;
+    const batches = [];
+    for (let i = 0; i < entries.length; i += 10) batches.push(entries.slice(i, i + 10));
+
+    const recordIds = [];
+    for (const batch of batches) {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: airtableHeaders(),
+        body: JSON.stringify({
+          records: batch.map(e => ({
+            fields: {
+              [USERNAME_FIELD]: String(username),
+              Date:             String(e.date || ''),
+              WorkoutName:      String(e.name || e.workoutName || ''),
+              Minutes:          e.minutes != null ? Number(e.minutes) : null,
+              Seconds:          e.seconds != null ? Number(e.seconds) : null,
+              Rounds:           e.rounds  != null ? Number(e.rounds)  : null,
+              Notes:            e.notes ? String(e.notes) : '',
+              ExercisesJson:    e.exercises ? JSON.stringify(e.exercises) : '',
+              SyncedAt:         new Date().toISOString()
+            }
+          }))
+        })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        return sendError(res, 422, 'crossfit.airtable_rejected', 'Airtable rejected the request.',
+          data?.error?.message || JSON.stringify(data));
+      }
+      (data.records || []).forEach(r => recordIds.push(r.id));
+    }
+
+    return sendSuccess(res, 201, { count: recordIds.length, recordIds });
+  } catch (err) {
+    console.error('POST /crossfit/sync failed:', err);
+    return sendError(res, 500, 'crossfit.server_error', String(err));
+  }
+});
+
+// GET /crossfit?username= — fetch synced CrossFit history
+app.get('/crossfit', authenticateToken, async (req, res) => {
+  try {
+    if (!airtableEnabled) return res.json({ success: true, items: [] });
+    const username = typeof req.query.username === 'string' ? req.query.username.trim() : '';
+    if (!username) return sendError(res, 422, 'crossfit.missing_username', 'username is required.');
+
+    const safeUsername = escapeAirtableFormulaValue(username);
+    const records = await base(CROSSFIT_TABLE)
+      .select({
+        filterByFormula: `{${USERNAME_FIELD}}='${safeUsername}'`,
+        sort: [{ field: 'Date', direction: 'desc' }],
+        pageSize: 100
+      })
+      .all();
+
+    const items = records.map(r => ({
+      id:           r.id,
+      date:         r.get('Date'),
+      workoutName:  r.get('WorkoutName'),
+      minutes:      r.get('Minutes'),
+      seconds:      r.get('Seconds'),
+      rounds:       r.get('Rounds'),
+      notes:        r.get('Notes'),
+      exercises:    (() => { try { return JSON.parse(r.get('ExercisesJson') || '[]'); } catch { return []; } })(),
+      syncedAt:     r.get('SyncedAt')
+    }));
+
+    return sendSuccess(res, 200, { items });
+  } catch (err) {
+    console.error('GET /crossfit failed:', err);
+    return sendError(res, 500, 'crossfit.server_error', String(err));
+  }
+});
+
 // ── Programs ──────────────────────────────────────────────────────────────────
 const PROGRAMS_TABLE = process.env.AIRTABLE_PROGRAMS_TABLE || 'Programs';
 
