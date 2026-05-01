@@ -648,6 +648,193 @@ app.get('/templates', authenticateToken, async (req, res) => {
   }
 });
 
+// ── Bodyweight & Measurements ─────────────────────────────────────────────────
+const BODYWEIGHT_TABLE   = process.env.AIRTABLE_BODYWEIGHT_TABLE   || 'BodyweightLog';
+const MEASUREMENTS_TABLE = process.env.AIRTABLE_MEASUREMENTS_TABLE || 'BodyMeasurements';
+
+// POST /bodyweight/archive — archive a 4-week snapshot of bodyweight entries
+app.post('/bodyweight/archive', authenticateToken, async (req, res) => {
+  try {
+    if (!airtableEnabled) return sendError(res, 503, 'bodyweight.airtable_disabled', 'Airtable is not configured.');
+
+    const { username, periodStart, periodEnd, entries, trend } = req.body || {};
+    if (!username || !Array.isArray(entries) || !entries.length) {
+      return sendError(res, 422, 'bodyweight.invalid_payload', 'username and entries array are required.');
+    }
+
+    // Compute summary stats from the entries
+    const kgValues = entries.map(e => typeof e.weightKg === 'number' ? e.weightKg : null).filter(v => v !== null);
+    const startWeightKg = kgValues[0]   ?? null;
+    const endWeightKg   = kgValues[kgValues.length - 1] ?? null;
+    const avgWeightKg   = kgValues.length
+      ? Math.round((kgValues.reduce((s, v) => s + v, 0) / kgValues.length) * 10) / 10
+      : null;
+    const weightChangeKg = (startWeightKg !== null && endWeightKg !== null)
+      ? Math.round((endWeightKg - startWeightKg) * 10) / 10
+      : null;
+
+    const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(BODYWEIGHT_TABLE)}`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: airtableHeaders(),
+      body: JSON.stringify({
+        records: [{
+          fields: {
+            [USERNAME_FIELD]: String(username),
+            PeriodStart:    periodStart ? String(periodStart) : '',
+            PeriodEnd:      periodEnd   ? String(periodEnd)   : '',
+            StartWeightKg:  startWeightKg,
+            EndWeightKg:    endWeightKg,
+            AvgWeightKg:    avgWeightKg,
+            WeightChangeKg: weightChangeKg,
+            KgPerWeek:      typeof trend?.kgPerWeek === 'number' ? Math.round(trend.kgPerWeek * 100) / 100 : null,
+            CaloriesDelta:  typeof trend?.caloriesDelta === 'number' ? trend.caloriesDelta : null,
+            EntryCount:     entries.length,
+            EntriesJson:    JSON.stringify(entries),
+            ArchivedAt:     new Date().toISOString()
+          }
+        }]
+      })
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      return sendError(res, 422, 'bodyweight.airtable_rejected', 'Airtable rejected the request.',
+        data?.error?.message || JSON.stringify(data));
+    }
+    return sendSuccess(res, 201, { recordId: data?.records?.[0]?.id || null });
+  } catch (err) {
+    console.error('POST /bodyweight/archive failed:', err);
+    return sendError(res, 500, 'bodyweight.server_error', String(err));
+  }
+});
+
+// GET /bodyweight?username= — fetch archived bodyweight snapshots
+app.get('/bodyweight', authenticateToken, async (req, res) => {
+  try {
+    if (!airtableEnabled) return res.json({ success: true, items: [] });
+    const username = typeof req.query.username === 'string' ? req.query.username.trim() : '';
+    if (!username) return sendError(res, 422, 'bodyweight.missing_username', 'username is required.');
+
+    const safeUsername = escapeAirtableFormulaValue(username);
+    const records = await base(BODYWEIGHT_TABLE)
+      .select({
+        filterByFormula: `{${USERNAME_FIELD}}='${safeUsername}'`,
+        sort: [{ field: 'PeriodStart', direction: 'desc' }],
+        pageSize: 100
+      })
+      .all();
+
+    const items = records.map(r => ({
+      id:             r.id,
+      periodStart:    r.get('PeriodStart'),
+      periodEnd:      r.get('PeriodEnd'),
+      startWeightKg:  r.get('StartWeightKg'),
+      endWeightKg:    r.get('EndWeightKg'),
+      avgWeightKg:    r.get('AvgWeightKg'),
+      weightChangeKg: r.get('WeightChangeKg'),
+      kgPerWeek:      r.get('KgPerWeek'),
+      caloriesDelta:  r.get('CaloriesDelta'),
+      entryCount:     r.get('EntryCount'),
+      archivedAt:     r.get('ArchivedAt')
+    }));
+
+    return sendSuccess(res, 200, { items });
+  } catch (err) {
+    console.error('GET /bodyweight failed:', err);
+    return sendError(res, 500, 'bodyweight.server_error', String(err));
+  }
+});
+
+// POST /measurements/sync — save individual measurement entries not yet synced
+app.post('/measurements/sync', authenticateToken, async (req, res) => {
+  try {
+    if (!airtableEnabled) return sendError(res, 503, 'measurements.airtable_disabled', 'Airtable is not configured.');
+
+    const { username, entries } = req.body || {};
+    if (!username || !Array.isArray(entries) || !entries.length) {
+      return sendError(res, 422, 'measurements.invalid_payload', 'username and entries array are required.');
+    }
+
+    const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(MEASUREMENTS_TABLE)}`;
+
+    // Airtable allows max 10 records per create call — batch if needed
+    const batches = [];
+    for (let i = 0; i < entries.length; i += 10) batches.push(entries.slice(i, i + 10));
+
+    const recordIds = [];
+    for (const batch of batches) {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: airtableHeaders(),
+        body: JSON.stringify({
+          records: batch.map(e => ({
+            fields: {
+              [USERNAME_FIELD]: String(username),
+              Date:       String(e.date || ''),
+              Neck:       e.neck       != null ? Number(e.neck)       : null,
+              Shoulders:  e.shoulders  != null ? Number(e.shoulders)  : null,
+              Chest:      e.chest      != null ? Number(e.chest)      : null,
+              Waist:      e.waist      != null ? Number(e.waist)      : null,
+              Hips:       e.hips       != null ? Number(e.hips)       : null,
+              Arm:        e.arm        != null ? Number(e.arm)        : null,
+              Thigh:      e.thigh      != null ? Number(e.thigh)      : null,
+              SyncedAt:   new Date().toISOString()
+            }
+          }))
+        })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        return sendError(res, 422, 'measurements.airtable_rejected', 'Airtable rejected the request.',
+          data?.error?.message || JSON.stringify(data));
+      }
+      (data.records || []).forEach(r => recordIds.push(r.id));
+    }
+
+    return sendSuccess(res, 201, { count: recordIds.length, recordIds });
+  } catch (err) {
+    console.error('POST /measurements/sync failed:', err);
+    return sendError(res, 500, 'measurements.server_error', String(err));
+  }
+});
+
+// GET /measurements?username= — fetch synced measurement history
+app.get('/measurements', authenticateToken, async (req, res) => {
+  try {
+    if (!airtableEnabled) return res.json({ success: true, items: [] });
+    const username = typeof req.query.username === 'string' ? req.query.username.trim() : '';
+    if (!username) return sendError(res, 422, 'measurements.missing_username', 'username is required.');
+
+    const safeUsername = escapeAirtableFormulaValue(username);
+    const records = await base(MEASUREMENTS_TABLE)
+      .select({
+        filterByFormula: `{${USERNAME_FIELD}}='${safeUsername}'`,
+        sort: [{ field: 'Date', direction: 'desc' }],
+        pageSize: 100
+      })
+      .all();
+
+    const items = records.map(r => ({
+      id:         r.id,
+      date:       r.get('Date'),
+      neck:       r.get('Neck'),
+      shoulders:  r.get('Shoulders'),
+      chest:      r.get('Chest'),
+      waist:      r.get('Waist'),
+      hips:       r.get('Hips'),
+      arm:        r.get('Arm'),
+      thigh:      r.get('Thigh'),
+      syncedAt:   r.get('SyncedAt')
+    }));
+
+    return sendSuccess(res, 200, { items });
+  } catch (err) {
+    console.error('GET /measurements failed:', err);
+    return sendError(res, 500, 'measurements.server_error', String(err));
+  }
+});
+
 // ── Programs ──────────────────────────────────────────────────────────────────
 const PROGRAMS_TABLE = process.env.AIRTABLE_PROGRAMS_TABLE || 'Programs';
 
