@@ -579,11 +579,14 @@ app.post('/templates', authenticateToken, async (req, res) => {
       method: 'POST',
       headers: airtableHeaders(),
       body: JSON.stringify({
-        fields: {
-          Username:     username,
-          TemplateName: templateName,
-          TemplateData: JSON.stringify(templateData)
-        }
+        records: [{
+          fields: {
+            Username:     String(username),
+            TemplateName: String(templateName),
+            TemplateData: JSON.stringify(templateData),
+            CreatedAt:    new Date().toISOString()
+          }
+        }]
       })
     });
 
@@ -593,7 +596,7 @@ app.post('/templates', authenticateToken, async (req, res) => {
     }
 
     const result = await response.json();
-    return sendSuccess(res, 200, { record: result });
+    return sendSuccess(res, 200, { record: result?.records?.[0] || result });
   } catch (err) {
     console.error('POST /templates failed:', err);
     return sendError(res, 500, 'templates.server_error', 'Server error saving template.');
@@ -1115,7 +1118,11 @@ app.patch('/programs/:id/active', authenticateToken, async (req, res) => {
         .select({ filterByFormula: `AND({${USERNAME_FIELD}}='${safeUsername}',{IsActive}=1)` })
         .all();
       if (existing.length) {
-        await base(PROGRAMS_TABLE).update(existing.map(r => ({ id: r.id, fields: { IsActive: false } })));
+        // Airtable update max 10 records per call — batch
+        const toDeactivate = existing.map(r => ({ id: r.id, fields: { IsActive: false } }));
+        for (let i = 0; i < toDeactivate.length; i += 10) {
+          await base(PROGRAMS_TABLE).update(toDeactivate.slice(i, i + 10));
+        }
       }
     }
 
@@ -1164,11 +1171,14 @@ app.post('/sendTemplate', authenticateToken, async (req, res) => {
       method: 'POST',
       headers: airtableHeaders(),
       body: JSON.stringify({
-        fields: {
-          Username:     String(toUser),
-          TemplateName: String(templateName),
-          TemplateData: JSON.stringify(templateData)
-        }
+        records: [{
+          fields: {
+            Username:     String(toUser),
+            TemplateName: String(templateName),
+            TemplateData: JSON.stringify(templateData),
+            CreatedAt:    new Date().toISOString()
+          }
+        }]
       })
     });
 
@@ -1178,7 +1188,7 @@ app.post('/sendTemplate', authenticateToken, async (req, res) => {
     }
 
     const result = await response.json();
-    return sendSuccess(res, 200, { record: result });
+    return sendSuccess(res, 200, { record: result?.records?.[0] || result });
   } catch (err) {
     console.error('POST /sendTemplate failed:', err);
     return sendError(res, 500, 'templates.server_error', 'Server error sharing template.');
