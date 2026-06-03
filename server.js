@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const Airtable = require('airtable');
 const fetch = require('node-fetch');
 const jwt = require('jsonwebtoken');
@@ -22,12 +23,13 @@ const AIRTABLE_API_TOKEN = process.env.AIRTABLE_API_TOKEN || process.env.AIRTABL
 const JWT_SECRET         = process.env.JWT_SECRET;
 
 // ── Tables ────────────────────────────────────────────────────────────────────
-const TABLE_NAME          = process.env.AIRTABLE_TABLE        || 'Workouts';
-const DAYS_TABLE          = process.env.AIRTABLE_DAYS_TABLE   || 'Days';
+const TABLE_NAME          = process.env.AIRTABLE_TABLE           || 'Workouts';
+const DAYS_TABLE          = process.env.AIRTABLE_DAYS_TABLE      || 'Days';
 const WORKOUTS_TABLE      = 'Workouts';
 const MACRO_TARGETS_TABLE = 'MacroTargets';
-const DAILY_LOGS_TABLE    = process.env.AIRTABLE_DAILY_LOGS_TABLE || 'DailyMacros';
-const USERS_TABLE         = process.env.AIRTABLE_USERS_TABLE  || 'Users';
+const DAILY_LOGS_TABLE    = process.env.AIRTABLE_DAILY_LOGS_TABLE    || 'DailyMacros';
+const USERS_TABLE         = process.env.AIRTABLE_USERS_TABLE         || 'Users';
+const TEMPLATES_TABLE_NAME = process.env.AIRTABLE_TEMPLATES_TABLE    || 'Templates';
 const USERNAME_FIELD      = 'Username';
 
 // ── Airtable client ───────────────────────────────────────────────────────────
@@ -62,6 +64,14 @@ function airtableHeaders() {
   };
 }
 
+// fetch wrapper with 8-second timeout for all Airtable REST calls
+function airtableFetch(url, options = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  return fetch(url, { ...options, signal: controller.signal })
+    .finally(() => clearTimeout(timer));
+}
+
 // ── Auth middleware ───────────────────────────────────────────────────────────
 function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
@@ -91,6 +101,9 @@ const allowed = (process.env.CORS_ORIGINS ?? defaultOrigins)
 
 const allowAll    = allowed.length === 0;
 const allowedSet  = new Set(allowed);
+
+// Security headers
+app.use(helmet());
 
 app.use(cors({
   origin(origin, cb) {
@@ -251,11 +264,11 @@ app.post('/register', loginLimiter, async (req, res) => {
   if (!username || !password) {
     return sendError(res, 400, 'auth.missing_credentials', 'Username and password are required.');
   }
-  if (String(username).length < 3 || String(username).length > 50) {
-    return sendError(res, 400, 'auth.invalid_username', 'Username must be between 3 and 50 characters.');
+  if (String(username).length < 2 || String(username).length > 64) {
+    return sendError(res, 400, 'auth.invalid_username', 'Username must be between 2 and 64 characters.');
   }
-  if (String(password).length < 6) {
-    return sendError(res, 400, 'auth.weak_password', 'Password must be at least 6 characters.');
+  if (String(password).length < 6 || String(password).length > 128) {
+    return sendError(res, 400, 'auth.weak_password', 'Password must be between 6 and 128 characters.');
   }
   if (!airtableEnabled) {
     return sendError(res, 503, 'auth.not_configured', 'User storage is not configured.');
@@ -367,7 +380,7 @@ app.post('/workouts', authenticateToken, async (req, res) => {
 
     const sessionVolume = computeSessionVolume(workout);
     const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(WORKOUTS_TABLE)}`;
-    const response = await fetch(url, {
+    const response = await airtableFetch(url, {
       method: 'POST',
       headers: airtableHeaders(),
       body: JSON.stringify({
@@ -408,7 +421,7 @@ app.get('/workouts', authenticateToken, async (req, res) => {
       'sort[0][direction]': 'desc'
     });
     const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(WORKOUTS_TABLE)}?${params}`;
-    const response = await fetch(url, { headers: airtableHeaders() });
+    const response = await airtableFetch(url, { headers: airtableHeaders() });
     const data = await response.json();
 
     if (!response.ok) {
@@ -444,7 +457,7 @@ app.get('/macrotargets', authenticateToken, async (req, res) => {
       'sort[0][direction]': 'desc'
     });
     const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(MACRO_TARGETS_TABLE)}?${params}`;
-    const response = await fetch(url, { headers: airtableHeaders() });
+    const response = await airtableFetch(url, { headers: airtableHeaders() });
     const data = await response.json();
 
     if (!response.ok) {
@@ -471,7 +484,7 @@ app.post('/macrotargets', authenticateToken, async (req, res) => {
     }
 
     const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(MACRO_TARGETS_TABLE)}`;
-    const response = await fetch(url, {
+    const response = await airtableFetch(url, {
       method: 'POST',
       headers: airtableHeaders(),
       body: JSON.stringify({
@@ -574,8 +587,8 @@ app.post('/templates', authenticateToken, async (req, res) => {
   }
 
   try {
-    const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/Templates`;
-    const response = await fetch(url, {
+    const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(TEMPLATES_TABLE_NAME)}`;
+    const response = await airtableFetch(url, {
       method: 'POST',
       headers: airtableHeaders(),
       body: JSON.stringify({
@@ -617,7 +630,7 @@ app.get('/templates', authenticateToken, async (req, res) => {
 
   try {
     const safeOwner = escapeAirtableFormulaValue(owner);
-    const records = await base('Templates')
+    const records = await base(TEMPLATES_TABLE_NAME)
       .select({
         filterByFormula: `({Username}='${safeOwner}')`,
         pageSize: 100,
@@ -677,7 +690,7 @@ app.post('/bodyweight/archive', authenticateToken, async (req, res) => {
       : null;
 
     const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(BODYWEIGHT_TABLE)}`;
-    const response = await fetch(url, {
+    const response = await airtableFetch(url, {
       method: 'POST',
       headers: airtableHeaders(),
       body: JSON.stringify({
@@ -767,7 +780,7 @@ app.post('/measurements/sync', authenticateToken, async (req, res) => {
 
     const recordIds = [];
     for (const batch of batches) {
-      const response = await fetch(url, {
+      const response = await airtableFetch(url, {
         method: 'POST',
         headers: airtableHeaders(),
         body: JSON.stringify({
@@ -858,7 +871,7 @@ app.post('/cardio/sync', authenticateToken, async (req, res) => {
 
     const recordIds = [];
     for (const batch of batches) {
-      const response = await fetch(url, {
+      const response = await airtableFetch(url, {
         method: 'POST',
         headers: airtableHeaders(),
         body: JSON.stringify({
@@ -945,7 +958,7 @@ app.post('/crossfit/sync', authenticateToken, async (req, res) => {
 
     const recordIds = [];
     for (const batch of batches) {
-      const response = await fetch(url, {
+      const response = await airtableFetch(url, {
         method: 'POST',
         headers: airtableHeaders(),
         body: JSON.stringify({
@@ -1032,7 +1045,7 @@ async function saveProgramHandler(req, res) {
     if (!program.name) return sendError(res, 422, 'programs.missing_name', 'Program name is required.');
 
     const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(PROGRAMS_TABLE)}`;
-    const response = await fetch(url, {
+    const response = await airtableFetch(url, {
       method: 'POST',
       headers: airtableHeaders(),
       body: JSON.stringify({
@@ -1143,7 +1156,7 @@ app.delete('/programs/:id', authenticateToken, async (req, res) => {
 
   try {
     const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(PROGRAMS_TABLE)}/${encodeURIComponent(id)}`;
-    const response = await fetch(url, { method: 'DELETE', headers: airtableHeaders() });
+    const response = await airtableFetch(url, { method: 'DELETE', headers: airtableHeaders() });
     if (!response.ok) {
       const text = await response.text();
       return sendError(res, response.status, 'programs.airtable_rejected', 'Airtable rejected the delete.', text);
@@ -1166,8 +1179,8 @@ app.post('/sendTemplate', authenticateToken, async (req, res) => {
   }
 
   try {
-    const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/Templates`;
-    const response = await fetch(url, {
+    const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(TEMPLATES_TABLE_NAME)}`;
+    const response = await airtableFetch(url, {
       method: 'POST',
       headers: airtableHeaders(),
       body: JSON.stringify({
@@ -1202,8 +1215,8 @@ app.delete('/templates/:id', authenticateToken, async (req, res) => {
   if (!airtableEnabled) return sendError(res, 503, 'templates.airtable_disabled', 'Airtable is not configured.');
 
   try {
-    const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/Templates/${encodeURIComponent(id)}`;
-    const response = await fetch(url, { method: 'DELETE', headers: airtableHeaders() });
+    const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(TEMPLATES_TABLE_NAME)}/${encodeURIComponent(id)}`;
+    const response = await airtableFetch(url, { method: 'DELETE', headers: airtableHeaders() });
 
     if (!response.ok) {
       const text = await response.text();
