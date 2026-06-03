@@ -1293,6 +1293,92 @@ app.get('/days', authenticateToken, async (req, res) => {
   }
 });
 
+// ── Coach Dashboard ───────────────────────────────────────────────────────────
+const COACH_CLIENTS_TABLE      = process.env.AIRTABLE_COACH_CLIENTS_TABLE || 'CoachClients';
+const DAILY_MISSION_TABLE      = process.env.AIRTABLE_DAILY_MISSION_TABLE || 'DailyMissionState';
+
+// GET /api/coach/clients?coachId= — return all clients linked to a coach
+app.get('/api/coach/clients', authenticateToken, async (req, res) => {
+  try {
+    const coachId = typeof req.query.coachId === 'string' ? req.query.coachId.trim() : '';
+    if (!coachId) return sendError(res, 422, 'coach.missing_coach_id', 'coachId query param is required.');
+    if (!airtableEnabled) return res.json({ success: true, clients: [] });
+
+    const safeCoachId = escapeAirtableFormulaValue(coachId);
+    const records = await base(COACH_CLIENTS_TABLE)
+      .select({
+        filterByFormula: `{CoachId}='${safeCoachId}'`,
+        sort: [{ field: 'ClientName', direction: 'asc' }],
+        pageSize: 100
+      })
+      .all();
+
+    const clients = records.map(r => ({
+      id:                   r.id,
+      clientId:             r.get('ClientId')             || r.id,
+      clientName:           r.get('ClientName')           || '',
+      email:                r.get('Email')                || '',
+      status:               r.get('Status')               || 'active',
+      trainingMode:         r.get('TrainingMode')         || '',
+      currentProgram:       r.get('CurrentProgram')       || '',
+      lastCheckIn:          r.get('LastCheckIn')          || null,
+      alertStatus:          r.get('AlertStatus')          || 'ok',
+      currentNutritionSummary: r.get('NutritionSummary') || '',
+      latestCheckInData:    (() => {
+        try { return JSON.parse(r.get('LatestCheckInJson') || 'null'); } catch { return null; }
+      })()
+    }));
+
+    return sendSuccess(res, 200, { clients });
+  } catch (err) {
+    console.error('GET /api/coach/clients failed:', err);
+    return sendError(res, 500, 'coach.server_error', String(err));
+  }
+});
+
+// PUT /api/bodybuilding/daily-mission/:userId — persist daily mission state
+app.put('/api/bodybuilding/daily-mission/:userId', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    if (!userId) return sendError(res, 422, 'mission.missing_user_id', 'userId is required.');
+    if (!airtableEnabled) return sendSuccess(res, 200, { saved: false, reason: 'airtable_disabled' });
+
+    const state = req.body || {};
+    const today = new Date().toISOString().slice(0, 10);
+    const safeUserId = escapeAirtableFormulaValue(userId);
+
+    // Upsert: find existing record for this user+date, update or create
+    const existing = await base(DAILY_MISSION_TABLE)
+      .select({
+        filterByFormula: `AND({UserId}='${safeUserId}',{Date}='${today}')`,
+        maxRecords: 1
+      })
+      .firstPage();
+
+    const fields = {
+      UserId:      String(userId),
+      Date:        today,
+      StateJson:   JSON.stringify(state),
+      UpdatedAt:   new Date().toISOString()
+    };
+
+    let recordId;
+    if (existing.length) {
+      const updated = await base(DAILY_MISSION_TABLE).update([{ id: existing[0].id, fields }]);
+      recordId = updated[0]?.id;
+    } else {
+      const created = await base(DAILY_MISSION_TABLE).create([{ fields }]);
+      recordId = created[0]?.id;
+    }
+
+    return sendSuccess(res, 200, { saved: true, recordId });
+  } catch (err) {
+    // Non-fatal — mission state is always stored locally too; log but don't break the app
+    console.warn('PUT /api/bodybuilding/daily-mission failed:', err?.message);
+    return sendSuccess(res, 200, { saved: false, reason: err?.message });
+  }
+});
+
 app.use('/', leaderboardRoute);
 
 const PORT = process.env.PORT || 3000;
