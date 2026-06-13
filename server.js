@@ -453,9 +453,7 @@ app.get('/macrotargets', authenticateToken, async (req, res) => {
     const safeUsername = escapeAirtableFormulaValue(username);
     const params = new URLSearchParams({
       filterByFormula: `{${USERNAME_FIELD}}='${safeUsername}'`,
-      maxRecords: '1',
-      'sort[0][field]': 'Date',
-      'sort[0][direction]': 'desc'
+      maxRecords: '1'
     });
     const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(MACRO_TARGETS_TABLE)}?${params}`;
     const response = await airtableFetch(url, { headers: airtableHeaders() });
@@ -597,8 +595,7 @@ app.post('/templates', authenticateToken, async (req, res) => {
           fields: {
             Username:     String(username),
             TemplateName: String(templateName),
-            TemplateData: JSON.stringify(templateData),
-            CreatedAt:    new Date().toISOString()
+            TemplateData: JSON.stringify(templateData)
           }
         }]
       })
@@ -1189,8 +1186,7 @@ app.post('/sendTemplate', authenticateToken, async (req, res) => {
           fields: {
             Username:     String(toUser),
             TemplateName: String(templateName),
-            TemplateData: JSON.stringify(templateData),
-            CreatedAt:    new Date().toISOString()
+            TemplateData: JSON.stringify(templateData)
           }
         }]
       })
