@@ -226,6 +226,7 @@ async function findDayRecordId(dateKey) {
 
 // Health check
 app.get('/healthz', (_req, res) => res.send('ok'));
+app.get('/health',  (_req, res) => res.json({ status: 'ok' }));
 
 // Env check — no sensitive values
 app.get('/envcheck', (_req, res) => {
@@ -1380,6 +1381,12 @@ app.put('/api/bodybuilding/daily-mission/:userId', authenticateToken, async (req
 });
 
 app.use('/', leaderboardRoute);
+
+// Keep Render free tier awake — pings itself every 14 min
+setInterval(() => {
+  const url = process.env.RENDER_EXTERNAL_URL || 'https://traininglog-backend.onrender.com';
+  fetch(`${url}/health`).catch(() => {});
+}, 14 * 60 * 1000);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
