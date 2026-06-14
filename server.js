@@ -1376,6 +1376,197 @@ app.put('/api/bodybuilding/daily-mission/:userId', authenticateToken, async (req
   }
 });
 
+// ── Mobility ──────────────────────────────────────────────────────────────────
+const MOBILITY_ROUTINES_TABLE  = process.env.AIRTABLE_MOBILITY_ROUTINES_TABLE  || 'MobilityRoutines';
+const MOBILITY_SESSIONS_TABLE  = process.env.AIRTABLE_MOBILITY_SESSIONS_TABLE  || 'MobilitySessions';
+
+// GET /mobility/routines?username=
+app.get('/mobility/routines', authenticateToken, async (req, res) => {
+  try {
+    if (!airtableEnabled) return res.json({ success: true, items: [] });
+    const username = typeof req.query.username === 'string' ? req.query.username.trim() : '';
+    if (!username) return sendError(res, 422, 'mobility.missing_username', 'username is required.');
+
+    const safeUsername = escapeAirtableFormulaValue(username);
+    const records = await base(MOBILITY_ROUTINES_TABLE)
+      .select({
+        filterByFormula: `OR({${USERNAME_FIELD}}='${safeUsername}',{AssignedByCoach}=1)`,
+        sort: [{ field: 'CreatedAt', direction: 'desc' }],
+        pageSize: 100
+      })
+      .all();
+
+    const items = records.map(r => ({
+      id:                 r.id,
+      username:           r.get('Username'),
+      routineId:          r.get('RoutineId'),
+      name:               r.get('Name'),
+      type:               r.get('Type'),
+      targetArea:         r.get('TargetArea'),
+      frequencyPerWeek:   r.get('FrequencyPerWeek'),
+      exercises:          (() => { try { return JSON.parse(r.get('Exercises') || '[]'); } catch { return []; } })(),
+      assignedByCoach:    r.get('AssignedByCoach') || false,
+      coachNotes:         r.get('CoachNotes') || '',
+      createdAt:          r.get('CreatedAt')
+    }));
+
+    return sendSuccess(res, 200, { items });
+  } catch (err) {
+    console.error('GET /mobility/routines failed:', err);
+    return sendError(res, 500, 'mobility.server_error', String(err));
+  }
+});
+
+// POST /mobility/routines — create a new mobility routine
+app.post('/mobility/routines', authenticateToken, async (req, res) => {
+  try {
+    if (!airtableEnabled) return sendError(res, 503, 'mobility.airtable_disabled', 'Airtable is not configured.');
+    const { username, routineId, name, type, targetArea, frequencyPerWeek, exercises, assignedByCoach, coachNotes } = req.body || {};
+    if (!username || !name) return sendError(res, 422, 'mobility.invalid_payload', 'username and name are required.');
+
+    const [record] = await base(MOBILITY_ROUTINES_TABLE).create([{
+      fields: {
+        [USERNAME_FIELD]:   String(username),
+        RoutineId:          routineId ? String(routineId) : `routine_${Date.now()}`,
+        Name:               String(name),
+        Type:               type ? String(type) : '',
+        TargetArea:         targetArea ? String(targetArea) : '',
+        FrequencyPerWeek:   frequencyPerWeek != null ? Number(frequencyPerWeek) : null,
+        Exercises:          exercises ? JSON.stringify(exercises) : '[]',
+        AssignedByCoach:    Boolean(assignedByCoach),
+        CoachNotes:         coachNotes ? String(coachNotes) : '',
+        CreatedAt:          new Date().toISOString()
+      }
+    }]);
+
+    return sendSuccess(res, 201, { recordId: record.id });
+  } catch (err) {
+    console.error('POST /mobility/routines failed:', err);
+    return sendError(res, 500, 'mobility.server_error', String(err));
+  }
+});
+
+// DELETE /mobility/routines/:id
+app.delete('/mobility/routines/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  if (!id) return sendError(res, 400, 'mobility.missing_id', 'Record ID is required.');
+  if (!airtableEnabled) return sendError(res, 503, 'mobility.airtable_disabled', 'Airtable is not configured.');
+  try {
+    await base(MOBILITY_ROUTINES_TABLE).destroy([id]);
+    return sendSuccess(res, 200, { deleted: id });
+  } catch (err) {
+    console.error('DELETE /mobility/routines/:id failed:', err);
+    return sendError(res, 500, 'mobility.server_error', String(err));
+  }
+});
+
+// GET /mobility/sessions?username=
+app.get('/mobility/sessions', authenticateToken, async (req, res) => {
+  try {
+    if (!airtableEnabled) return res.json({ success: true, items: [] });
+    const username = typeof req.query.username === 'string' ? req.query.username.trim() : '';
+    if (!username) return sendError(res, 422, 'mobility.missing_username', 'username is required.');
+
+    const safeUsername = escapeAirtableFormulaValue(username);
+    const records = await base(MOBILITY_SESSIONS_TABLE)
+      .select({
+        filterByFormula: `{${USERNAME_FIELD}}='${safeUsername}'`,
+        sort: [{ field: 'CompletedAt', direction: 'desc' }],
+        pageSize: 100
+      })
+      .all();
+
+    const items = records.map(r => ({
+      id:           r.id,
+      username:     r.get('Username'),
+      sessionId:    r.get('SessionId'),
+      routineId:    r.get('RoutineId'),
+      completedAt:  r.get('CompletedAt'),
+      notes:        r.get('Notes') || ''
+    }));
+
+    return sendSuccess(res, 200, { items });
+  } catch (err) {
+    console.error('GET /mobility/sessions failed:', err);
+    return sendError(res, 500, 'mobility.server_error', String(err));
+  }
+});
+
+// POST /mobility/sessions — log a completed mobility session
+app.post('/mobility/sessions', authenticateToken, async (req, res) => {
+  try {
+    if (!airtableEnabled) return sendError(res, 503, 'mobility.airtable_disabled', 'Airtable is not configured.');
+    const { username, sessionId, routineId, completedAt, notes } = req.body || {};
+    if (!username || !routineId) return sendError(res, 422, 'mobility.invalid_payload', 'username and routineId are required.');
+
+    const [record] = await base(MOBILITY_SESSIONS_TABLE).create([{
+      fields: {
+        [USERNAME_FIELD]: String(username),
+        SessionId:        sessionId ? String(sessionId) : `session_${Date.now()}`,
+        RoutineId:        String(routineId),
+        CompletedAt:      completedAt ? String(completedAt) : new Date().toISOString(),
+        Notes:            notes ? String(notes) : ''
+      }
+    }]);
+
+    return sendSuccess(res, 201, { recordId: record.id });
+  } catch (err) {
+    console.error('POST /mobility/sessions failed:', err);
+    return sendError(res, 500, 'mobility.server_error', String(err));
+  }
+});
+
+// ── AI Chat ───────────────────────────────────────────────────────────────────
+
+// POST /ai/chat — proxy to Anthropic claude-haiku-4-5
+app.post('/ai/chat', authenticateToken, async (req, res) => {
+  try {
+    const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+    if (!ANTHROPIC_API_KEY) {
+      return sendError(res, 503, 'ai.not_configured', 'Anthropic API key is not configured.');
+    }
+
+    const { messages, systemPrompt } = req.body || {};
+    if (!Array.isArray(messages) || !messages.length) {
+      return sendError(res, 422, 'ai.invalid_payload', 'messages array is required.');
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 30000); // 30s timeout for AI
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'x-api-key':         ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+        'Content-Type':      'application/json'
+      },
+      body: JSON.stringify({
+        model:      'claude-haiku-4-5-20251001',
+        max_tokens: 1024,
+        system:     systemPrompt || 'You are a helpful fitness coaching assistant.',
+        messages:   messages.map(m => ({ role: m.role, content: String(m.content) }))
+      })
+    }).finally(() => clearTimeout(timer));
+
+    const data = await response.json();
+    if (!response.ok) {
+      return sendError(res, 502, 'ai.upstream_error', 'Anthropic API returned an error.',
+        data?.error?.message || JSON.stringify(data));
+    }
+
+    const reply = data?.content?.[0]?.text || '';
+    return sendSuccess(res, 200, { reply });
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      return sendError(res, 504, 'ai.timeout', 'AI request timed out.');
+    }
+    console.error('POST /ai/chat failed:', err);
+    return sendError(res, 500, 'ai.server_error', String(err));
+  }
+});
+
 app.use('/', leaderboardRoute);
 
 // Keep Render free tier awake — pings itself every 14 min
