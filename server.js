@@ -7,10 +7,12 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const rateLimit = require('express-rate-limit');
 const leaderboardRoute = require('./leaderboard');
+const { router: aiRouter } = require('./src/routes/ai');
 
 const app = express();
 
 // ── Environment validation ────────────────────────────────────────────────────
+// Required: AIRTABLE_TOKEN, AIRTABLE_BASE_ID, JWT_SECRET, ANTHROPIC_API_KEY
 const missing = ['AIRTABLE_TOKEN', 'AIRTABLE_BASE_ID', 'JWT_SECRET']
   .filter(k => !process.env[k]);
 if (missing.length) {
@@ -1567,6 +1569,7 @@ app.post('/ai/chat', authenticateToken, async (req, res) => {
   }
 });
 
+app.use('/api/ai', aiRouter);
 app.use('/', leaderboardRoute);
 
 // Keep Render free tier awake — pings itself every 14 min
