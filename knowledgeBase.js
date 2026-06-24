@@ -12,7 +12,15 @@ const upload = multer({
 });
 
 async function extractKnowledgeWithClaude(text, moduleName, topic) {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw new Error('ANTHROPIC_API_KEY not configured');
+  }
+
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+  // Truncate to ~50k chars to stay within token limits
+  const truncated = text.slice(0, 50000);
+  console.log(`[KnowledgeBase] Extracting from ${truncated.length} chars for module "${moduleName}" (${topic})`);
 
   const prompt = `You are extracting structured knowledge from a personal trainer's methodology document.
 
@@ -36,22 +44,35 @@ Extract all relevant knowledge from this document and return ONLY a valid JSON o
 Only include fields that have actual content from the document. Leave arrays empty and strings blank if not covered. Do not invent information.
 
 Document text:
-${text.slice(0, 120000)}`;
+${truncated}`;
 
-  const message = await client.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 4000,
-    messages: [{ role: 'user', content: prompt }]
-  });
+  try {
+    const message = await client.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 4000,
+      messages: [{ role: 'user', content: prompt }]
+    });
 
-  const raw = message.content?.[0]?.text || '';
-  const clean = raw.replace(/```json|```/g, '').trim();
-  return JSON.parse(clean);
+    const raw = message.content?.[0]?.text || '';
+    console.log(`[KnowledgeBase] Claude response length: ${raw.length}`);
+    const clean = raw.replace(/```json|```/g, '').trim();
+    return JSON.parse(clean);
+  } catch (err) {
+    console.error(`[KnowledgeBase] Claude extraction failed:`, err.message);
+    throw err;
+  }
 }
 
 async function saveToAirtable(airtableToken, airtableBaseId, fields) {
   const fetch = require('node-fetch');
   const url = `https://api.airtable.com/v0/${airtableBaseId}/KnowledgeBase`;
+
+  // Airtable long text fields max 100k chars
+  if (fields.ExtractedJSON && fields.ExtractedJSON.length > 95000) {
+    console.warn('[KnowledgeBase] ExtractedJSON too large, truncating');
+    fields.ExtractedJSON = fields.ExtractedJSON.slice(0, 95000);
+  }
+
   const response = await fetch(url, {
     method: 'POST',
     headers: {
@@ -63,6 +84,7 @@ async function saveToAirtable(airtableToken, airtableBaseId, fields) {
 
   if (!response.ok) {
     const err = await response.json();
+    console.error('[KnowledgeBase] Airtable save error:', JSON.stringify(err));
     throw new Error(`Airtable save failed: ${JSON.stringify(err)}`);
   }
 
