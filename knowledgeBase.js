@@ -22,26 +22,47 @@ async function extractKnowledgeWithClaude(text, moduleName, topic) {
   const truncated = text.slice(0, 30000);
   console.log(`[KnowledgeBase] Sending ${truncated.length} chars to Claude for "${moduleName}" (${topic})`);
 
-  const prompt = `You are extracting structured knowledge from a personal trainer's methodology document.
+  const prompt = `You are extracting ALL knowledge from a personal trainer's methodology document. Capture everything — do not discard information because it doesn't fit a narrow category.
 
 Module name: "${moduleName}"
 Topic category: "${topic}"
 
-Extract all relevant knowledge and return ONLY valid JSON — no preamble, no markdown fences. Structure:
+Return ONLY valid JSON — no preamble, no markdown fences. Use this structure:
 
 {
   "principles": [],
   "methods": [],
+  "protocols": [],
   "progressionModel": "",
   "exerciseCues": {},
   "nutritionGuidelines": {},
   "recoveryProtocols": [],
+  "programmingGuidelines": {},
+  "periodization": {},
+  "recommendations": [],
   "coachingNotes": [],
   "keyTerms": {},
-  "warningsAndContraindications": []
+  "warningsAndContraindications": [],
+  "rawInsights": []
 }
 
-Only include fields with actual content. Do not invent information.
+Field guide:
+- principles: core training/nutrition/coaching philosophies
+- methods: specific techniques, approaches, systems described
+- protocols: step-by-step procedures, phase structures, competition prep timelines, peaking strategies, deload protocols, weekly structures
+- progressionModel: how to progress over time
+- exerciseCues: exercise-specific technique cues and form tips (key = exercise name, value = cue text)
+- nutritionGuidelines: any nutrition advice — macros, meal timing, supplementation, water cuts, refeed strategies, diet phases
+- recoveryProtocols: rest, deload, sleep, stress management, injury prevention
+- programmingGuidelines: training splits, volume recommendations, frequency, exercise selection rationale, session structure
+- periodization: block structures, mesocycle design, phase transitions, tapering
+- recommendations: actionable coach-to-athlete advice that doesn't fit other categories
+- coachingNotes: practical coaching wisdom, client management tips, common mistakes
+- keyTerms: glossary of terms defined or used (key = term, value = definition)
+- warningsAndContraindications: things to avoid, risks, red flags
+- rawInsights: ANY other valuable information from the document that doesn't fit the above categories — quotes, data points, research references, unique concepts
+
+Be thorough. Extract EVERYTHING of value. A training document may contain nutrition info and vice versa — capture it all regardless of the topic category.
 
 Document text:
 ${truncated}`;
