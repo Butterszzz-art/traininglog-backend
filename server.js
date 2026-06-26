@@ -231,6 +231,127 @@ async function findDayRecordId(dateKey) {
 app.get('/healthz', (_req, res) => res.send('ok'));
 app.get('/health',  (_req, res) => res.json({ status: 'ok' }));
 
+// ── User plan endpoint ───────────────────────────────────────────────────────
+app.get('/api/user/plan', authenticateToken, async (req, res) => {
+  try {
+    const username = req.user?.username;
+    if (!username) return res.json({ plan: 'free', status: 'none' });
+
+    const user = await getUserByUsername(username);
+    if (!user) return res.json({ plan: 'free', status: 'none' });
+
+    const f = user.fields;
+    return res.json({
+      plan: f.UserPlan || 'free',
+      status: f.SubStatus || 'none',
+      periodEnd: f.SubCurrentPeriodEnd || '',
+      billingCycle: f.BillingCycle || '',
+      referralCode: f.ReferralCode || '',
+      referralCredits: Number(f.ReferralCredits) || 0,
+    });
+  } catch (err) {
+    console.error('[GET /api/user/plan]', err.message);
+    return res.json({ plan: 'free', status: 'none' });
+  }
+});
+
+// ── Stripe checkout (requires STRIPE_SECRET_KEY) ─────────────────────────────
+const stripeEnabled = Boolean(process.env.STRIPE_SECRET_KEY);
+let stripe = null;
+if (stripeEnabled) {
+  const Stripe = require('stripe');
+  stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+}
+
+app.post('/api/stripe/create-checkout-session', async (req, res) => {
+  if (!stripeEnabled) return res.status(503).json({ error: 'Stripe not configured' });
+  const { username, plan, billing } = req.body;
+  if (!username || !plan) return res.status(400).json({ error: 'username and plan required' });
+
+  const priceMap = {
+    'pro-monthly': process.env.STRIPE_PRO_MONTHLY_PRICE_ID,
+    'pro-annual': process.env.STRIPE_PRO_ANNUAL_PRICE_ID,
+    'coach-monthly': process.env.STRIPE_COACH_MONTHLY_PRICE_ID,
+    'coach-annual': process.env.STRIPE_COACH_ANNUAL_PRICE_ID,
+  };
+  const priceId = priceMap[plan + '-' + (billing || 'monthly')];
+  if (!priceId) return res.status(400).json({ error: 'Invalid plan/billing combination' });
+
+  try {
+    const user = await getUserByUsername(username);
+    const credits = user ? (Number(user.fields.ReferralCredits) || 0) : 0;
+    const trialDays = credits > 0 ? credits * 30 : 7;
+
+    const sessionParams = {
+      mode: 'subscription',
+      payment_method_types: ['card'],
+      line_items: [{ price: priceId, quantity: 1 }],
+      success_url: (process.env.APP_URL || 'https://butterszzz-art.github.io/TrainingLog-mobile') + '/payment-success.html?plan=' + plan,
+      cancel_url: (process.env.APP_URL || 'https://butterszzz-art.github.io/TrainingLog-mobile') + '/#pricing',
+      subscription_data: { trial_period_days: trialDays, metadata: { username, plan, billing: billing || 'monthly' } },
+      metadata: { username, plan, billing: billing || 'monthly' },
+    };
+    if (user?.fields?.StripeCustomerId) sessionParams.customer = user.fields.StripeCustomerId;
+
+    const session = await stripe.checkout.sessions.create(sessionParams);
+    return res.json({ url: session.url });
+  } catch (err) {
+    console.error('[Stripe checkout]', err.message);
+    return res.status(500).json({ error: 'Could not create checkout session' });
+  }
+});
+
+app.get('/api/stripe/portal', async (req, res) => {
+  if (!stripeEnabled) return res.status(503).json({ error: 'Stripe not configured' });
+  const username = req.query.username;
+  if (!username) return res.status(400).json({ error: 'username required' });
+
+  try {
+    const user = await getUserByUsername(username);
+    const customerId = user?.fields?.StripeCustomerId;
+    if (!customerId) return res.status(400).json({ error: 'No Stripe customer found' });
+
+    const session = await stripe.billingPortal.sessions.create({
+      customer: customerId,
+      return_url: (process.env.APP_URL || 'https://butterszzz-art.github.io/TrainingLog-mobile') + '/#settings',
+    });
+    return res.json({ url: session.url });
+  } catch (err) {
+    console.error('[Stripe portal]', err.message);
+    return res.status(500).json({ error: 'Could not create portal session' });
+  }
+});
+
+// ── Referral endpoints ───────────────────────────────────────────────────────
+app.get('/api/referral/validate', async (req, res) => {
+  const code = req.query.code;
+  if (!code || !airtableEnabled) return res.json({ valid: false });
+  try {
+    const safe = escapeAirtableFormulaValue(code);
+    const records = await base(USERS_TABLE).select({ filterByFormula: `{ReferralCode}='${safe}'`, maxRecords: 1 }).firstPage();
+    if (!records.length) return res.json({ valid: false });
+    return res.json({ valid: true, referrerName: (records[0].fields.Username || '').slice(0, 8) });
+  } catch { return res.json({ valid: false }); }
+});
+
+app.get('/api/referral/stats', async (req, res) => {
+  const username = req.query.username;
+  if (!username || !airtableEnabled) return res.json({ referralCode: '', referralCredits: 0, referralCount: 0 });
+  try {
+    const user = await getUserByUsername(username);
+    if (!user) return res.json({ referralCode: '', referralCredits: 0, referralCount: 0 });
+    const code = user.fields.ReferralCode || '';
+    const credits = Number(user.fields.ReferralCredits) || 0;
+    let count = 0;
+    if (code) {
+      const safe = escapeAirtableFormulaValue(code);
+      const referred = await base(USERS_TABLE).select({ filterByFormula: `{ReferredBy}='${safe}'` }).firstPage();
+      count = referred.length;
+    }
+    return res.json({ referralCode: code, referralCredits: credits, referralCount: count });
+  } catch { return res.json({ referralCode: '', referralCredits: 0, referralCount: 0 }); }
+});
+
 // Env check — no sensitive values
 app.get('/envcheck', (_req, res) => {
   res.json({ success: true, airtableConfigured: airtableEnabled });
@@ -258,7 +379,39 @@ async function findUserByUsername(username) {
   if (!passwordHash) {
     console.error(`[AUTH] User "${username}" found but has no PasswordHash/Password field. Check Airtable field names.`);
   }
-  return { id: records[0].id, username: f.Username, passwordHash };
+  return { id: records[0].id, username: f.Username, passwordHash, fields: f };
+}
+
+// Get full user record by username (for plan/billing queries)
+async function getUserByUsername(username) {
+  if (!airtableEnabled) return null;
+  try {
+    const safe = escapeAirtableFormulaValue(username);
+    const records = await base(USERS_TABLE)
+      .select({ filterByFormula: `{Username}='${safe}'`, maxRecords: 1 })
+      .firstPage();
+    if (!records.length) return null;
+    return { id: records[0].id, fields: records[0].fields };
+  } catch { return null; }
+}
+
+// Update user plan fields in Airtable
+async function updateUserPlan(recordId, fields) {
+  if (!airtableEnabled || !recordId) return false;
+  try {
+    await base(USERS_TABLE).update([{ id: recordId, fields }]);
+    return true;
+  } catch (err) {
+    console.error('[updateUserPlan] Failed:', err.message);
+    return false;
+  }
+}
+
+// Generate unique referral code
+function generateReferralCode(username) {
+  const base36 = username.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 5);
+  const rand = Math.random().toString(36).substring(2, 6).toUpperCase();
+  return `${base36}-${rand}`;
 }
 
 // Register
@@ -285,8 +438,19 @@ app.post('/register', loginLimiter, async (req, res) => {
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
+    const referralCode = generateReferralCode(username);
+    const referredBy = req.body.referredBy || '';
     const [record] = await base(USERS_TABLE).create([{
-      fields: { Username: String(username), PasswordHash: passwordHash, CreatedAt: new Date().toISOString() }
+      fields: {
+        Username: String(username),
+        PasswordHash: passwordHash,
+        CreatedAt: new Date().toISOString(),
+        UserPlan: 'free',
+        ReferralCode: referralCode,
+        ReferredBy: referredBy || '',
+        ReferralCredits: 0,
+        ProgramGenCount: 0,
+      }
     }]);
 
     const token = jwt.sign({ id: record.id, username: String(username) }, JWT_SECRET, { expiresIn: '7d' });
