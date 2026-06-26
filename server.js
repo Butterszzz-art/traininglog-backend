@@ -98,7 +98,7 @@ function authenticateToken(req, res, next) {
 }
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
-const defaultOrigins = 'https://butterszzz-art.github.io,http://localhost:5173';
+const defaultOrigins = 'https://pocketcoachcoms.org,http://localhost:5173';
 const allowed = (process.env.CORS_ORIGINS ?? defaultOrigins)
   .split(',').map(s => s.trim()).filter(Boolean);
 
@@ -286,8 +286,8 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
       mode: 'subscription',
       payment_method_types: ['card'],
       line_items: [{ price: priceId, quantity: 1 }],
-      success_url: (process.env.APP_URL || 'https://butterszzz-art.github.io/TrainingLog-mobile') + '/payment-success.html?plan=' + plan,
-      cancel_url: (process.env.APP_URL || 'https://butterszzz-art.github.io/TrainingLog-mobile') + '/#pricing',
+      success_url: (process.env.APP_URL || 'https://pocketcoachcoms.org') + '/payment-success.html?plan=' + plan,
+      cancel_url: (process.env.APP_URL || 'https://pocketcoachcoms.org') + '/#pricing',
       subscription_data: { trial_period_days: trialDays, metadata: { username, plan, billing: billing || 'monthly' } },
       metadata: { username, plan, billing: billing || 'monthly' },
     };
@@ -313,7 +313,7 @@ app.get('/api/stripe/portal', async (req, res) => {
 
     const session = await stripe.billingPortal.sessions.create({
       customer: customerId,
-      return_url: (process.env.APP_URL || 'https://butterszzz-art.github.io/TrainingLog-mobile') + '/#settings',
+      return_url: (process.env.APP_URL || 'https://pocketcoachcoms.org') + '/#settings',
     });
     return res.json({ url: session.url });
   } catch (err) {
