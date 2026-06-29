@@ -151,6 +151,192 @@ AVOID:
 NOT RECOMMENDED:
 - Weighted stretching for hypertrophy: Requires extreme intensity (7-8/10 pain, >15 min/day). Impractical.
 - Static stretching between sets: Reduces reps in subsequent sets.
+
+### MODULE 7: PERIODIZATION & PROGRESSIVE OVERLOAD
+
+PROGRESSIVE OVERLOAD is the foundation of every program. Without progressive increase in mechanical tension, growth stagnates.
+
+5 ways to implement progressive overload (in order):
+1. More weight — most direct. Microloading essential for isolation (max 2.5% per session for advanced).
+2. More sets — most effective if optimal volume not yet reached.
+3. More reps — build within rep range before increasing weight (interval progression).
+4. Higher frequency — more sessions per week per muscle group.
+5. Exercise variation — when other methods stall; creates new benchmark.
+
+AUTOREGULATORY VOLUME TRAINING (AVT): Only plan the first set (benchmark set). Follow-up sets use same weight and proximity to failure but no planned rep target. Volume self-regulates to daily recovery capacity. AVT is exercise-specific — bicep fatigue doesn't affect squat volume.
+
+PERIODIZATION MODELS:
+- Linear: Rising intensity, declining volume. For athletes with competition peak. Not better than non-periodized for hypertrophy.
+- Undulating (DUP/WUP): Alternating intensities per day/week. Superior for strength. Slight preference over block for hypertrophy.
+- Block: Sequential blocks with different goals. For athletes with competing demands. No advantage for recreational lifters.
+- No periodization: Fine for beginners where linear progression still works.
+
+"MUSCLE CONFUSION" has no scientific basis. Muscles respond to current mechanical tension, not novelty. Progressive overload on fixed exercises is superior.
+
+Only start periodizing when linear progression stalls. Decision tree: more reps → interval progression → exercise change → then periodization.
+
+FATIGUE: Peripheral (local muscle) vs Central (CNS). "Feeling weak" is NOT proof of CNS fatigue and NOT a reason to skip training.
+
+DELOADS:
+- Traditional (proactive, every 4th week): NOT recommended. Timing is arbitrary, full-body is overkill (fatigue is local), rest week slows recovery.
+- Reactive (autoregulation): RECOMMENDED. Deload specific exercise only when performance unexpectedly drops. Criteria: >2.5% strength loss at same exercise with no other explanation.
+
+Overtraining is rare in recreational athletes. Most "overtraining" is actually underfeeding, sleep deprivation, or psychological fatigue. Always ask: diet, sleep, stress?
+
+### MODULE 8: CARDIO & CARDIORESPIRATORY TRAINING
+
+Core truth: Cardio's only role in fat loss is increasing energy expenditure. Diet is far more effective. Resistance training is at least as effective as cardio for fat loss AND builds muscle.
+
+MYTHS DEBUNKED:
+- Fat-burning zone: Lower intensity burns higher % fat but fewer total calories. At equal energy expenditure, intensity doesn't matter for fat loss.
+- Fasted cardio: Burning more fat during training = less glucose burned = more glucose available for fat storage later. Total daily energy balance determines fat loss.
+- EPOC/afterburn: Only 6-15% of net session expenditure, lasting 3-24h. Max ~114 kcal after extreme cardio. Negligible.
+- "HIIT gives you a sprinter body": HIIT metabolically resembles soccer, not sprinting. Sprinters rest 5+ min per 10-sec sprint.
+
+INTERFERENCE EFFECT: Endurance activates AMPK which inhibits mTOR (muscle growth pathway). Concurrent training impairs strength more than hypertrophy.
+
+HIIT vs LISS for strength athletes:
+- HIIT: Greater interference on muscle growth (2022 meta-analysis), even 30-sec sprint separated by 24h can interfere
+- LISS: Minimal interference at <60% HRmax, more sustainable long-term, better psychological tolerance
+- For WOMEN: HIIT is extra unfavorable — smaller VO2max benefit, worse recovery, less efficient motor cortex
+
+CARDIO STRATEGIES for strength athletes (in order):
+1. Keep sessions short (<20 min)
+2. Separate from strength by min 6h, ideally 24h. If same day: cardio AFTER strength
+3. Choose LISS over HIIT (<60% HRmax, breathing through nose)
+4. Choose concentric, low-impact forms (cycling, rowing, swimming, elliptical — NOT running)
+5. Don't do more cardio than needed — use as supplement to diet, not replacement
+
+### MODULE 9: STRETCHING
+
+Core truth: Stretching does NOT make muscles longer. It increases stretch tolerance (neural pain threshold adaptation).
+
+3 mechanisms of ROM increase:
+1. Increased stretch tolerance (neural) — primary mechanism, very position-specific
+2. Increased viscoelasticity (temporary) — minutes to hours
+3. Reduced passive stiffness (long-term) — weeks, not consistently shown
+
+Resistance training with full ROM is at least as effective as stretching for ROM improvement AND actually lengthens muscle fascicles via sarcomere addition — something stretching cannot do.
+
+KEY CONCLUSIONS:
+- Most strength athletes NEVER need to stretch separately
+- Stretching only relevant for a specific ROM problem in a specific movement
+- No stretching needed in warm-up (specific warm-up sets ARE dynamic stretching)
+- Stretching does NOT prevent injuries (flexibility is a poor predictor of injury risk, hypermobility may increase risk)
+- Post-workout stretching does NOT aid recovery (meta-analysis 2025: no effect on soreness, pain thresholds, strength, or performance)
+- Stretching reduces blood flow to muscles and tendons (similar to BFR band)
+- More stretching ≠ more flexibility gain (no benefit beyond 4 min/session or 10 min/week)
+
+### MODULE 10: POSTURE CORRECTION
+
+Core truth: There is no universally perfect posture. Postural deviations are only pathological when accompanied by PAIN or DYSFUNCTION.
+
+The muscle imbalance theory (short = strong, long = weak) does NOT hold:
+- "Tightness" is subjective and correlates poorly with measurable muscle length
+- Anterior pelvic tilt is NORMAL — present in 85% of asymptomatic men and 75% of women (Herrington 2011)
+- No consistent link between any posture type and back pain (systematic review of reviews 2019)
+- Sitting does not cause bad posture or back pain more than standing
+- Anterior pelvic tilt can be ADVANTAGEOUS for sprinting and horizontal force production
+
+Corrective exercises mostly don't change resting posture. When posture improves with training, it's via improved wellbeing and confidence — not muscle balance correction.
+
+FMS (Functional Movement Screen) predicts injury risk no better than chance. Movement is too specific to test generically.
+
+### MODULE 18: SEX-SPECIFIC PROGRAMMING
+
+Women have the SAME relative muscle potential as men. The 15-20% absolute difference is explained by: higher essential body fat (~12% vs ~3%), lower expectations, and smaller elite population.
+
+Women and testosterone: Women have 15x less testosterone but growth factors (IGF-1, GH — women have 3x more GH) take over the anabolic role. Testosterone works MORE potently per unit in women.
+
+Estrogen is ANABOLIC — it promotes muscle protein synthesis. Low-fat diets reduce estrogen → less muscle growth. Higher fat intake → more estrogen AND testosterone in women.
+
+TRAINING DIFFERENCES for women:
+- Higher fatigue resistance — more type I fibers, higher oxidative capacity, more efficient recovery → can handle more sets/session, shorter rest, higher frequency
+- Lower motor coordination at >90% 1RM → better at 8-15 reps than men
+- Possibly smaller interference effect for lower body
+- Shorter rest intervals needed
+
+PRACTICAL: Start with same template as a man → test work capacity → increase volume if high → use muscle-specific hypertrophy method for automatic higher rep ranges.
+
+NUTRITION for women: Higher fat intake recommended (~40% of energy for hormonal benefits), lower carbs (glycogen-sparing metabolism), same relative protein (1.8g/kg).
+
+MENSTRUAL CYCLE:
+- Follicular phase (day 1-13): Rising estrogen. BEST phase for heavy training, high volume, PRs.
+- Ovulation (~day 14): Peak strength BUT increased ACL injury risk. No max 1RM attempts.
+- Luteal phase (day 15-28): Rising progesterone, declining estrogen. Performance decline, water retention (+0.5-2kg — NOT fat gain). Better for lower intensity, higher reps, recovery work.
+- Only implement menstrual periodization if the client reports clear, consistent performance changes between phases.
+
+### MODULE 19: POWERLIFTING
+
+Strength = muscle size (the "engine") × neuromuscular efficiency (the "driver"). Powerlifters need both.
+
+3 exercise categories for powerlifters:
+1. The powerlifts themselves (squat, bench, deadlift) — min 2-3x/week, 6-16 sets/week each
+2. Supplementary variants (front squats, paused squats, deficit deadlifts) — outside last 8-12 weeks before competition
+3. Mass builders (all other exercises) — maximize muscle growth
+
+Programming:
+- Full-body splits with high frequency are optimal
+- DUP (daily undulating periodization) recommended
+- Plan heavy powerlifts on lowest-fatigue days
+- Supplementary exercises AFTER powerlifts or next day — NEVER before (muscle damage suppresses motor learning)
+- Reactive deloads, not scheduled
+
+TAPERING: Short taper (2-3 days), maintain or increase intensity, reduce volume by ~70%. Long taper (1+ week) is harmful — neurological sharpness declines.
+
+COMPETITION ATTEMPT SELECTION:
+- Opener (~90% 1RM): Conservative, always make it
+- Attempt 2 (~95-100%): Solid, confident lift
+- Attempt 3 (>100%): PR attempt only if 1 and 2 went well
+
+### MODULE 20: TRAINING CASE STUDIES — 6-STEP PROGRAM DESIGN
+
+1. Determine total weekly training frequency (how often can the client consistently train?)
+2. Determine per-muscle-group frequency (beginner: 2x, advanced with priority: 3-4x)
+3. Determine weekly set volume per muscle group (beginner: 10 sets, advanced: 10-30+)
+4. Select exercises, intensity, and progression model (6 selection criteria, muscle-specific hypertrophy method)
+5. Distribute exercises across the training split (priority first, compound before isolation, heavy before light, antagonistic supersets, combo sets)
+6. Check feasibility (realistic for this client's schedule, goals, equipment, motivation?)
+
+The 5 central principles across ALL modules:
+1. Mechanical tension is the primary growth stimulus — always
+2. Energy balance is the primary determinant of body composition
+3. Specificity: the body adapts to the exact demands you place on it
+4. Subjective sensation correlates poorly with objective physiology
+5. Adjustment based on measurable outcomes > sticking to a fixed plan
+
+### COMPETITION PREPARATION (PEAK WEEK)
+
+Two golden principles: Be AGGRESSIVE (homeostatic systems require large changes) and EXPERIMENT (test rounds are mandatory).
+
+PROTOCOL ORDER: Glycogen depletion → Carb load → Water cut → Shitload
+
+GLYCOGEN DEPLETION:
+- ~3 days low carb (~100g/day, avoid ketosis)
+- Depletion training: HIIT cardio (assault bike, stairmaster), NOT strength training (causes muscle damage which slows glycogen resynthesis)
+- Sprint 10-30 sec, rest to recovery, repeat 10+ sets
+
+CARB LOADING:
+- Start immediately after depletion training
+- Minimum 8g/kg/day, ideal 10g/kg/day, max ~12g/kg
+- Must be in caloric surplus
+- Post-workout: min 1.85g/kg immediately, then 1.2g/kg/hour for 5 hours
+- Limit fructose to ≤100g (fills liver glycogen, not muscle)
+- Every gram glycogen pulls 2.7-4g water into muscle
+- WOMEN react differently: need caloric surplus AND high carb intake. Follicular phase less favorable than luteal.
+- Always carbload BEFORE water cut (carbloading while dehydrated = muscle water loss)
+
+WATER CUT:
+- Sodium cut 3-6 hours BEFORE water cut (order is critical)
+- Dandelion leaf (safe diuretic, specific sodium excretion)
+- ~78% of muscle volume is water — too much dehydration shrinks muscles
+
+SHITLOAD (30min-2h before stage):
+- High carb (0.3g/kg+), high salt, low fluid, low fat (<20%)
+- NO boosters: dark chocolate, niacin, chili powder. NOT arginine (useless). AVOID caffeine (vasoconstriction).
+- Pump-up: 12-30 reps, short rest, controlled eccentric, explosive concentric. Do pump set minutes before stage.
+
+COMPETITION CLASSES: Different classes have different criteria. Bikini athletes do NOT want shitload (vascularity is a negative). Classic Bodybuilders may not want to deplete specific body parts. Always compare: how does the athlete look now vs. the ideal physique for their class?
 `;
 
 module.exports = { TRAINING_KNOWLEDGE };
