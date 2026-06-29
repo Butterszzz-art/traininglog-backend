@@ -1,6 +1,7 @@
 const express = require('express');
 const Anthropic = require('@anthropic-ai/sdk');
 const { TRAINING_KNOWLEDGE } = require('../knowledge/training-methodology');
+const { NUTRITION_KNOWLEDGE } = require('../knowledge/nutrition-methodology');
 
 const router = express.Router();
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -8,7 +9,7 @@ const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const MODEL = 'claude-sonnet-4-6';
 const MODEL_FAST = 'claude-haiku-4-5-20251001';
 
-const BASE_SYSTEM = `You are an expert fitness coach inside Pocket Coach. Your advice is grounded in the following evidence-based training methodology. ALWAYS apply these principles — never contradict them with bro-science or outdated advice.\n\n${TRAINING_KNOWLEDGE}\n\n`;
+const BASE_SYSTEM = `You are an expert fitness coach inside Pocket Coach. Your advice is grounded in the following evidence-based methodology. ALWAYS apply these principles — never contradict them with bro-science or outdated advice.\n\n${TRAINING_KNOWLEDGE}\n\n${NUTRITION_KNOWLEDGE}\n\n`;
 
 async function callClaude(systemPrompt, userPrompt, maxTokens = 1024, model = MODEL) {
   try {
