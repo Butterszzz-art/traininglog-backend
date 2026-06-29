@@ -1,11 +1,14 @@
 const express = require('express');
 const Anthropic = require('@anthropic-ai/sdk');
+const { TRAINING_KNOWLEDGE } = require('../knowledge/training-methodology');
 
 const router = express.Router();
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const MODEL = 'claude-sonnet-4-6';
 const MODEL_FAST = 'claude-haiku-4-5-20251001';
+
+const BASE_SYSTEM = `You are an expert fitness coach inside Pocket Coach. Your advice is grounded in the following evidence-based training methodology. ALWAYS apply these principles — never contradict them with bro-science or outdated advice.\n\n${TRAINING_KNOWLEDGE}\n\n`;
 
 async function callClaude(systemPrompt, userPrompt, maxTokens = 1024, model = MODEL) {
   try {
@@ -35,7 +38,7 @@ router.post('/chat', async (req, res) => {
     if (!Array.isArray(messages) || !messages.length) {
       return res.status(422).json({ success: false, error: 'messages array is required.' });
     }
-    const system = systemPrompt || 'You are a helpful fitness coaching assistant.';
+    const system = BASE_SYSTEM + (systemPrompt || 'Answer the user\'s fitness question using your methodology knowledge.');
     const userPrompt = messages[messages.length - 1]?.content || '';
     const reply = await callClaude(system, userPrompt);
     return res.json({ success: true, reply });
@@ -75,7 +78,7 @@ router.post('/checkin-summary', async (req, res) => {
   parts.push(`Weekly compliance: ${compliancePercent}%.`);
   parts.push(`Adjustment notes: ${adjustmentNotes || 'None'}.`);
 
-  const system = `You are a knowledgeable fitness coach assistant inside Pocket Coach. You write concise, direct, data-driven check-in summaries. Be factual, encouraging but honest. Never use filler phrases. Reference the specific numbers. Write in second person. Max 3 sentences.`;
+  const system = BASE_SYSTEM + `You write concise, direct, data-driven check-in summaries. Be factual, encouraging but honest. Never use filler phrases. Reference the specific numbers. Write in second person. Max 3 sentences.`;
 
   try {
     const summary = (await callClaude(system, parts.join(' '), 256, MODEL_FAST)).trim();
@@ -117,7 +120,7 @@ router.post('/macro-advice', async (req, res) => {
   else parts.push(`Insufficient weight history. Target rate: ${targetRate >= 0 ? '+' : ''}${targetRate} kg/week.`);
   if (averageHunger != null) parts.push(`Average hunger: ${averageHunger}/10.`);
 
-  const system = `You are a precision sports nutrition coach inside Pocket Coach. Give specific, data-driven macro adjustment advice with exact numbers. Never give vague advice. Reference the actual trend data. Keep response to 3-4 sentences max. Write in second person. Always end with: TARGETS:{"protein":X,"carbs":X,"fats":X,"calories":X}`;
+  const system = BASE_SYSTEM + `You are also a precision sports nutrition coach. Give specific, data-driven macro adjustment advice with exact numbers. Never give vague advice. Reference the actual trend data. Keep response to 3-4 sentences max. Write in second person. Always end with: TARGETS:{"protein":X,"carbs":X,"fats":X,"calories":X}`;
 
   try {
     const raw = (await callClaude(system, parts.join(' '), 400, MODEL_FAST)).trim();
@@ -159,7 +162,7 @@ router.post('/program-analysis', async (req, res) => {
     return `${dayLabel}: ${exList.join(', ') || 'No exercises'}`;
   }).join('\n');
 
-  const system = `You are an elite strength and conditioning coach reviewing training programs inside Pocket Coach. Identify specific structural issues, recovery gaps, volume imbalances, and progression problems. Be direct. Format: VERDICT: one sentence\nISSUES: bullet list 2-4\nSUGGESTIONS: bullet list 2-4`;
+  const system = BASE_SYSTEM + `Review this training program. Identify specific structural issues based on the methodology above: exercise selection criteria violations, volume imbalances, recovery gaps, and progression problems. Be direct. Format: VERDICT: one sentence\nISSUES: bullet list 2-4\nSUGGESTIONS: bullet list 2-4`;
 
   try {
     const raw = (await callClaude(system, `Analyse this ${trainingMode || 'general'} program for a ${experienceLevel || 'intermediate'} athlete targeting ${goal || 'general fitness'}, ${daysPerWeek || program.days.length} days/week:\n\n${programText}`, 512, MODEL_FAST)).trim();
@@ -186,7 +189,7 @@ router.post('/generate-program', async (req, res) => {
   }
   parts.push(`Generate exactly ${daysPerWeek} training days.`);
 
-  const system = `You are an expert program designer inside Pocket Coach. Generate a complete structured program. Respond ONLY with valid JSON: {"name":string,"daysPerWeek":number,"days":[{"name":string,"focus":string,"exercises":[{"name":string,"sets":number,"reps":string,"restSeconds":number,"notes":string}]}],"progressionNotes":string,"deloadRecommendation":string}`;
+  const system = BASE_SYSTEM + `Generate a program following the exercise selection criteria, volume/frequency guidelines, and training structure principles from the methodology above. Apply proper exercise order (priority → compound → heavy first → antagonistic supersets → combo sets). Respond ONLY with valid JSON: {"name":string,"daysPerWeek":number,"days":[{"name":string,"focus":string,"exercises":[{"name":string,"sets":number,"reps":string,"restSeconds":number,"notes":string}]}],"progressionNotes":string,"deloadRecommendation":string}`;
 
   try {
     const raw = (await callClaude(system, parts.join('\n'), 2048, MODEL_FAST)).trim();
@@ -278,7 +281,7 @@ router.post('/profile-summary', async (req, res) => {
   if (sex) parts.push(`Sex: ${sex}`);
   if (bodyweight && unit) parts.push(`BW: ${bodyweight}${unit}`);
 
-  const system = `You are an expert fitness coach creating a personalized profile summary. Respond ONLY with valid JSON: {"philosophy":string,"splitRecommendation":string,"weeklyStructure":string,"keyFocusAreas":[string],"estimatedSessionLength":string,"coachNote":string}`;
+  const system = BASE_SYSTEM + `Create a personalized profile summary based on the methodology above. Respond ONLY with valid JSON: {"philosophy":string,"splitRecommendation":string,"weeklyStructure":string,"keyFocusAreas":[string],"estimatedSessionLength":string,"coachNote":string}`;
 
   try {
     const raw = (await callClaude(system, parts.join('\n'), 512, MODEL_FAST)).trim();
@@ -306,7 +309,7 @@ router.post('/sleep-insight', async (req, res) => {
   const entries = sleepLog.slice(0, 10).map(e => `${e.date}: ${e.duration?.toFixed(1)}h, quality ${e.quality}/5${e.tags?.length ? ` [${e.tags.join(', ')}]` : ''}`).join('\n');
 
   const prompt = [`Analyse sleep data for a ${archetype || 'hybrid'} athlete.`, `Avg duration: ${avgDuration.toFixed(1)}h. Avg quality: ${avgQuality.toFixed(1)}/5.`, topTags.length ? `Common factors: ${topTags.map(([t, c]) => `${t} (${c}x)`).join(', ')}.` : '', '', 'Recent entries:', entries].join('\n');
-  const system = `You are a sleep and recovery specialist inside Pocket Coach. Analyse sleep data and provide one actionable insight. Reference specific numbers. Relate sleep to training recovery based on archetype. 2-3 sentences max. Second person.`;
+  const system = BASE_SYSTEM + `Analyse sleep data and provide one actionable insight. Reference specific numbers. Relate sleep to training recovery based on the methodology above and the athlete's archetype. 2-3 sentences max. Second person.`;
 
   try {
     const insight = (await callClaude(system, prompt, 200, MODEL_FAST)).trim();
@@ -323,7 +326,7 @@ router.post('/rehab-plan', async (req, res) => {
   if (!bodyPart || !injuryType) return res.status(400).json({ error: 'Missing: bodyPart, injuryType' });
 
   const prompt = `Generate a rehab plan for a ${archetype || 'hybrid'} athlete with a ${injuryType} in their ${bodyPart}. Severity: ${severity || 3}/5. Days since injury: ${daysSinceInjury || 'unknown'}. Status: ${status || 'active'}. Provide phase-appropriate exercises and progression criteria.`;
-  const system = `You are a sports physiotherapy specialist inside Pocket Coach. Generate a concise rehab recommendation. Include: (1) phase assessment, (2) 3-4 exercises with sets/reps/hold times, (3) what to avoid, (4) when to progress. Tailor to athlete's archetype. Under 200 words. Second person.`;
+  const system = BASE_SYSTEM + `Generate a concise rehab recommendation grounded in the methodology above. Include: (1) phase assessment, (2) 3-4 exercises with sets/reps/hold times, (3) what to avoid, (4) when to progress. Tailor to athlete's archetype. Under 200 words. Second person.`;
 
   try {
     const plan = (await callClaude(system, prompt, 350, MODEL_FAST)).trim();
