@@ -299,7 +299,7 @@ if (stripeEnabled) {
   stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 }
 
-app.post('/api/stripe/create-checkout-session', async (req, res) => {
+app.post('/api/stripe/create-checkout-session', authenticateToken, async (req, res) => {
   if (!stripeEnabled) return res.status(503).json({ error: 'Stripe not configured' });
   const { username, plan, billing } = req.body;
   if (!username || !plan) return res.status(400).json({ error: 'username and plan required' });
@@ -337,7 +337,7 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
   }
 });
 
-app.get('/api/stripe/portal', async (req, res) => {
+app.get('/api/stripe/portal', authenticateToken, async (req, res) => {
   if (!stripeEnabled) return res.status(503).json({ error: 'Stripe not configured' });
   const username = req.query.username;
   if (!username) return res.status(400).json({ error: 'username required' });
@@ -583,9 +583,10 @@ app.post('/saveWorkout', authenticateToken, (req, res) => {
 // POST /workouts
 app.post('/workouts', authenticateToken, async (req, res) => {
   try {
-    const { username, date, title, workout } = req.body || {};
-    if (!username || !date || !workout) {
-      return sendError(res, 422, 'workouts.invalid_payload', 'username, date, and workout are required.');
+    const username = req.user.username;
+    const { date, title, workout } = req.body || {};
+    if (!date || !workout) {
+      return sendError(res, 422, 'workouts.invalid_payload', 'date and workout are required.');
     }
     if (!airtableEnabled) {
       return sendError(res, 503, 'workouts.airtable_disabled', 'Airtable is not configured.',
@@ -684,39 +685,39 @@ app.get('/macrotargets', authenticateToken, async (req, res) => {
   }
 });
 
-// POST /macrotargets — save macro targets for a user
+// POST /macrotargets — upsert macro targets for a user (one record per user)
 app.post('/macrotargets', authenticateToken, async (req, res) => {
   try {
     if (!airtableEnabled) {
       return sendError(res, 503, 'macrotargets.airtable_disabled', 'Airtable is not configured.');
     }
-    const { username, calories, protein, fat, carbs } = req.body || {};
-    if (!username) {
-      return sendError(res, 422, 'macrotargets.missing_username', 'username is required.');
+    const username = req.user.username;
+    const { calories, protein, fat, carbs } = req.body || {};
+
+    const fields = {
+      [USERNAME_FIELD]: String(username),
+      Calories: calories != null ? Number(calories) : null,
+      Protein:  protein  != null ? Number(protein)  : null,
+      Fat:      fat      != null ? Number(fat)      : null,
+      Carbs:    carbs    != null ? Number(carbs)    : null
+    };
+
+    // Upsert: update existing record if one exists, otherwise create
+    const safeUsername = escapeAirtableFormulaValue(username);
+    const existing = await base(MACRO_TARGETS_TABLE)
+      .select({ filterByFormula: `{${USERNAME_FIELD}}='${safeUsername}'`, maxRecords: 1 })
+      .firstPage();
+
+    let recordId;
+    if (existing.length) {
+      const updated = await base(MACRO_TARGETS_TABLE).update([{ id: existing[0].id, fields }]);
+      recordId = updated[0]?.id;
+    } else {
+      const [created] = await base(MACRO_TARGETS_TABLE).create([{ fields }]);
+      recordId = created.id;
     }
 
-    const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(MACRO_TARGETS_TABLE)}`;
-    const response = await airtableFetch(url, {
-      method: 'POST',
-      headers: airtableHeaders(),
-      body: JSON.stringify({
-        records: [{
-          fields: {
-            [USERNAME_FIELD]: String(username),
-            Calories: calories != null ? Number(calories) : null,
-            Protein:  protein  != null ? Number(protein)  : null,
-            Fat:      fat      != null ? Number(fat)      : null,
-            Carbs:    carbs    != null ? Number(carbs)    : null
-          }
-        }]
-      })
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      return sendError(res, 422, 'macrotargets.airtable_rejected', 'Airtable rejected the request.',
-        data?.error?.message || JSON.stringify(data));
-    }
-    return sendSuccess(res, 201, { recordId: data?.records?.[0]?.id || null });
+    return sendSuccess(res, 200, { recordId });
   } catch (err) {
     return sendError(res, 500, 'macrotargets.server_error', String(err));
   }
@@ -732,8 +733,8 @@ app.post('/dailylogs', authenticateToken, async (req, res) => {
     // Support both flat body and legacy { fields: { ... } } wrapper from frontend
     const body = req.body?.fields ? req.body.fields : req.body || {};
 
-    const date     = body.Date     || body.date;
-    const username = body.Username || body.username;
+    const date     = body.Date || body.date;
+    const username = req.user.username;
 
     if (!date || !username) {
       return sendError(res, 422, 'dailylogs.invalid_payload', 'date and username are required.');
@@ -790,9 +791,10 @@ app.get('/dailylogs', authenticateToken, async (req, res) => {
 
 // POST /templates
 app.post('/templates', authenticateToken, async (req, res) => {
-  const { username, templateName, templateData } = req.body || {};
-  if (!username || !templateName || !templateData) {
-    return sendError(res, 400, 'templates.invalid_payload', 'username, templateName, and templateData are required.');
+  const username = req.user.username;
+  const { templateName, templateData } = req.body || {};
+  if (!templateName || !templateData) {
+    return sendError(res, 400, 'templates.invalid_payload', 'templateName and templateData are required.');
   }
   if (!airtableEnabled) {
     return sendError(res, 503, 'templates.airtable_disabled', 'Airtable is not configured.');
@@ -884,9 +886,10 @@ app.post('/bodyweight/archive', authenticateToken, async (req, res) => {
   try {
     if (!airtableEnabled) return sendError(res, 503, 'bodyweight.airtable_disabled', 'Airtable is not configured.');
 
-    const { username, periodStart, periodEnd, entries, trend } = req.body || {};
-    if (!username || !Array.isArray(entries) || !entries.length) {
-      return sendError(res, 422, 'bodyweight.invalid_payload', 'username and entries array are required.');
+    const username = req.user.username;
+    const { periodStart, periodEnd, entries, trend } = req.body || {};
+    if (!Array.isArray(entries) || !entries.length) {
+      return sendError(res, 422, 'bodyweight.invalid_payload', 'entries array is required.');
     }
 
     // Compute summary stats from the entries
@@ -978,9 +981,10 @@ app.post('/measurements/sync', authenticateToken, async (req, res) => {
   try {
     if (!airtableEnabled) return sendError(res, 503, 'measurements.airtable_disabled', 'Airtable is not configured.');
 
-    const { username, entries } = req.body || {};
-    if (!username || !Array.isArray(entries) || !entries.length) {
-      return sendError(res, 422, 'measurements.invalid_payload', 'username and entries array are required.');
+    const username = req.user.username;
+    const { entries } = req.body || {};
+    if (!Array.isArray(entries) || !entries.length) {
+      return sendError(res, 422, 'measurements.invalid_payload', 'entries array is required.');
     }
 
     const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(MEASUREMENTS_TABLE)}`;
@@ -1071,9 +1075,10 @@ app.post('/cardio/sync', authenticateToken, async (req, res) => {
   try {
     if (!airtableEnabled) return sendError(res, 503, 'cardio.airtable_disabled', 'Airtable is not configured.');
 
-    const { username, entries } = req.body || {};
-    if (!username || !Array.isArray(entries) || !entries.length) {
-      return sendError(res, 422, 'cardio.invalid_payload', 'username and entries array are required.');
+    const username = req.user.username;
+    const { entries } = req.body || {};
+    if (!Array.isArray(entries) || !entries.length) {
+      return sendError(res, 422, 'cardio.invalid_payload', 'entries array is required.');
     }
 
     const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(CARDIO_TABLE)}`;
@@ -1158,9 +1163,10 @@ app.post('/crossfit/sync', authenticateToken, async (req, res) => {
   try {
     if (!airtableEnabled) return sendError(res, 503, 'crossfit.airtable_disabled', 'Airtable is not configured.');
 
-    const { username, entries } = req.body || {};
-    if (!username || !Array.isArray(entries) || !entries.length) {
-      return sendError(res, 422, 'crossfit.invalid_payload', 'username and entries array are required.');
+    const username = req.user.username;
+    const { entries } = req.body || {};
+    if (!Array.isArray(entries) || !entries.length) {
+      return sendError(res, 422, 'crossfit.invalid_payload', 'entries array is required.');
     }
 
     const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(CROSSFIT_TABLE)}`;
@@ -1250,7 +1256,7 @@ async function saveProgramHandler(req, res) {
     // Accept both { program } and { draft } shapes from the frontend
     const body = req.body || {};
     const program = body.program || body.draft || body;
-    const username = program.userId || program.username || body.userId || body.username;
+    const username = req.user.username;
 
     if (!username) return sendError(res, 422, 'programs.missing_username', 'username / userId is required.');
     if (!program.name) return sendError(res, 422, 'programs.missing_name', 'Program name is required.');
@@ -1366,6 +1372,11 @@ app.delete('/programs/:id', authenticateToken, async (req, res) => {
   if (!airtableEnabled) return sendError(res, 503, 'programs.airtable_disabled', 'Airtable is not configured.');
 
   try {
+    // Verify ownership before deleting
+    const record = await base(PROGRAMS_TABLE).find(id);
+    if (!record || record.fields[USERNAME_FIELD] !== req.user.username) {
+      return sendError(res, 403, 'programs.forbidden', 'You do not own this program.');
+    }
     const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(PROGRAMS_TABLE)}/${encodeURIComponent(id)}`;
     const response = await airtableFetch(url, { method: 'DELETE', headers: airtableHeaders() });
     if (!response.ok) {
@@ -1425,6 +1436,11 @@ app.delete('/templates/:id', authenticateToken, async (req, res) => {
   if (!airtableEnabled) return sendError(res, 503, 'templates.airtable_disabled', 'Airtable is not configured.');
 
   try {
+    // Verify ownership before deleting
+    const record = await base(TEMPLATES_TABLE_NAME).find(id);
+    if (!record || record.fields[USERNAME_FIELD] !== req.user.username) {
+      return sendError(res, 403, 'templates.forbidden', 'You do not own this template.');
+    }
     const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(TEMPLATES_TABLE_NAME)}/${encodeURIComponent(id)}`;
     const response = await airtableFetch(url, { method: 'DELETE', headers: airtableHeaders() });
 
@@ -1482,16 +1498,17 @@ app.get('/days', authenticateToken, async (req, res) => {
   if (!airtableEnabled) return res.json({ items: [] });
 
   try {
+    const username = req.user.username;
     const from  = typeof req.query.from  === 'string' ? req.query.from.trim()  : '';
     const to    = typeof req.query.to    === 'string' ? req.query.to.trim()    : '';
     const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 100);
 
-    const filter = [];
+    const filter = [`{${USERNAME_FIELD}}='${escapeAirtableFormulaValue(username)}'`];
     if (from) filter.push(`{Date} >= '${escapeAirtableFormulaValue(from)}'`);
     if (to)   filter.push(`{Date} <= '${escapeAirtableFormulaValue(to)}'`);
 
     const records = await base(DAYS_TABLE).select({
-      ...(filter.length ? { filterByFormula: filter.join(' AND ') } : {}),
+      filterByFormula: filter.length > 1 ? `AND(${filter.join(',')})` : filter[0],
       sort: [{ field: 'Date', direction: 'desc' }],
       pageSize: limit
     }).all();
@@ -1634,8 +1651,9 @@ app.get('/mobility/routines', authenticateToken, async (req, res) => {
 app.post('/mobility/routines', authenticateToken, async (req, res) => {
   try {
     if (!airtableEnabled) return sendError(res, 503, 'mobility.airtable_disabled', 'Airtable is not configured.');
-    const { username, routineId, name, type, targetArea, frequencyPerWeek, exercises, assignedByCoach, coachNotes } = req.body || {};
-    if (!username || !name) return sendError(res, 422, 'mobility.invalid_payload', 'username and name are required.');
+    const username = req.user.username;
+    const { routineId, name, type, targetArea, frequencyPerWeek, exercises, assignedByCoach, coachNotes } = req.body || {};
+    if (!name) return sendError(res, 422, 'mobility.invalid_payload', 'name is required.');
 
     const [record] = await base(MOBILITY_ROUTINES_TABLE).create([{
       fields: {
@@ -1709,8 +1727,9 @@ app.get('/mobility/sessions', authenticateToken, async (req, res) => {
 app.post('/mobility/sessions', authenticateToken, async (req, res) => {
   try {
     if (!airtableEnabled) return sendError(res, 503, 'mobility.airtable_disabled', 'Airtable is not configured.');
-    const { username, sessionId, routineId, completedAt, notes } = req.body || {};
-    if (!username || !routineId) return sendError(res, 422, 'mobility.invalid_payload', 'username and routineId are required.');
+    const username = req.user.username;
+    const { sessionId, routineId, completedAt, notes } = req.body || {};
+    if (!routineId) return sendError(res, 422, 'mobility.invalid_payload', 'routineId is required.');
 
     const [record] = await base(MOBILITY_SESSIONS_TABLE).create([{
       fields: {
@@ -1785,7 +1804,7 @@ app.use('/', leaderboardRoute);
 
 // ── Knowledge Base routes ────────────────────────────────────────────────────
 
-app.post('/admin/ingest-pdf', upload.single('pdf'), async (req, res) => {
+app.post('/admin/ingest-pdf', authenticateToken, upload.single('pdf'), async (req, res) => {
   try {
     const { moduleName, topic } = req.body;
     if (!req.file) return res.status(400).json({ error: 'No PDF file received' });
@@ -1815,7 +1834,7 @@ app.post('/admin/ingest-pdf', upload.single('pdf'), async (req, res) => {
   }
 });
 
-app.get('/admin/knowledge-modules', async (req, res) => {
+app.get('/admin/knowledge-modules', authenticateToken, async (req, res) => {
   try {
     if (!AIRTABLE_API_TOKEN || !AIRTABLE_BASE_ID) return res.status(500).json({ error: 'Airtable not configured' });
     const modules = await getActiveModules(AIRTABLE_API_TOKEN, AIRTABLE_BASE_ID);
@@ -1826,7 +1845,7 @@ app.get('/admin/knowledge-modules', async (req, res) => {
   }
 });
 
-app.get('/knowledge-context', async (req, res) => {
+app.get('/knowledge-context', authenticateToken, async (req, res) => {
   try {
     if (!AIRTABLE_API_TOKEN || !AIRTABLE_BASE_ID) return res.status(500).json({ error: 'Airtable not configured' });
     const topicsParam = req.query.topics;
