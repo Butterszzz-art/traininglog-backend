@@ -229,7 +229,43 @@ async function findDayRecordId(dateKey) {
 
 // Health check
 app.get('/healthz', (_req, res) => res.send('ok'));
-app.get('/health',  (_req, res) => res.json({ status: 'ok' }));
+app.get('/health', async (_req, res) => {
+  const hasToken  = Boolean(process.env.AIRTABLE_API_TOKEN || process.env.AIRTABLE_TOKEN);
+  const hasBaseId = Boolean(process.env.AIRTABLE_BASE_ID);
+  const hasJwt    = Boolean(process.env.JWT_SECRET);
+
+  let airtableReachable = null;
+  let airtableError     = null;
+  if (hasToken && hasBaseId) {
+    try {
+      await new Promise((resolve, reject) => {
+        base('Users').select({ maxRecords: 1, fields: ['Username'] }).firstPage((err) => {
+          if (err) reject(err); else resolve();
+        });
+      });
+      airtableReachable = true;
+    } catch (e) {
+      airtableReachable = false;
+      airtableError = e.message || String(e);
+    }
+  }
+
+  const ok = hasToken && hasBaseId && hasJwt && airtableReachable !== false;
+  res.status(ok ? 200 : 503).json({
+    status: ok ? 'ok' : 'misconfigured',
+    env: {
+      AIRTABLE_TOKEN:   hasToken  ? 'SET' : 'MISSING',
+      AIRTABLE_BASE_ID: hasBaseId ? 'SET' : 'MISSING',
+      JWT_SECRET:       hasJwt    ? 'SET' : 'MISSING',
+      AIRTABLE_USERS_TABLE: process.env.AIRTABLE_USERS_TABLE || '(default: Users)',
+    },
+    airtable: {
+      enabled:   airtableEnabled,
+      reachable: airtableReachable,
+      error:     airtableError,
+    },
+  });
+});
 
 // ── User plan endpoint ───────────────────────────────────────────────────────
 app.get('/api/user/plan', authenticateToken, async (req, res) => {
