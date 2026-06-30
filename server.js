@@ -476,24 +476,34 @@ app.post('/register', loginLimiter, async (req, res) => {
     const passwordHash = await bcrypt.hash(password, 12);
     const referralCode = generateReferralCode(username);
     const referredBy = req.body.referredBy || '';
-    const [record] = await base(USERS_TABLE).create([{
-      fields: {
-        Username: String(username),
-        PasswordHash: passwordHash,
-        CreatedAt: new Date().toISOString(),
-        UserPlan: 'free',
-        ReferralCode: referralCode,
-        ReferredBy: referredBy || '',
-        ReferralCredits: 0,
-        ProgramGenCount: 0,
-      }
-    }]);
+    const fields = {
+      Username: String(username),
+      PasswordHash: passwordHash,
+      CreatedAt: new Date().toISOString(),
+    };
+    // Optional fields — only written if the Airtable table has them
+    const optionalFields = {
+      UserPlan: 'free',
+      ReferralCode: referralCode,
+      ReferredBy: referredBy || '',
+      ReferralCredits: 0,
+      ProgramGenCount: 0,
+    };
+
+    // Try with all fields first; if Airtable rejects unknown fields, fall back to core only
+    let record;
+    try {
+      [record] = await base(USERS_TABLE).create([{ fields: { ...fields, ...optionalFields } }]);
+    } catch (e1) {
+      console.warn('[REGISTER] Full create failed, retrying with core fields only:', e1.message);
+      [record] = await base(USERS_TABLE).create([{ fields }]);
+    }
 
     const token = jwt.sign({ id: record.id, username: String(username) }, JWT_SECRET, { expiresIn: '7d' });
     return sendSuccess(res, 201, { token, username: String(username) });
   } catch (e) {
-    console.error('[REGISTER] Failed:', e);
-    return sendError(res, 500, 'auth.register_failed', 'Failed to create account.');
+    console.error('[REGISTER] Failed:', e.message || e);
+    return sendError(res, 500, 'auth.register_failed', `Failed to create account: ${e.message}`);
   }
 });
 
