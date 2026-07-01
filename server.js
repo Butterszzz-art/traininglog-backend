@@ -234,35 +234,46 @@ app.get('/health', async (_req, res) => {
   const hasBaseId = Boolean(process.env.AIRTABLE_BASE_ID);
   const hasJwt    = Boolean(process.env.JWT_SECRET);
 
+  const tableChecks = {};
+  const requiredTables = ['Users', 'Templates', 'Programs', 'Workouts', 'MacroTargets', 'DailyMacros'];
   let airtableReachable = null;
-  let airtableError     = null;
+  let airtableError = null;
+
   if (hasToken && hasBaseId) {
-    try {
-      await new Promise((resolve, reject) => {
-        base('Users').select({ maxRecords: 1, fields: ['Username'] }).firstPage((err) => {
-          if (err) reject(err); else resolve();
+    for (const tableName of requiredTables) {
+      try {
+        await new Promise((resolve, reject) => {
+          base(tableName).select({ maxRecords: 1 }).firstPage((err) => {
+            if (err) reject(err); else resolve();
+          });
         });
-      });
-      airtableReachable = true;
-    } catch (e) {
-      airtableReachable = false;
-      airtableError = e.message || String(e);
+        tableChecks[tableName] = 'OK';
+        if (airtableReachable !== false) airtableReachable = true;
+      } catch (e) {
+        tableChecks[tableName] = `MISSING or ERROR: ${e.message || e}`;
+        if (tableName === 'Users') {
+          airtableReachable = false;
+          airtableError = e.message || String(e);
+        }
+      }
     }
   }
 
+  const missingTables = Object.entries(tableChecks).filter(([, v]) => v !== 'OK').map(([k]) => k);
   const ok = hasToken && hasBaseId && hasJwt && airtableReachable !== false;
-  res.status(ok ? 200 : 503).json({
-    status: ok ? 'ok' : 'misconfigured',
+  res.status(ok && !missingTables.length ? 200 : 503).json({
+    status: ok ? (missingTables.length ? 'tables_missing' : 'ok') : 'misconfigured',
     env: {
       AIRTABLE_TOKEN:   hasToken  ? 'SET' : 'MISSING',
       AIRTABLE_BASE_ID: hasBaseId ? 'SET' : 'MISSING',
       JWT_SECRET:       hasJwt    ? 'SET' : 'MISSING',
-      AIRTABLE_USERS_TABLE: process.env.AIRTABLE_USERS_TABLE || '(default: Users)',
     },
     airtable: {
-      enabled:   airtableEnabled,
-      reachable: airtableReachable,
-      error:     airtableError,
+      enabled:       airtableEnabled,
+      reachable:     airtableReachable,
+      error:         airtableError,
+      tables:        tableChecks,
+      missingTables,
     },
   });
 });
@@ -625,8 +636,7 @@ app.post('/workouts', authenticateToken, async (req, res) => {
 // GET /workouts
 app.get('/workouts', authenticateToken, async (req, res) => {
   try {
-    const username = typeof req.query.username === 'string' ? req.query.username.trim() : '';
-    if (!username) return sendError(res, 422, 'workouts.missing_username', 'username query param is required.');
+    const username = req.user.username;
     if (!airtableEnabled) return sendError(res, 503, 'workouts.airtable_disabled', 'Airtable is not configured.');
 
     const safeUsername = escapeAirtableFormulaValue(username);
@@ -660,8 +670,7 @@ app.get('/workouts', authenticateToken, async (req, res) => {
 // GET /macrotargets
 app.get('/macrotargets', authenticateToken, async (req, res) => {
   try {
-    const username = typeof req.query.username === 'string' ? req.query.username.trim() : '';
-    if (!username) return sendError(res, 422, 'macrotargets.missing_username', 'username query param is required.');
+    const username = req.user.username;
     if (!airtableEnabled) return sendError(res, 503, 'macrotargets.airtable_disabled', 'Airtable is not configured.');
 
     const safeUsername = escapeAirtableFormulaValue(username);
@@ -831,12 +840,8 @@ app.post('/templates', authenticateToken, async (req, res) => {
 
 // GET /templates
 app.get('/templates', authenticateToken, async (req, res) => {
-  const owner = (typeof req.query.username === 'string' ? req.query.username.trim() : '') ||
-                (typeof req.query.userId   === 'string' ? req.query.userId.trim()   : '');
+  const owner = req.user.username;
 
-  if (!owner) {
-    return sendError(res, 422, 'templates.missing_owner', 'username or userId query param is required.');
-  }
   if (!airtableEnabled) {
     return sendError(res, 503, 'templates.airtable_disabled', 'Airtable is not configured.');
   }
@@ -1300,8 +1305,7 @@ app.get('/programs', authenticateToken, async (req, res) => {
   try {
     if (!airtableEnabled) return res.json({ success: true, items: [] });
 
-    const username = typeof req.query.username === 'string' ? req.query.username.trim() : '';
-    if (!username) return sendError(res, 422, 'programs.missing_username', 'username query param is required.');
+    const username = req.user.username;
 
     const safeUsername = escapeAirtableFormulaValue(username);
     const records = await base(PROGRAMS_TABLE)
