@@ -235,7 +235,7 @@ app.get('/health', async (_req, res) => {
   const hasJwt    = Boolean(process.env.JWT_SECRET);
 
   const tableChecks = {};
-  const requiredTables = ['Users', 'Templates', 'Programs', 'Workouts', 'MacroTargets', 'DailyMacros'];
+  const requiredTables = ['Users', 'Templates', 'Programs', 'Workouts', 'MacroTargets', 'DailyMacros', 'CoachClients', 'ExerciseVideos'];
   let airtableReachable = null;
   let airtableError = null;
 
@@ -1564,6 +1564,203 @@ app.get('/api/coach/clients', authenticateToken, async (req, res) => {
   } catch (err) {
     console.error('GET /api/coach/clients failed:', err);
     return sendError(res, 500, 'coach.server_error', String(err));
+  }
+});
+
+// Verify a coach-client relationship exists in the CoachClients table.
+async function verifyCoachClientLink(coachUsername, clientUsername) {
+  const safeCoach = escapeAirtableFormulaValue(coachUsername);
+  const safeClient = escapeAirtableFormulaValue(clientUsername);
+  const records = await base(COACH_CLIENTS_TABLE)
+    .select({
+      filterByFormula: `AND({CoachId}='${safeCoach}',OR({ClientId}='${safeClient}',{ClientName}='${safeClient}'))`,
+      maxRecords: 1
+    })
+    .firstPage();
+  return records.length > 0;
+}
+
+// POST /coach/workouts — coach logs a workout on behalf of a linked client
+app.post('/coach/workouts', authenticateToken, async (req, res) => {
+  try {
+    const coachUsername = req.user.username;
+    const { clientUsername, date, title, workout } = req.body || {};
+    if (!clientUsername || !date || !workout) {
+      return sendError(res, 422, 'coach.invalid_payload', 'clientUsername, date and workout are required.');
+    }
+    if (!airtableEnabled) {
+      return sendError(res, 503, 'coach.airtable_disabled', 'Airtable is not configured.');
+    }
+
+    let linked = false;
+    try {
+      linked = await verifyCoachClientLink(coachUsername, clientUsername);
+    } catch (err) {
+      console.error('Coach-client link check failed:', err);
+      return sendError(res, 500, 'coach.link_check_failed', String(err));
+    }
+    if (!linked) {
+      return sendError(res, 403, 'coach.not_linked', 'This client is not linked to your coach account.');
+    }
+
+    // Stamp who logged it inside the workout JSON (no extra Airtable field needed)
+    const stamped = { ...workout, loggedByCoach: coachUsername };
+    const sessionVolume = computeSessionVolume(stamped);
+    const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(WORKOUTS_TABLE)}`;
+    const response = await airtableFetch(url, {
+      method: 'POST',
+      headers: airtableHeaders(),
+      body: JSON.stringify({
+        records: [{
+          fields: {
+            [USERNAME_FIELD]: String(clientUsername),
+            Date:             String(date),
+            Title:            String(title || 'Workout (logged by coach)'),
+            WorkoutJSON:      JSON.stringify(stamped),
+            SessionVolume:    sessionVolume
+          }
+        }]
+      })
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      return sendError(res, 422, 'coach.airtable_rejected', 'Airtable rejected the request.',
+        data?.error?.message || JSON.stringify(data));
+    }
+    return sendSuccess(res, 200, { recordId: data?.records?.[0]?.id || null });
+  } catch (err) {
+    return sendError(res, 500, 'coach.server_error', String(err));
+  }
+});
+
+// ── Exercise technique videos (coach → clients) ─────────────────────────────
+const EXERCISE_VIDEOS_TABLE = process.env.AIRTABLE_EXERCISE_VIDEOS_TABLE || 'ExerciseVideos';
+
+// POST /coach/exercise-videos — coach attaches/updates a video for an exercise
+app.post('/coach/exercise-videos', authenticateToken, async (req, res) => {
+  try {
+    const coachUsername = req.user.username;
+    const { exerciseName, videoUrl, notes } = req.body || {};
+    if (!exerciseName || !videoUrl) {
+      return sendError(res, 422, 'videos.invalid_payload', 'exerciseName and videoUrl are required.');
+    }
+    if (!/^https?:\/\//i.test(String(videoUrl))) {
+      return sendError(res, 422, 'videos.invalid_url', 'videoUrl must be an http(s) link.');
+    }
+    if (!airtableEnabled) {
+      return sendError(res, 503, 'videos.airtable_disabled', 'Airtable is not configured.');
+    }
+
+    const fields = {
+      CoachId:      String(coachUsername),
+      ExerciseName: String(exerciseName).trim(),
+      VideoUrl:     String(videoUrl).trim(),
+      Notes:        notes ? String(notes) : ''
+    };
+
+    // Upsert on CoachId + ExerciseName
+    const safeCoach = escapeAirtableFormulaValue(coachUsername);
+    const safeExercise = escapeAirtableFormulaValue(String(exerciseName).trim());
+    const existing = await base(EXERCISE_VIDEOS_TABLE)
+      .select({
+        filterByFormula: `AND({CoachId}='${safeCoach}',LOWER({ExerciseName})=LOWER('${safeExercise}'))`,
+        maxRecords: 1
+      })
+      .firstPage();
+
+    let record;
+    if (existing.length) {
+      const updated = await base(EXERCISE_VIDEOS_TABLE).update([{ id: existing[0].id, fields }]);
+      record = updated[0];
+    } else {
+      const created = await base(EXERCISE_VIDEOS_TABLE).create([{ fields }]);
+      record = created[0];
+    }
+    return sendSuccess(res, 200, { id: record.id });
+  } catch (err) {
+    return sendError(res, 500, 'videos.server_error', String(err));
+  }
+});
+
+// GET /coach/exercise-videos — coach lists their own videos
+app.get('/coach/exercise-videos', authenticateToken, async (req, res) => {
+  try {
+    const coachUsername = req.user.username;
+    if (!airtableEnabled) return sendSuccess(res, 200, { items: [] });
+
+    const safeCoach = escapeAirtableFormulaValue(coachUsername);
+    const records = await base(EXERCISE_VIDEOS_TABLE)
+      .select({ filterByFormula: `{CoachId}='${safeCoach}'`, pageSize: 100 })
+      .all();
+
+    const items = records.map(r => ({
+      id:           r.id,
+      exerciseName: r.get('ExerciseName') || '',
+      videoUrl:     r.get('VideoUrl') || '',
+      notes:        r.get('Notes') || ''
+    }));
+    return sendSuccess(res, 200, { items });
+  } catch (err) {
+    return sendError(res, 500, 'videos.server_error', String(err));
+  }
+});
+
+// DELETE /coach/exercise-videos/:id — coach removes their own video
+app.delete('/coach/exercise-videos/:id', authenticateToken, async (req, res) => {
+  try {
+    const coachUsername = req.user.username;
+    if (!airtableEnabled) return sendError(res, 503, 'videos.airtable_disabled', 'Airtable is not configured.');
+
+    const record = await base(EXERCISE_VIDEOS_TABLE).find(req.params.id);
+    if (!record || record.get('CoachId') !== coachUsername) {
+      return sendError(res, 403, 'videos.not_owner', 'You can only delete your own videos.');
+    }
+    await base(EXERCISE_VIDEOS_TABLE).destroy([req.params.id]);
+    return sendSuccess(res, 200, { deleted: true });
+  } catch (err) {
+    return sendError(res, 500, 'videos.server_error', String(err));
+  }
+});
+
+// GET /exercise-videos — client fetches videos shared by their coach(es)
+app.get('/exercise-videos', authenticateToken, async (req, res) => {
+  try {
+    const clientUsername = req.user.username;
+    if (!airtableEnabled) return sendSuccess(res, 200, { items: [] });
+
+    // Find this user's coach(es) via the CoachClients table
+    const safeClient = escapeAirtableFormulaValue(clientUsername);
+    const links = await base(COACH_CLIENTS_TABLE)
+      .select({
+        filterByFormula: `OR({ClientId}='${safeClient}',{ClientName}='${safeClient}')`,
+        pageSize: 10
+      })
+      .firstPage();
+
+    const coachIds = [...new Set(links.map(l => l.get('CoachId')).filter(Boolean))];
+    if (!coachIds.length) return sendSuccess(res, 200, { items: [] });
+
+    const coachFilter = coachIds
+      .map(c => `{CoachId}='${escapeAirtableFormulaValue(c)}'`)
+      .join(',');
+    const records = await base(EXERCISE_VIDEOS_TABLE)
+      .select({
+        filterByFormula: coachIds.length > 1 ? `OR(${coachFilter})` : coachFilter,
+        pageSize: 100
+      })
+      .all();
+
+    const items = records.map(r => ({
+      id:           r.id,
+      coachId:      r.get('CoachId') || '',
+      exerciseName: r.get('ExerciseName') || '',
+      videoUrl:     r.get('VideoUrl') || '',
+      notes:        r.get('Notes') || ''
+    }));
+    return sendSuccess(res, 200, { items });
+  } catch (err) {
+    return sendError(res, 500, 'videos.server_error', String(err));
   }
 });
 
