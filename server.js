@@ -10,6 +10,7 @@ const leaderboardRoute = require('./leaderboard');
 const { router: aiRouter } = require('./src/routes/ai');
 const { upload, extractKnowledgeWithClaude, saveToAirtable, getActiveModules } = require('./knowledgeBase');
 const { auth: fbAuth, db, FieldValue, firebaseEnabled, projectId: firebaseProjectId, initError: firebaseInitError } = require('./firebase');
+const { migrateLegacyUserData } = require('./legacyMigration');
 
 const app = express();
 
@@ -677,24 +678,35 @@ app.get('/auth/username-available', usernameCheckLimiter, async (req, res) => {
   }
   try {
     const snap = await db.collection('usernames').doc(username.toLowerCase()).get();
-    let available = !snap.exists;
-    if (available && airtableEnabled) {
-      // Legacy usernames stay reserved until their owners re-register
-      const legacy = await findUserByUsername(username);
-      available = !legacy;
+    if (snap.exists) {
+      // Already claimed on Firestore — genuinely taken, no reclaim possible.
+      return sendSuccess(res, 200, { username, available: false, reclaimable: false });
     }
-    return sendSuccess(res, 200, { username, available });
+    let reclaimable = false;
+    if (airtableEnabled) {
+      // Legacy Airtable-only usernames aren't available for a fresh signup,
+      // but the true owner can reclaim them via signup-complete + legacyPassword.
+      const legacy = await findUserByUsername(username);
+      reclaimable = Boolean(legacy);
+    }
+    return sendSuccess(res, 200, { username, available: !reclaimable, reclaimable });
   } catch (err) {
     console.error('[AUTH] username-available failed:', err.message);
     return sendError(res, 500, 'auth.server_error', 'Could not check username.');
   }
 });
 
-// POST /auth/signup-complete — body { username, referredBy? }, Bearer = fresh Firebase ID token.
-// Runs after createUserWithEmailAndPassword on the client:
-//  1. claims usernames/{username} + creates users/{uid} in one transaction
-//  2. sets custom claims (username, tier, isCoach)
-//  3. best-effort Airtable Users row so plan/Stripe flows keep working until Phase 2
+// POST /auth/signup-complete — body { username, referredBy?, legacyPassword? },
+// Bearer = fresh Firebase ID token. Runs after createUserWithEmailAndPassword:
+//  1. if `username` matches an existing Airtable Users row, require and verify
+//     legacyPassword against its bcrypt hash (Phase 2: this is how a beta
+//     tester reclaims their old account instead of it staying reserved forever)
+//  2. claims usernames/{username} + creates users/{uid} in one transaction,
+//     carrying over the legacy plan/referral fields when this is a reclaim
+//  3. sets custom claims (username, tier, isCoach)
+//  4. on a verified reclaim, migrates that user's Airtable data into Firestore
+//     (legacyMigration.js) — brand-new signups get a plain Airtable row instead,
+//     matching Phase 1 behavior, so existing Stripe/data routes keep working
 app.post('/auth/signup-complete', loginLimiter, async (req, res) => {
   if (!firebaseEnabled) return sendError(res, 503, 'auth.firebase_disabled', 'Firebase auth is not configured.');
 
@@ -712,27 +724,47 @@ app.post('/auth/signup-complete', loginLimiter, async (req, res) => {
 
   const username = typeof req.body?.username === 'string' ? req.body.username.trim() : '';
   const referredByCode = typeof req.body?.referredBy === 'string' ? req.body.referredBy.trim() : '';
+  const legacyPassword = typeof req.body?.legacyPassword === 'string' ? req.body.legacyPassword : '';
   if (!USERNAME_RE.test(username)) {
     return sendError(res, 400, 'auth.invalid_username',
       'Username must be 2-64 characters: letters, numbers, dot, dash, underscore.');
   }
 
   try {
-    // Legacy usernames stay reserved for their Airtable owners
+    // A username matching an existing Airtable row can only be claimed by
+    // proving ownership of the old password — otherwise it stays reserved.
+    let legacy = null;
     if (airtableEnabled) {
-      const legacy = await findUserByUsername(username);
-      if (legacy) return sendError(res, 409, 'auth.username_taken', 'That username is already taken.');
+      legacy = await findUserByUsername(username);
+      if (legacy) {
+        if (!legacy.passwordHash) {
+          return sendError(res, 500, 'auth.config_error', 'Legacy account configuration error. Please contact support.');
+        }
+        if (!legacyPassword) {
+          return sendError(res, 409, 'auth.legacy_verification_required',
+            'This username belongs to an existing account. Enter its password to reclaim it.');
+        }
+        const matches = await bcrypt.compare(legacyPassword, legacy.passwordHash);
+        if (!matches) {
+          return sendError(res, 401, 'auth.legacy_password_invalid', 'That password doesn’t match the existing account.');
+        }
+      }
     }
+    const isLegacyClaim = Boolean(legacy);
 
     const usernameRef = db.collection('usernames').doc(username.toLowerCase());
     const userRef = db.collection('users').doc(fbUser.uid);
-    const referralCode = generateReferralCode(username);
+    // Reclaims keep their old referral code/credits so existing shared links
+    // and any accrued credit keep working; brand-new signups get a fresh code.
+    const referralCode = (isLegacyClaim && legacy.fields.ReferralCode) || generateReferralCode(username);
+    const tier = (isLegacyClaim && legacy.fields.UserPlan) || 'free';
 
     // Resolve referral code → referrer uid where possible (schema doc: transform, not copy)
     let referredByUid = null;
-    if (referredByCode) {
+    const referredByCodeFinal = (isLegacyClaim && legacy.fields.ReferredBy) || referredByCode || null;
+    if (referredByCodeFinal) {
       const referrer = await db.collection('users')
-        .where('referralCode', '==', referredByCode).limit(1).get();
+        .where('referralCode', '==', referredByCodeFinal).limit(1).get();
       if (!referrer.empty) referredByUid = referrer.docs[0].id;
     }
 
@@ -757,27 +789,43 @@ app.post('/auth/signup-complete', loginLimiter, async (req, res) => {
         username,
         email: fbUser.email || null,
         createdAt: FieldValue.serverTimestamp(),
-        userPlan: 'free',
-        subStatus: 'none',
-        subCurrentPeriodEnd: null,
-        billingCycle: null,
-        stripeCustomerId: null,
+        userPlan: tier,
+        subStatus: (isLegacyClaim && legacy.fields.SubStatus) || 'none',
+        subCurrentPeriodEnd: (isLegacyClaim && legacy.fields.SubCurrentPeriodEnd) || null,
+        billingCycle: (isLegacyClaim && legacy.fields.BillingCycle) || null,
+        stripeCustomerId: (isLegacyClaim && legacy.fields.StripeCustomerId) || null,
         referralCode,
-        referralCredits: 0,
-        referredByCode: referredByCode || null,
+        referralCredits: (isLegacyClaim && Number(legacy.fields.ReferralCredits)) || 0,
+        referredByCode: referredByCodeFinal,
         referredByUid,
-        isCoach: false
+        isCoach: false // corrected below if the migration finds a coach roster
       }, { merge: true });
     });
 
     await fbAuth.setCustomUserClaims(fbUser.uid, {
       username,
-      tier: 'free',
+      tier,
       isCoach: false
     });
 
-    // Best-effort Airtable row — data routes are keyed by Username until Phase 2
-    if (airtableEnabled) {
+    if (isLegacyClaim) {
+      // Reclaiming an existing account — migrate its Airtable data into
+      // Firestore. The legacy Airtable row is left untouched (still usable by
+      // /login for anyone who hasn't switched yet); no new row is created for
+      // it, which would otherwise duplicate the username and break the
+      // maxRecords:1 lookup every legacy route relies on.
+      const { counts, errors, isCoach } = await migrateLegacyUserData({
+        username, uid: fbUser.uid, base, db, FieldValue, escapeAirtableFormulaValue
+      });
+      console.info(`[AUTH] Legacy migration for "${username}" (uid ${fbUser.uid}):`, counts,
+        Object.keys(errors).length ? { errors } : '');
+      if (isCoach) {
+        await db.collection('users').doc(fbUser.uid).set({ isCoach: true }, { merge: true });
+        await fbAuth.setCustomUserClaims(fbUser.uid, { username, tier, isCoach: true });
+      }
+    } else if (airtableEnabled) {
+      // Brand-new signup — best-effort Airtable row so plan/Stripe flows keep
+      // working until those routes move to Firestore.
       const fields = { Username: username, CreatedAt: new Date().toISOString() };
       const optionalFields = {
         UserPlan: 'free',
