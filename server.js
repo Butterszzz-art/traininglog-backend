@@ -9,7 +9,7 @@ const rateLimit = require('express-rate-limit');
 const leaderboardRoute = require('./leaderboard');
 const { router: aiRouter } = require('./src/routes/ai');
 const { upload, extractKnowledgeWithClaude, saveToAirtable, getActiveModules } = require('./knowledgeBase');
-const { admin, db, firebaseEnabled, projectId: firebaseProjectId, initError: firebaseInitError } = require('./firebase');
+const { auth: fbAuth, db, FieldValue, firebaseEnabled, projectId: firebaseProjectId, initError: firebaseInitError } = require('./firebase');
 
 const app = express();
 
@@ -94,7 +94,7 @@ function isFirebaseIdToken(token) {
 // { skipEmailVerification } is used only by the signup-completion endpoint —
 // the user has just created the account and cannot have verified yet.
 async function verifyFirebaseToken(token, { skipEmailVerification = false } = {}) {
-  const decoded = await admin.auth().verifyIdToken(token);
+  const decoded = await fbAuth.verifyIdToken(token);
   if (!skipEmailVerification && !decoded.email_verified) {
     const err = new Error('Email not verified');
     err.code = 'auth.email_not_verified';
@@ -525,8 +525,8 @@ async function syncTierClaim(username, tier) {
     const snap = await db.collection('usernames').doc(String(username).toLowerCase()).get();
     if (!snap.exists) return false; // legacy user, no Firebase account yet
     const uid = snap.get('uid');
-    const { customClaims = {} } = await admin.auth().getUser(uid);
-    await admin.auth().setCustomUserClaims(uid, { ...customClaims, tier });
+    const { customClaims = {} } = await fbAuth.getUser(uid);
+    await fbAuth.setCustomUserClaims(uid, { ...customClaims, tier });
     await db.collection('users').doc(uid).set({ userPlan: tier }, { merge: true });
     return true;
   } catch (err) {
@@ -756,7 +756,7 @@ app.post('/auth/signup-complete', loginLimiter, async (req, res) => {
         uid: fbUser.uid,
         username,
         email: fbUser.email || null,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdAt: FieldValue.serverTimestamp(),
         userPlan: 'free',
         subStatus: 'none',
         subCurrentPeriodEnd: null,
@@ -770,7 +770,7 @@ app.post('/auth/signup-complete', loginLimiter, async (req, res) => {
       }, { merge: true });
     });
 
-    await admin.auth().setCustomUserClaims(fbUser.uid, {
+    await fbAuth.setCustomUserClaims(fbUser.uid, {
       username,
       tier: 'free',
       isCoach: false
@@ -822,7 +822,7 @@ app.post('/auth/email-for-username', loginLimiter, async (req, res) => {
   try {
     const snap = await db.collection('usernames').doc(username.toLowerCase()).get();
     if (!snap.exists) return sendError(res, 404, 'auth.unknown_username', 'No account found for that username.');
-    const { email } = await admin.auth().getUser(snap.get('uid'));
+    const { email } = await fbAuth.getUser(snap.get('uid'));
     if (!email) return sendError(res, 404, 'auth.unknown_username', 'No account found for that username.');
     return sendSuccess(res, 200, { email });
   } catch (err) {
