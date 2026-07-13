@@ -9,6 +9,7 @@ const rateLimit = require('express-rate-limit');
 const leaderboardRoute = require('./leaderboard');
 const { router: aiRouter } = require('./src/routes/ai');
 const { upload, extractKnowledgeWithClaude, saveToAirtable, getActiveModules } = require('./knowledgeBase');
+const { admin, db, firebaseEnabled, projectId: firebaseProjectId } = require('./firebase');
 
 const app = express();
 
@@ -76,12 +77,66 @@ function airtableFetch(url, options = {}) {
 }
 
 // ── Auth middleware ───────────────────────────────────────────────────────────
+// Transitional dual-mode auth (Phase 1 of Firebase migration):
+//  - Firebase ID tokens (iss = securetoken.google.com/<project>) verified via
+//    Admin SDK; email must be verified; username/tier/isCoach come from custom claims.
+//  - Legacy custom JWTs still accepted until the cutover (removed in step 7 of
+//    the migration plan, after end-to-end verification).
+function isFirebaseIdToken(token) {
+  try {
+    const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf8'));
+    return typeof payload.iss === 'string' && payload.iss.startsWith('https://securetoken.google.com/');
+  } catch {
+    return false;
+  }
+}
+
+// { skipEmailVerification } is used only by the signup-completion endpoint —
+// the user has just created the account and cannot have verified yet.
+async function verifyFirebaseToken(token, { skipEmailVerification = false } = {}) {
+  const decoded = await admin.auth().verifyIdToken(token);
+  if (!skipEmailVerification && !decoded.email_verified) {
+    const err = new Error('Email not verified');
+    err.code = 'auth.email_not_verified';
+    throw err;
+  }
+  return {
+    uid: decoded.uid,
+    email: decoded.email,
+    emailVerified: Boolean(decoded.email_verified),
+    username: decoded.username,   // custom claim, set at signup-complete
+    tier: decoded.tier || 'free', // custom claim
+    isCoach: Boolean(decoded.isCoach),
+    authProvider: 'firebase'
+  };
+}
+
 function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
   if (!token) {
     return sendError(res, 401, 'auth.missing_token', 'Authorization token is required.');
+  }
+
+  if (firebaseEnabled && isFirebaseIdToken(token)) {
+    verifyFirebaseToken(token)
+      .then(user => {
+        if (!user.username) {
+          return sendError(res, 403, 'auth.signup_incomplete',
+            'Account has no username claim. Complete signup via /auth/signup-complete.');
+        }
+        req.user = user;
+        next();
+      })
+      .catch(err => {
+        if (err.code === 'auth.email_not_verified') {
+          return sendError(res, 403, 'auth.email_not_verified',
+            'Email not verified. Check your inbox for the verification link.');
+        }
+        return sendError(res, 401, 'auth.invalid_token', 'Token invalid or expired. Please re-authenticate.');
+      });
+    return;
   }
 
   jwt.verify(token, JWT_SECRET, (err, user) => {
@@ -267,6 +322,11 @@ app.get('/health', async (_req, res) => {
       AIRTABLE_TOKEN:   hasToken  ? 'SET' : 'MISSING',
       AIRTABLE_BASE_ID: hasBaseId ? 'SET' : 'MISSING',
       JWT_SECRET:       hasJwt    ? 'SET' : 'MISSING',
+      FIREBASE_SERVICE_ACCOUNT: process.env.FIREBASE_SERVICE_ACCOUNT ? 'SET' : 'MISSING',
+    },
+    firebase: {
+      enabled: firebaseEnabled,
+      projectId: firebaseProjectId,
     },
     airtable: {
       enabled:       airtableEnabled,
@@ -454,6 +514,26 @@ async function updateUserPlan(recordId, fields) {
   }
 }
 
+// Sync the tier custom claim after a plan change. The Stripe webhook handler
+// (PAY-2) must call this alongside updateUserPlan — claims are what gate the
+// routes for Firebase-auth'd users, and they only refresh on the next ID-token
+// refresh (client forces it with getIdToken(true) after checkout).
+async function syncTierClaim(username, tier) {
+  if (!firebaseEnabled || !username) return false;
+  try {
+    const snap = await db.collection('usernames').doc(String(username).toLowerCase()).get();
+    if (!snap.exists) return false; // legacy user, no Firebase account yet
+    const uid = snap.get('uid');
+    const { customClaims = {} } = await admin.auth().getUser(uid);
+    await admin.auth().setCustomUserClaims(uid, { ...customClaims, tier });
+    await db.collection('users').doc(uid).set({ userPlan: tier }, { merge: true });
+    return true;
+  } catch (err) {
+    console.error('[syncTierClaim] Failed:', err.message);
+    return false;
+  }
+}
+
 // Generate unique referral code
 function generateReferralCode(username) {
   const base36 = username.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 5);
@@ -572,6 +652,181 @@ app.post('/login', loginLimiter, async (req, res) => {
   } catch (e) {
     console.error('[LOGIN] Failed:', e);
     return sendError(res, 500, 'auth.token_failure', 'Failed to sign in.');
+  }
+});
+
+// ── Firebase Auth endpoints (Phase 1 migration) ───────────────────────────────
+const USERNAME_RE = /^[a-zA-Z0-9_.-]{2,64}$/;
+
+const usernameCheckLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60, // typed availability checks are chattier than login attempts
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: { code: 'auth.rate_limited', message: 'Too many requests. Try again shortly.' } }
+});
+
+// GET /auth/username-available?username=
+app.get('/auth/username-available', usernameCheckLimiter, async (req, res) => {
+  if (!firebaseEnabled) return sendError(res, 503, 'auth.firebase_disabled', 'Firebase auth is not configured.');
+  const username = typeof req.query.username === 'string' ? req.query.username.trim() : '';
+  if (!USERNAME_RE.test(username)) {
+    return sendError(res, 400, 'auth.invalid_username',
+      'Username must be 2-64 characters: letters, numbers, dot, dash, underscore.');
+  }
+  try {
+    const snap = await db.collection('usernames').doc(username.toLowerCase()).get();
+    let available = !snap.exists;
+    if (available && airtableEnabled) {
+      // Legacy usernames stay reserved until their owners re-register
+      const legacy = await findUserByUsername(username);
+      available = !legacy;
+    }
+    return sendSuccess(res, 200, { username, available });
+  } catch (err) {
+    console.error('[AUTH] username-available failed:', err.message);
+    return sendError(res, 500, 'auth.server_error', 'Could not check username.');
+  }
+});
+
+// POST /auth/signup-complete — body { username, referredBy? }, Bearer = fresh Firebase ID token.
+// Runs after createUserWithEmailAndPassword on the client:
+//  1. claims usernames/{username} + creates users/{uid} in one transaction
+//  2. sets custom claims (username, tier, isCoach)
+//  3. best-effort Airtable Users row so plan/Stripe flows keep working until Phase 2
+app.post('/auth/signup-complete', loginLimiter, async (req, res) => {
+  if (!firebaseEnabled) return sendError(res, 503, 'auth.firebase_disabled', 'Firebase auth is not configured.');
+
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  if (!token) return sendError(res, 401, 'auth.missing_token', 'Authorization token is required.');
+
+  let fbUser;
+  try {
+    // Email cannot be verified yet — the account was created seconds ago
+    fbUser = await verifyFirebaseToken(token, { skipEmailVerification: true });
+  } catch {
+    return sendError(res, 401, 'auth.invalid_token', 'Token invalid or expired.');
+  }
+
+  const username = typeof req.body?.username === 'string' ? req.body.username.trim() : '';
+  const referredByCode = typeof req.body?.referredBy === 'string' ? req.body.referredBy.trim() : '';
+  if (!USERNAME_RE.test(username)) {
+    return sendError(res, 400, 'auth.invalid_username',
+      'Username must be 2-64 characters: letters, numbers, dot, dash, underscore.');
+  }
+
+  try {
+    // Legacy usernames stay reserved for their Airtable owners
+    if (airtableEnabled) {
+      const legacy = await findUserByUsername(username);
+      if (legacy) return sendError(res, 409, 'auth.username_taken', 'That username is already taken.');
+    }
+
+    const usernameRef = db.collection('usernames').doc(username.toLowerCase());
+    const userRef = db.collection('users').doc(fbUser.uid);
+    const referralCode = generateReferralCode(username);
+
+    // Resolve referral code → referrer uid where possible (schema doc: transform, not copy)
+    let referredByUid = null;
+    if (referredByCode) {
+      const referrer = await db.collection('users')
+        .where('referralCode', '==', referredByCode).limit(1).get();
+      if (!referrer.empty) referredByUid = referrer.docs[0].id;
+    }
+
+    await db.runTransaction(async tx => {
+      const [nameSnap, userSnap] = await Promise.all([tx.get(usernameRef), tx.get(userRef)]);
+      if (userSnap.exists) {
+        const claimed = userSnap.get('username');
+        if (claimed && claimed.toLowerCase() !== username.toLowerCase()) {
+          const err = new Error('Account already has a username.');
+          err.code = 'auth.already_registered';
+          throw err;
+        }
+      }
+      if (nameSnap.exists && nameSnap.get('uid') !== fbUser.uid) {
+        const err = new Error('That username is already taken.');
+        err.code = 'auth.username_taken';
+        throw err;
+      }
+      tx.set(usernameRef, { uid: fbUser.uid });
+      tx.set(userRef, {
+        uid: fbUser.uid,
+        username,
+        email: fbUser.email || null,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        userPlan: 'free',
+        subStatus: 'none',
+        subCurrentPeriodEnd: null,
+        billingCycle: null,
+        stripeCustomerId: null,
+        referralCode,
+        referralCredits: 0,
+        referredByCode: referredByCode || null,
+        referredByUid,
+        isCoach: false
+      }, { merge: true });
+    });
+
+    await admin.auth().setCustomUserClaims(fbUser.uid, {
+      username,
+      tier: 'free',
+      isCoach: false
+    });
+
+    // Best-effort Airtable row — data routes are keyed by Username until Phase 2
+    if (airtableEnabled) {
+      const fields = { Username: username, CreatedAt: new Date().toISOString() };
+      const optionalFields = {
+        UserPlan: 'free',
+        ReferralCode: referralCode,
+        ReferredBy: referredByCode || '',
+        ReferralCredits: 0,
+        ProgramGenCount: 0,
+      };
+      try {
+        await base(USERS_TABLE).create([{ fields: { ...fields, ...optionalFields } }]);
+      } catch (e1) {
+        try {
+          await base(USERS_TABLE).create([{ fields }]);
+        } catch (e2) {
+          console.error(`[AUTH] Airtable Users row failed for "${username}":`, e2.message);
+        }
+      }
+    }
+
+    console.info(`[AUTH] Signup complete for "${username}" (uid ${fbUser.uid})`);
+    return sendSuccess(res, 201, { username, referralCode });
+  } catch (err) {
+    if (err.code === 'auth.username_taken') {
+      return sendError(res, 409, 'auth.username_taken', 'That username is already taken.');
+    }
+    if (err.code === 'auth.already_registered') {
+      return sendError(res, 409, 'auth.already_registered', 'This account already completed signup.');
+    }
+    console.error('[AUTH] signup-complete failed:', err.message);
+    return sendError(res, 500, 'auth.signup_failed', 'Failed to complete signup.');
+  }
+});
+
+// POST /auth/email-for-username — body { username }. Login is by username (plan:
+// required, not optional); Firebase authenticates by email, so resolve first.
+app.post('/auth/email-for-username', loginLimiter, async (req, res) => {
+  if (!firebaseEnabled) return sendError(res, 503, 'auth.firebase_disabled', 'Firebase auth is not configured.');
+  const username = typeof req.body?.username === 'string' ? req.body.username.trim() : '';
+  if (!USERNAME_RE.test(username)) {
+    return sendError(res, 404, 'auth.unknown_username', 'No account found for that username.');
+  }
+  try {
+    const snap = await db.collection('usernames').doc(username.toLowerCase()).get();
+    if (!snap.exists) return sendError(res, 404, 'auth.unknown_username', 'No account found for that username.');
+    const { email } = await admin.auth().getUser(snap.get('uid'));
+    if (!email) return sendError(res, 404, 'auth.unknown_username', 'No account found for that username.');
+    return sendSuccess(res, 200, { email });
+  } catch (err) {
+    console.error('[AUTH] email-for-username failed:', err.message);
+    return sendError(res, 500, 'auth.server_error', 'Could not resolve username.');
   }
 });
 
