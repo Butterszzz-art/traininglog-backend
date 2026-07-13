@@ -9,7 +9,7 @@ const rateLimit = require('express-rate-limit');
 const leaderboardRoute = require('./leaderboard');
 const { router: aiRouter } = require('./src/routes/ai');
 const { upload, extractKnowledgeWithClaude, saveToAirtable, getActiveModules } = require('./knowledgeBase');
-const { admin, db, firebaseEnabled, projectId: firebaseProjectId } = require('./firebase');
+const { admin, db, firebaseEnabled, projectId: firebaseProjectId, initError: firebaseInitError } = require('./firebase');
 
 const app = express();
 
@@ -327,6 +327,7 @@ app.get('/health', async (_req, res) => {
     firebase: {
       enabled: firebaseEnabled,
       projectId: firebaseProjectId,
+      initError: firebaseInitError || null,
     },
     airtable: {
       enabled:       airtableEnabled,
