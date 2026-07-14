@@ -222,24 +222,6 @@ async function verifyAirtableModelDefinitions() {
 
 verifyAirtableModelDefinitions();
 
-// ── Field mappers ─────────────────────────────────────────────────────────────
-function mapWorkoutToFields(w) {
-  return {
-    Name:      w.name      || 'Workout',
-    CreatedAt: w.createdAt || new Date().toISOString(),
-    Notes:     w.notes     || '',
-    Units:     w.units     || '',
-    SetsJson:  JSON.stringify(w.sets || [])
-  };
-}
-
-function mapRecordToWorkout(rec) {
-  const f = rec.fields || {};
-  let sets = [];
-  try { sets = f.SetsJson ? JSON.parse(f.SetsJson) : []; } catch {}
-  return { id: rec.id, createdAt: f.CreatedAt || rec._rawJson?.createdTime, name: f.Name || 'Workout', notes: f.Notes || '', units: f.Units || '', sets };
-}
-
 function computeSessionVolume(workout) {
   if (!workout || typeof workout !== 'object') return 0;
   const sets = Array.isArray(workout.sets)
