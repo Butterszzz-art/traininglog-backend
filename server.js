@@ -28,8 +28,6 @@ const AIRTABLE_API_TOKEN = process.env.AIRTABLE_API_TOKEN || process.env.AIRTABL
 const JWT_SECRET         = process.env.JWT_SECRET;
 
 // ── Tables ────────────────────────────────────────────────────────────────────
-const TABLE_NAME          = process.env.AIRTABLE_TABLE           || 'Workouts';
-const DAYS_TABLE          = process.env.AIRTABLE_DAYS_TABLE      || 'Days';
 const WORKOUTS_TABLE      = 'Workouts';
 const MACRO_TARGETS_TABLE = 'MacroTargets';
 const DAILY_LOGS_TABLE    = process.env.AIRTABLE_DAILY_LOGS_TABLE    || 'DailyMacros';
@@ -242,28 +240,6 @@ function mapRecordToWorkout(rec) {
   return { id: rec.id, createdAt: f.CreatedAt || rec._rawJson?.createdTime, name: f.Name || 'Workout', notes: f.Notes || '', units: f.Units || '', sets };
 }
 
-function toFieldsFromDay(day) {
-  const f = { Date: day.date };
-  if (day.workout)    f.WorkoutJson    = JSON.stringify(day.workout);
-  if (day.bodyweight) { f.BodyweightValue = day.bodyweight.value ?? null; f.BodyweightUnit = day.bodyweight.unit ?? null; }
-  if (day.cardio)     f.CardioJson     = JSON.stringify(day.cardio);
-  if (day.macros)     f.MacrosJson     = JSON.stringify(day.macros);
-  return f;
-}
-
-function fromRecordToDay(rec) {
-  const f = rec.fields || {};
-  const safeParse = s => { try { return s ? JSON.parse(s) : undefined; } catch { return undefined; } };
-  return {
-    id:          rec.id,
-    date:        f.Date,
-    workout:     safeParse(f.WorkoutJson),
-    bodyweight:  (f.BodyweightValue || f.BodyweightUnit) ? { value: f.BodyweightValue ?? undefined, unit: f.BodyweightUnit ?? undefined } : undefined,
-    cardio:      safeParse(f.CardioJson),
-    macros:      safeParse(f.MacrosJson)
-  };
-}
-
 function computeSessionVolume(workout) {
   if (!workout || typeof workout !== 'object') return 0;
   const sets = Array.isArray(workout.sets)
@@ -277,14 +253,6 @@ function computeSessionVolume(workout) {
     if (!Number.isFinite(weight) || !Number.isFinite(reps)) return total;
     return total + weight * reps;
   }, 0);
-}
-
-async function findDayRecordId(dateKey) {
-  const safeDate = escapeAirtableFormulaValue(dateKey);
-  const found = await base(DAYS_TABLE)
-    .select({ filterByFormula: `{Date} = '${safeDate}'`, maxRecords: 1 })
-    .firstPage();
-  return found[0]?.id || null;
 }
 
 // ── Routes ────────────────────────────────────────────────────────────────────
@@ -352,6 +320,20 @@ app.get('/api/user/plan', authenticateToken, async (req, res) => {
     const username = req.user?.username;
     if (!username) return res.json({ plan: 'free', status: 'none' });
 
+    const uid = await resolveFirestoreUid(username);
+    if (uid) {
+      const snap = await db.collection('users').doc(uid).get();
+      const u = snap.exists ? snap.data() : {};
+      return res.json({
+        plan: u.userPlan || 'free',
+        status: u.subStatus || 'none',
+        periodEnd: u.subCurrentPeriodEnd || '',
+        billingCycle: u.billingCycle || '',
+        referralCode: u.referralCode || '',
+        referralCredits: Number(u.referralCredits) || 0,
+      });
+    }
+
     const user = await getUserByUsername(username);
     if (!user) return res.json({ plan: 'free', status: 'none' });
 
@@ -393,8 +375,19 @@ app.post('/api/stripe/create-checkout-session', authenticateToken, async (req, r
   if (!priceId) return res.status(400).json({ error: 'Invalid plan/billing combination' });
 
   try {
-    const user = await getUserByUsername(username);
-    const credits = user ? (Number(user.fields.ReferralCredits) || 0) : 0;
+    const uid = await resolveFirestoreUid(username);
+    let credits = 0;
+    let stripeCustomerId = null;
+    if (uid) {
+      const snap = await db.collection('users').doc(uid).get();
+      const u = snap.exists ? snap.data() : {};
+      credits = Number(u.referralCredits) || 0;
+      stripeCustomerId = u.stripeCustomerId || null;
+    } else {
+      const user = await getUserByUsername(username);
+      credits = user ? (Number(user.fields.ReferralCredits) || 0) : 0;
+      stripeCustomerId = user?.fields?.StripeCustomerId || null;
+    }
     const trialDays = credits > 0 ? credits * 30 : 7;
 
     const sessionParams = {
@@ -406,7 +399,7 @@ app.post('/api/stripe/create-checkout-session', authenticateToken, async (req, r
       subscription_data: { trial_period_days: trialDays, metadata: { username, plan, billing: billing || 'monthly' } },
       metadata: { username, plan, billing: billing || 'monthly' },
     };
-    if (user?.fields?.StripeCustomerId) sessionParams.customer = user.fields.StripeCustomerId;
+    if (stripeCustomerId) sessionParams.customer = stripeCustomerId;
 
     const session = await stripe.checkout.sessions.create(sessionParams);
     return res.json({ url: session.url });
@@ -422,8 +415,15 @@ app.get('/api/stripe/portal', authenticateToken, async (req, res) => {
   if (!username) return res.status(400).json({ error: 'username required' });
 
   try {
-    const user = await getUserByUsername(username);
-    const customerId = user?.fields?.StripeCustomerId;
+    const uid = await resolveFirestoreUid(username);
+    let customerId;
+    if (uid) {
+      const snap = await db.collection('users').doc(uid).get();
+      customerId = snap.exists ? snap.get('stripeCustomerId') : null;
+    } else {
+      const user = await getUserByUsername(username);
+      customerId = user?.fields?.StripeCustomerId;
+    }
     if (!customerId) return res.status(400).json({ error: 'No Stripe customer found' });
 
     const session = await stripe.billingPortal.sessions.create({
@@ -440,7 +440,23 @@ app.get('/api/stripe/portal', authenticateToken, async (req, res) => {
 // ── Referral endpoints ───────────────────────────────────────────────────────
 app.get('/api/referral/validate', async (req, res) => {
   const code = req.query.code;
-  if (!code || !airtableEnabled) return res.json({ valid: false });
+  if (!code) return res.json({ valid: false });
+
+  // A referral code's owner could be on either side depending on when they
+  // migrated — check Firestore first, then fall back to Airtable.
+  if (firebaseEnabled) {
+    try {
+      const snap = await db.collection('users').where('referralCode', '==', code).limit(1).get();
+      if (!snap.empty) {
+        const u = snap.docs[0].data();
+        return res.json({ valid: true, referrerName: (u.username || '').slice(0, 8) });
+      }
+    } catch (err) {
+      console.error('[GET /api/referral/validate] Firestore lookup failed:', err.message);
+    }
+  }
+
+  if (!airtableEnabled) return res.json({ valid: false });
   try {
     const safe = escapeAirtableFormulaValue(code);
     const records = await base(USERS_TABLE).select({ filterByFormula: `{ReferralCode}='${safe}'`, maxRecords: 1 }).firstPage();
@@ -451,17 +467,48 @@ app.get('/api/referral/validate', async (req, res) => {
 
 app.get('/api/referral/stats', async (req, res) => {
   const username = req.query.username;
-  if (!username || !airtableEnabled) return res.json({ referralCode: '', referralCredits: 0, referralCount: 0 });
+  if (!username) return res.json({ referralCode: '', referralCredits: 0, referralCount: 0 });
   try {
-    const user = await getUserByUsername(username);
-    if (!user) return res.json({ referralCode: '', referralCredits: 0, referralCount: 0 });
-    const code = user.fields.ReferralCode || '';
-    const credits = Number(user.fields.ReferralCredits) || 0;
+    const uid = await resolveFirestoreUid(username);
+    let code = '', credits = 0;
+    if (uid) {
+      const snap = await db.collection('users').doc(uid).get();
+      const u = snap.exists ? snap.data() : {};
+      code = u.referralCode || '';
+      credits = Number(u.referralCredits) || 0;
+    } else if (airtableEnabled) {
+      const user = await getUserByUsername(username);
+      if (!user) return res.json({ referralCode: '', referralCredits: 0, referralCount: 0 });
+      code = user.fields.ReferralCode || '';
+      credits = Number(user.fields.ReferralCredits) || 0;
+    } else {
+      return res.json({ referralCode: '', referralCredits: 0, referralCount: 0 });
+    }
+
+    // Referred users can land in either store depending on when each of
+    // them migrated — count both and sum, regardless of which store the
+    // referrer's own code came from.
     let count = 0;
     if (code) {
-      const safe = escapeAirtableFormulaValue(code);
-      const referred = await base(USERS_TABLE).select({ filterByFormula: `{ReferredBy}='${safe}'` }).firstPage();
-      count = referred.length;
+      if (firebaseEnabled) {
+        try {
+          const referredSnap = await db.collection('users').where('referredByCode', '==', code).get();
+          count += referredSnap.docs.length;
+        } catch (err) {
+          console.error('[GET /api/referral/stats] Firestore count failed:', err.message);
+        }
+      }
+      if (airtableEnabled) {
+        const safe = escapeAirtableFormulaValue(code);
+        const referred = await base(USERS_TABLE).select({ filterByFormula: `{ReferredBy}='${safe}'` }).firstPage();
+        // Exclude anyone who's since migrated — they're already counted via
+        // the Firestore branch above (referredByCode), and would otherwise
+        // be double-counted (old Airtable row + new Firestore doc).
+        const stillLegacy = await Promise.all(referred.map(async r =>
+          (await resolveFirestoreUid(r.fields?.Username)) ? null : r
+        ));
+        count += stillLegacy.filter(Boolean).length;
+      }
     }
     return res.json({ referralCode: code, referralCredits: credits, referralCount: count });
   } catch { return res.json({ referralCode: '', referralCredits: 0, referralCount: 0 }); }
@@ -933,12 +980,44 @@ app.post('/workouts', authenticateToken, async (req, res) => {
     if (!date || !workout) {
       return sendError(res, 422, 'workouts.invalid_payload', 'date and workout are required.');
     }
+
+    const sessionVolume = computeSessionVolume(workout);
+
+    const uid = await resolveFirestoreUid(username);
+    if (uid) {
+      // The whole `workout` object is stored as-is (not exploded) so GET can
+      // return it byte-for-byte — that's the API's existing contract. A
+      // `sets` subcollection is also populated for future analytics, mirroring
+      // legacyMigration.js's design, but GET doesn't reconstruct from it.
+      const docRef = db.collection(`users/${uid}/workouts`).doc();
+      await docRef.set({
+        date: String(date),
+        title: String(title || 'Workout'),
+        sessionVolume,
+        workout
+      });
+      const sets = Array.isArray(workout.sets)
+        ? workout.sets
+        : Array.isArray(workout.exercises)
+          ? workout.exercises.flatMap(ex => Array.isArray(ex.sets) ? ex.sets.map(s => ({ ...s, exerciseName: s.exerciseName || ex.exercise || ex.name })) : [])
+          : [];
+      await Promise.all(sets.map((s, i) =>
+        docRef.collection('sets').doc(String(i)).set({
+          exerciseName: s.exerciseName || s.exercise || null,
+          weight: s.weight ?? null,
+          reps: s.reps ?? null,
+          rpe: s.rpe ?? null,
+          setNumber: s.setNumber ?? i + 1
+        })
+      ));
+      return sendSuccess(res, 200, { recordId: docRef.id });
+    }
+
     if (!airtableEnabled) {
       return sendError(res, 503, 'workouts.airtable_disabled', 'Airtable is not configured.',
         'Set AIRTABLE_BASE_ID and AIRTABLE_API_TOKEN in environment variables.');
     }
 
-    const sessionVolume = computeSessionVolume(workout);
     const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(WORKOUTS_TABLE)}`;
     const response = await airtableFetch(url, {
       method: 'POST',
@@ -971,6 +1050,16 @@ app.post('/workouts', authenticateToken, async (req, res) => {
 app.get('/workouts', authenticateToken, async (req, res) => {
   try {
     const username = req.user.username;
+
+    const uid = await resolveFirestoreUid(username);
+    if (uid) {
+      const snap = await db.collection(`users/${uid}/workouts`).orderBy('date', 'desc').get();
+      const items = snap.docs.map(d => ({
+        id: d.id, username, date: d.get('date'), title: d.get('title'), workout: d.get('workout') ?? null
+      }));
+      return sendSuccess(res, 200, { items });
+    }
+
     if (!airtableEnabled) return sendError(res, 503, 'workouts.airtable_disabled', 'Airtable is not configured.');
 
     const safeUsername = escapeAirtableFormulaValue(username);
@@ -2041,6 +2130,20 @@ app.post('/sendTemplate', authenticateToken, async (req, res) => {
   if (!fromUser || !toUser || !templateName || !templateData) {
     return sendError(res, 400, 'templates.invalid_payload', 'fromUser, toUser, templateName, and templateData are required.');
   }
+
+  // Cross-user write: resolve the RECIPIENT's uid, not the caller's.
+  const toUid = await resolveFirestoreUid(toUser);
+  if (toUid) {
+    try {
+      const docRef = db.collection(`users/${toUid}/templates`).doc();
+      await docRef.set({ name: String(templateName), templateData });
+      return sendSuccess(res, 200, { record: { id: docRef.id, fields: { TemplateName: templateName, Username: toUser } } });
+    } catch (err) {
+      console.error('POST /sendTemplate (Firestore) failed:', err);
+      return sendError(res, 500, 'templates.server_error', 'Server error sharing template.');
+    }
+  }
+
   if (!airtableEnabled) {
     return sendError(res, 503, 'templates.airtable_disabled', 'Airtable is not configured.');
   }
@@ -2118,68 +2221,21 @@ app.delete('/templates/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// POST /days/upsert + POST /days
-async function upsertDayHandler(req, res) {
-  const incoming = req.body || {};
-
-  if (!airtableEnabled) {
-    return sendSuccess(res, 200, { day: incoming });
-  }
-
-  try {
-    if (!incoming.date) return sendError(res, 400, 'days.validation', 'date required (YYYY-MM-DD)');
-
-    const recId = await findDayRecordId(incoming.date);
-    if (recId) {
-      const existingRec = await base(DAYS_TABLE).find(recId);
-      const existingDay = fromRecordToDay(existingRec);
-      const merged = {
-        date:       incoming.date,
-        workout:    incoming.workout    ?? existingDay.workout,
-        bodyweight: incoming.bodyweight ?? existingDay.bodyweight,
-        cardio:     incoming.cardio     ?? existingDay.cardio,
-        macros:     incoming.macros     ?? existingDay.macros
-      };
-      const updated = await base(DAYS_TABLE).update([{ id: recId, fields: toFieldsFromDay(merged) }]);
-      return res.json(fromRecordToDay(updated[0]));
-    }
-
-    const created = await base(DAYS_TABLE).create([{ fields: toFieldsFromDay(incoming) }]);
-    return res.status(201).json(fromRecordToDay(created[0]));
-  } catch (e) {
-    console.error('POST /days/upsert failed:', e);
-    return sendError(res, 500, 'days.upsert_failed', 'Failed to upsert day.', e?.message);
-  }
+// POST /days/upsert + POST /days + GET /days — RETIRED (PHASE2-NOTES.md).
+// Confirmed write-only dead weight: the frontend's workoutTimer.js posts here
+// fire-and-forget, but nothing anywhere ever calls GET /days to read it back.
+// Real data lives in Workouts/DailyMacros/CardioLog/BodyweightLog instead.
+// Routes stay registered (so any cached old client build doesn't start
+// getting 404s) but no longer touch Airtable or Firestore.
+function upsertDayHandler(req, res) {
+  return sendSuccess(res, 200, { day: req.body || {} });
 }
 
 app.post('/days/upsert', authenticateToken, upsertDayHandler);
 app.post('/days',        authenticateToken, upsertDayHandler);
 
-// GET /days
-app.get('/days', authenticateToken, async (req, res) => {
-  if (!airtableEnabled) return res.json({ items: [] });
-
-  try {
-    const username = req.user.username;
-    const from  = typeof req.query.from  === 'string' ? req.query.from.trim()  : '';
-    const to    = typeof req.query.to    === 'string' ? req.query.to.trim()    : '';
-    const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 100);
-
-    const filter = [`{${USERNAME_FIELD}}='${escapeAirtableFormulaValue(username)}'`];
-    if (from) filter.push(`{Date} >= '${escapeAirtableFormulaValue(from)}'`);
-    if (to)   filter.push(`{Date} <= '${escapeAirtableFormulaValue(to)}'`);
-
-    const records = await base(DAYS_TABLE).select({
-      filterByFormula: filter.length > 1 ? `AND(${filter.join(',')})` : filter[0],
-      sort: [{ field: 'Date', direction: 'desc' }],
-      pageSize: limit
-    }).all();
-
-    return res.json({ items: records.map(fromRecordToDay) });
-  } catch (e) {
-    console.error('GET /days failed:', e);
-    return sendError(res, 500, 'days.fetch_failed', 'Failed to load days.', e?.message);
-  }
+app.get('/days', authenticateToken, (_req, res) => {
+  return res.json({ items: [] });
 });
 
 // ── Coach Dashboard ───────────────────────────────────────────────────────────
@@ -2268,10 +2324,11 @@ app.post('/coach/workouts', authenticateToken, async (req, res) => {
     if (!clientUsername || !date || !workout) {
       return sendError(res, 422, 'coach.invalid_payload', 'clientUsername, date and workout are required.');
     }
-    if (!airtableEnabled) {
-      return sendError(res, 503, 'coach.airtable_disabled', 'Airtable is not configured.');
-    }
 
+    // Link verification always goes through Airtable's CoachClients table —
+    // that relationship hasn't been fully migrated bidirectionally yet
+    // (PHASE2-NOTES.md gap #1), so this stays the authoritative source
+    // regardless of either party's migration status.
     let linked = false;
     try {
       linked = await verifyCoachClientLink(coachUsername, clientUsername);
@@ -2286,6 +2343,24 @@ app.post('/coach/workouts', authenticateToken, async (req, res) => {
     // Stamp who logged it inside the workout JSON (no extra Airtable field needed)
     const stamped = { ...workout, loggedByCoach: coachUsername };
     const sessionVolume = computeSessionVolume(stamped);
+
+    // Cross-user write: resolve the CLIENT's uid, not the coach's.
+    const clientUid = await resolveFirestoreUid(clientUsername);
+    if (clientUid) {
+      const docRef = db.collection(`users/${clientUid}/workouts`).doc();
+      await docRef.set({
+        date: String(date),
+        title: String(title || 'Workout (logged by coach)'),
+        sessionVolume,
+        workout: stamped
+      });
+      return sendSuccess(res, 200, { recordId: docRef.id });
+    }
+
+    if (!airtableEnabled) {
+      return sendError(res, 503, 'coach.airtable_disabled', 'Airtable is not configured.');
+    }
+
     const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(WORKOUTS_TABLE)}`;
     const response = await airtableFetch(url, {
       method: 'POST',

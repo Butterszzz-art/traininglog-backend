@@ -38,29 +38,33 @@ function docRefFor(colPath, docId) {
     async set(data, opts) {
       store[colPath][docId] = opts?.merge ? { ...(store[colPath][docId] || {}), ...data } : data;
     },
-    async delete() { delete store[colPath][docId]; }
+    async delete() { delete store[colPath][docId]; },
+    collection(subPath) { return collection(`${colPath}/${docId}/${subPath}`); }
   };
 }
 function collection(colPath) {
   store[colPath] = store[colPath] || {};
   const filters = [];
+  let limitN = null;
   const api = {
     doc(id) {
       const docId = id || `auto_${Math.random().toString(36).slice(2, 8)}`;
       return docRefFor(colPath, docId);
     },
-    async get() { // naive: ignores orderBy direction, applies == filters only
+    async get() { // naive: ignores orderBy direction, applies == filters + limit only
       let entries = Object.entries(store[colPath] || {});
       for (const [field, value] of filters) {
         entries = entries.filter(([, data]) => data?.[field] === value);
       }
+      if (limitN != null) entries = entries.slice(0, limitN);
       const docs = entries.map(([id, data]) => ({
         id, get: (f) => data[f], data: () => data, ref: docRefFor(colPath, id)
       }));
-      return { docs };
+      return { docs, empty: docs.length === 0 };
     },
     orderBy() { return this; },
-    where(field, op, value) { filters.push([field, value]); return this; }
+    where(field, op, value) { filters.push([field, value]); return this; },
+    limit(n) { limitN = n; return this; }
   };
   return api;
 }
@@ -71,9 +75,31 @@ require.cache[require.resolve(firebasePath)] = {
   exports: { auth: {}, db: fakeDb, FieldValue: { serverTimestamp: () => 'TS' }, firebaseEnabled: true, projectId: 'test-project', initError: null }
 };
 
+// Mock the 'airtable' package too — verifyCoachClientLink() deliberately
+// always checks Airtable's CoachClients table regardless of migration status
+// (that relationship isn't in Firestore yet), so testing /coach/workouts
+// needs a controllable fake link result rather than a real network call.
+const airtablePath = require.resolve('airtable', { paths: [BACKEND_DIR] });
+class FakeAirtable {
+  base() {
+    return (tableName) => ({
+      select() {
+        return {
+          async firstPage() {
+            if (tableName === 'CoachClients') return [{ id: 'link1' }]; // always "linked"
+            return [];
+          },
+          all: async () => []
+        };
+      }
+    });
+  }
+}
+require.cache[airtablePath] = { id: airtablePath, filename: airtablePath, loaded: true, exports: FakeAirtable };
+
 // Pre-seed: "migrateduser" has completed signup-complete (usernames doc exists)
-store['usernames'] = { migrateduser: { uid: 'uidABC123' } };
-store['users'] = {};
+store['usernames'] = { migrateduser: { uid: 'uidABC123' }, clientuser: { uid: 'uidClient456' } };
+store['users'] = { uidABC123: { username: 'migrateduser', referralCode: 'REFCODE1' } };
 
 const jwt = require(path.join(BACKEND_DIR, 'node_modules/jsonwebtoken'));
 const legacyTokenMigrated = jwt.sign({ id: 'rec1', username: 'migrateduser' }, process.env.JWT_SECRET);
@@ -251,6 +277,46 @@ setTimeout(() => {
     r = await req('GET', '/api/coach/clients?coachId=migrateduser', legacyTokenMigrated);
     check('GET /api/coach/clients (migrated) 200', r.status === 200);
     check('GET /api/coach/clients (migrated) lists roster', r.body?.clients?.some(c => c.clientName === 'Alice' && c.email === 'a@x.com'));
+
+    // ── Workouts ──
+    r = await req('POST', '/workouts', legacyTokenMigrated, { date: '2026-07-01', title: 'Push Day', workout: { sets: [{ exerciseName: 'Bench', weight: 80, reps: 5 }] } });
+    check('POST /workouts (migrated) 200', r.status === 200);
+    const workoutId = r.body?.recordId;
+    check('POST /workouts (migrated) wrote to Firestore (whole object)', store['users/uidABC123/workouts']?.[workoutId]?.workout?.sets?.[0]?.exerciseName === 'Bench');
+    check('POST /workouts (migrated) also exploded sets subcollection', !!store[`users/uidABC123/workouts/${workoutId}/sets`]?.['0']);
+
+    r = await req('GET', '/workouts', legacyTokenMigrated);
+    check('GET /workouts (migrated) 200', r.status === 200);
+    check('GET /workouts (migrated) returns whole workout object byte-for-byte', r.body?.items?.some(i => i.id === workoutId && i.workout?.sets?.[0]?.weight === 80));
+
+    // ── sendTemplate: writes to the RECIPIENT's templates, not the sender's ──
+    r = await req('POST', '/sendTemplate', legacyTokenMigrated, { fromUser: 'migrateduser', toUser: 'clientuser', templateName: 'Shared Plan', templateData: { log: [] } });
+    check('POST /sendTemplate (recipient migrated) 200', r.status === 200);
+    check('POST /sendTemplate wrote to RECIPIENT (uidClient456), not sender', Object.values(store['users/uidClient456/templates'] || {}).some(t => t.name === 'Shared Plan') && !Object.values(store['users/uidABC123/templates'] || {}).some(t => t.name === 'Shared Plan'));
+
+    // ── coach/workouts: writes to the CLIENT's workouts, not the coach's ──
+    r = await req('POST', '/coach/workouts', legacyTokenMigrated, { clientUsername: 'clientuser', date: '2026-07-02', workout: { sets: [{ exerciseName: 'Squat', weight: 100, reps: 5 }] } });
+    check('POST /coach/workouts (client migrated) 200', r.status === 200);
+    const coachLoggedId = r.body?.recordId;
+    check('POST /coach/workouts wrote to CLIENT (uidClient456), stamped loggedByCoach', store['users/uidClient456/workouts']?.[coachLoggedId]?.workout?.loggedByCoach === 'migrateduser');
+    check('POST /coach/workouts did not write to coach\'s own workouts', !store['users/uidABC123/workouts']?.[coachLoggedId]);
+
+    // ── Plan / referral ──
+    r = await req('GET', '/api/user/plan', legacyTokenMigrated);
+    check('GET /api/user/plan (migrated) 200', r.status === 200);
+    check('GET /api/user/plan (migrated) reads referralCode from Firestore', r.body?.referralCode === 'REFCODE1');
+
+    r = await req('GET', '/api/referral/validate?code=REFCODE1', null);
+    check('GET /api/referral/validate (Firestore hit) 200', r.status === 200);
+    check('GET /api/referral/validate (Firestore hit) valid + referrerName', r.body?.valid === true && r.body?.referrerName === 'migrateduser'.slice(0, 8));
+
+    r = await req('GET', '/api/referral/validate?code=NOSUCHCODE', null);
+    check('GET /api/referral/validate (no match) valid:false', r.body?.valid === false);
+
+    store['users']['uidClient456'] = { username: 'clientuser', referredByCode: 'REFCODE1' };
+    r = await req('GET', '/api/referral/stats?username=migrateduser', null);
+    check('GET /api/referral/stats (migrated) 200', r.status === 200);
+    check('GET /api/referral/stats (migrated) counts Firestore-referred user', r.body?.referralCode === 'REFCODE1' && r.body?.referralCount === 1);
 
     console.log('\n=== RESULTS ===');
     for (const { label, pass } of results) console.log((pass ? 'PASS' : 'FAIL') + ' - ' + label);
