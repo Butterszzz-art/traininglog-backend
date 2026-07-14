@@ -35,7 +35,36 @@
 4. **Workouts/Programs migration recovers almost nothing** in practice, since that data lives in localStorage, not Airtable. If preserving on-device workout history matters, it needs a *client-side* migration path (sync localStorage to Firestore on first login post-reclaim), which is a different mechanism than this server-side Airtable migration.
 5. Test residue in production Firestore from verification passes: a handful of `users/{uid}` + `usernames/{username}` docs from disposable test accounts (Firebase Auth accounts and Airtable rows were cleaned up; the Firestore docs are orphaned but inert — no PII, safe to delete manually from the Firebase Console if you want them gone, or ignore).
 
+## Route cutover — in progress
+
+**Pattern (established this pass, apply to everything below):** `const uid = await resolveFirestoreUid(req.user.username);` — if `uid` resolves, that user has migrated; read/write Firestore exclusively for this route (no dual-write, no fallback-merge — Firestore is the sole source of truth for them from this point on). If `uid` is `null`, they haven't migrated; leave the existing Airtable code path completely untouched. `resolveFirestoreUid` works identically regardless of whether the current request carries a Firebase ID token or a legacy JWT — it only depends on whether that username ever completed `/auth/signup-complete`.
+
+Verify each conversion with the same method used for MacroTargets/Templates: `node scripts/test-firestore-routes.js` — a full HTTP-level test against the real `server.js` with `firebase.js`'s `db` mocked via `require.cache` injection and a locally-signed legacy JWT (bypasses the email-verification gate that blocks live production testing without a real inbox). Add request/assert blocks there for each newly-converted route.
+
+| Route(s) | Table | Status |
+|---|---|---|
+| `GET/POST /macrotargets` | MacroTargets | ✅ Converted (this pass) |
+| `POST/GET/DELETE /templates` | Templates | ✅ Converted (this pass) |
+| `GET/POST /workouts` | Workouts | Not converted. Low real-world value — table is nearly empty (see gap #4), but still worth converting for correctness/future data. |
+| `POST/GET /dailylogs` | DailyMacros | Not converted. |
+| `POST /bodyweight/archive`, `GET /bodyweight` | BodyweightLog | Not converted. |
+| `POST /measurements/sync`, `GET /measurements` | BodyMeasurements | Not converted. |
+| `POST /cardio/sync`, `GET /cardio` | CardioLog | Not converted. |
+| `POST /crossfit/sync`, `GET /crossfit` | CrossFitLog | Not converted. |
+| `POST /programs` (+ `/saveProgram` alias), `GET /programs`, `PATCH /programs/:id/active`, `DELETE /programs/:id` | Programs | Not converted. |
+| `PUT /api/bodybuilding/daily-mission/:userId` | DailyMissionState | Not converted. |
+| `GET/POST/DELETE /mobility/routines`, `GET/POST /mobility/sessions` | MobilityRoutines, MobilitySessions | Not converted. Coach-assigned routines still need the cross-account reference from gap #2 above. |
+| `GET /api/coach/clients` | CoachClients | Not converted. |
+| `POST /coach/workouts` | Workouts (writes to a **client's** data, not the caller's) | Not converted — needs `resolveFirestoreUid` on the *target athlete's* username, not the coach's. Handle deliberately, same caveat as `/sendTemplate`. |
+| `POST /sendTemplate` | Templates (writes to a **different user's** templates) | Not converted — the recipient's uid needs resolving, not the sender's. Deferred this pass. |
+| `POST/GET/DELETE /coach/exercise-videos`, `GET /exercise-videos` | ExerciseVideos | Not converted — no decided Firestore home yet (known gap #3). Decide the collection shape before converting. |
+| `GET /api/user/plan`, `GET /api/referral/validate`, `GET /api/referral/stats` | Users (plan/referral fields) | Not converted, but a good near-term candidate — a migrated user's plan/referral data already lives correctly in `users/{uid}` (written at signup-complete and, once built, by the Stripe webhook), so these read routes just need the same `resolveFirestoreUid` treatment. |
+| `POST /api/stripe/create-checkout-session`, `GET /api/stripe/portal` | Users (Stripe fields) | Not converted. Whichever of these ends up updating plan/billing fields post-checkout must write to `users/{uid}` for migrated users (and should call `syncTierClaim`, already built in Phase 1, to keep custom claims in sync). |
+| `POST/GET/DELETE` KnowledgeBase-adjacent (`/admin/ingest-pdf`, `/admin/knowledge-modules`, `/knowledge-context`) | KnowledgeBase | Not converted, not even decided — this table wasn't covered in the original collection-homes pass either. Needs its own audit (three-layer tier design from the original schema doc vs. what's actually live) before converting. |
+| `/register`, `/login` | Users (legacy auth) | Not converted, not going to be — these are the legacy JWT auth routes themselves, superseded by the Firebase flows. Removed at cutover (Phase 1 plan step 7), not migrated. |
+| `/days/upsert`, `/days` (POST+GET) | Days | Not converted — per the retirement decision above, these should eventually be removed/no-op'd rather than converted, once confirmed nothing still depends on them. |
+
 ## Not started
 
-- Rewriting the ~40 existing Express routes to read/write Firestore instead of Airtable (the actual "cutover" for non-auth data). Everything above only prepares the target structure and the reclaim-time migration path; live traffic still reads/writes Airtable until those routes are rewritten and tested — a separate, larger pass.
 - Deploying `firestore.rules` (manual, needs Firebase CLI).
+- Everything in the route table above marked "Not converted."
