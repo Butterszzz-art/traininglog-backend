@@ -369,6 +369,9 @@ setTimeout(() => {
     check('GET /exercises (muscleGroup=biceps) 200', r.status === 200);
     check('GET /exercises (muscleGroup=biceps) respects limit', r.body?.items?.length === 5 && r.body?.items?.every(i => i.muscleGroup === 'biceps'));
 
+    r = await req('GET', '/exercises?limit=1000', legacyTokenMigrated);
+    check('GET /exercises (limit=1000) returns the whole dataset for local caching', r.body?.items?.length === 873);
+
     console.log('\n=== RESULTS ===');
     for (const { label, pass } of results) console.log((pass ? 'PASS' : 'FAIL') + ' - ' + label);
     const failed = results.filter(r => !r.pass);
