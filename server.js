@@ -265,7 +265,15 @@ app.get('/health', async (_req, res) => {
   const hasJwt    = Boolean(process.env.JWT_SECRET);
 
   const tableChecks = {};
-  const requiredTables = ['Users', 'Templates', 'Programs', 'Workouts', 'MacroTargets', 'DailyMacros', 'CoachClients', 'ExerciseVideos'];
+  // ExerciseVideos intentionally excluded: that Airtable table was never
+  // actually created (confirmed via direct probe — 403
+  // INVALID_PERMISSIONS_OR_MODEL_NOT_FOUND, same signature as other
+  // never-existed legacy tables found during the Phase 2 audit). The
+  // feature now lives in Firestore (coaches/{uid}/exerciseVideos) since the
+  // Phase 2 route cutover, so this was a permanent false alarm — every
+  // /health check has been returning HTTP 503 because of it, masking any
+  // real problem behind a status that's always red.
+  const requiredTables = ['Users', 'Templates', 'Programs', 'Workouts', 'MacroTargets', 'DailyMacros', 'CoachClients'];
   let airtableReachable = null;
   let airtableError = null;
 
