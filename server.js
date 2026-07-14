@@ -3119,7 +3119,10 @@ app.get('/exercises', authenticateToken, async (req, res) => {
     const q = typeof req.query.q === 'string' ? req.query.q.trim().toLowerCase() : '';
     const muscleGroup = typeof req.query.muscleGroup === 'string' ? req.query.muscleGroup.trim() : '';
     const equipment = typeof req.query.equipment === 'string' ? req.query.equipment.trim() : '';
-    const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
+    // Cap raised to 1000 (> the whole ~900-row dataset) so a client can fetch
+    // the entire library in one call to cache locally, e.g. for an
+    // autocomplete/datalist — not just paginate search results.
+    const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 1000);
 
     let query = db.collection('exercises');
     if (muscleGroup) query = query.where('muscleGroup', '==', muscleGroup);
