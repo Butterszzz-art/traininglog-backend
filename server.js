@@ -2403,6 +2403,22 @@ app.post('/coach/exercise-videos', authenticateToken, async (req, res) => {
     if (!/^https?:\/\//i.test(String(videoUrl))) {
       return sendError(res, 422, 'videos.invalid_url', 'videoUrl must be an http(s) link.');
     }
+
+    const uid = await resolveFirestoreUid(coachUsername);
+    if (uid) {
+      // Firestore home: coaches/{coachUid}/exerciseVideos/{slug}, parallel to
+      // the existing coaches/{uid}/clients pattern. The exercise-name slug
+      // as the doc id makes upsert-by-name a plain doc().set(merge) instead
+      // of a query-then-update/create round trip.
+      const slug = String(exerciseName).trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      await db.collection(`coaches/${uid}/exerciseVideos`).doc(slug).set({
+        exerciseName: String(exerciseName).trim(),
+        videoUrl: String(videoUrl).trim(),
+        notes: notes ? String(notes) : ''
+      });
+      return sendSuccess(res, 200, { id: slug });
+    }
+
     if (!airtableEnabled) {
       return sendError(res, 503, 'videos.airtable_disabled', 'Airtable is not configured.');
     }
@@ -2442,6 +2458,19 @@ app.post('/coach/exercise-videos', authenticateToken, async (req, res) => {
 app.get('/coach/exercise-videos', authenticateToken, async (req, res) => {
   try {
     const coachUsername = req.user.username;
+
+    const uid = await resolveFirestoreUid(coachUsername);
+    if (uid) {
+      const snap = await db.collection(`coaches/${uid}/exerciseVideos`).get();
+      const items = snap.docs.map(d => ({
+        id: d.id,
+        exerciseName: d.get('exerciseName') || '',
+        videoUrl: d.get('videoUrl') || '',
+        notes: d.get('notes') || ''
+      }));
+      return sendSuccess(res, 200, { items });
+    }
+
     if (!airtableEnabled) return sendSuccess(res, 200, { items: [] });
 
     const safeCoach = escapeAirtableFormulaValue(coachUsername);
@@ -2465,6 +2494,17 @@ app.get('/coach/exercise-videos', authenticateToken, async (req, res) => {
 app.delete('/coach/exercise-videos/:id', authenticateToken, async (req, res) => {
   try {
     const coachUsername = req.user.username;
+
+    const uid = await resolveFirestoreUid(coachUsername);
+    if (uid) {
+      // Ownership is implicit — the doc only exists under this coach's own subcollection.
+      const docRef = db.collection(`coaches/${uid}/exerciseVideos`).doc(req.params.id);
+      const snap = await docRef.get();
+      if (!snap.exists) return sendError(res, 404, 'videos.not_found', 'Video not found.');
+      await docRef.delete();
+      return sendSuccess(res, 200, { deleted: true });
+    }
+
     if (!airtableEnabled) return sendError(res, 503, 'videos.airtable_disabled', 'Airtable is not configured.');
 
     const record = await base(EXERCISE_VIDEOS_TABLE).find(req.params.id);
@@ -2484,7 +2524,10 @@ app.get('/exercise-videos', authenticateToken, async (req, res) => {
     const clientUsername = req.user.username;
     if (!airtableEnabled) return sendSuccess(res, 200, { items: [] });
 
-    // Find this user's coach(es) via the CoachClients table
+    // Find this user's coach(es) via the CoachClients table — that
+    // relationship isn't migrated bidirectionally yet (PHASE2-NOTES.md gap
+    // #1), so this lookup always goes through Airtable regardless of either
+    // party's migration status. Only the video STORAGE is per-coach-migrated.
     const safeClient = escapeAirtableFormulaValue(clientUsername);
     const links = await base(COACH_CLIENTS_TABLE)
       .select({
@@ -2496,23 +2539,37 @@ app.get('/exercise-videos', authenticateToken, async (req, res) => {
     const coachIds = [...new Set(links.map(l => l.get('CoachId')).filter(Boolean))];
     if (!coachIds.length) return sendSuccess(res, 200, { items: [] });
 
-    const coachFilter = coachIds
-      .map(c => `{CoachId}='${escapeAirtableFormulaValue(c)}'`)
-      .join(',');
-    const records = await base(EXERCISE_VIDEOS_TABLE)
-      .select({
-        filterByFormula: coachIds.length > 1 ? `OR(${coachFilter})` : coachFilter,
-        pageSize: 100
-      })
-      .all();
+    // Each coach may or may not have migrated independently of this client —
+    // fetch their videos from whichever store they're actually in.
+    const items = [];
+    const legacyCoachIds = [];
+    for (const coachId of coachIds) {
+      const coachUid = await resolveFirestoreUid(coachId);
+      if (coachUid) {
+        const snap = await db.collection(`coaches/${coachUid}/exerciseVideos`).get();
+        for (const d of snap.docs) {
+          items.push({ id: d.id, coachId, exerciseName: d.get('exerciseName') || '', videoUrl: d.get('videoUrl') || '', notes: d.get('notes') || '' });
+        }
+      } else {
+        legacyCoachIds.push(coachId);
+      }
+    }
 
-    const items = records.map(r => ({
-      id:           r.id,
-      coachId:      r.get('CoachId') || '',
-      exerciseName: r.get('ExerciseName') || '',
-      videoUrl:     r.get('VideoUrl') || '',
-      notes:        r.get('Notes') || ''
-    }));
+    if (legacyCoachIds.length) {
+      const coachFilter = legacyCoachIds
+        .map(c => `{CoachId}='${escapeAirtableFormulaValue(c)}'`)
+        .join(',');
+      const records = await base(EXERCISE_VIDEOS_TABLE)
+        .select({
+          filterByFormula: legacyCoachIds.length > 1 ? `OR(${coachFilter})` : coachFilter,
+          pageSize: 100
+        })
+        .all();
+      for (const r of records) {
+        items.push({ id: r.id, coachId: r.get('CoachId') || '', exerciseName: r.get('ExerciseName') || '', videoUrl: r.get('VideoUrl') || '', notes: r.get('Notes') || '' });
+      }
+    }
+
     return sendSuccess(res, 200, { items });
   } catch (err) {
     return sendError(res, 500, 'videos.server_error', String(err));
@@ -2863,6 +2920,65 @@ app.use('/api/ai', aiRouter);
 app.use('/', leaderboardRoute);
 
 // ── Knowledge Base routes ────────────────────────────────────────────────────
+// KnowledgeBase is global/shared AI-coaching content, not per-user data — it
+// doesn't get copied at signup like the tables in legacyMigration.js. Instead,
+// POST /admin/knowledgebase/migrate does a one-time copy from Airtable, and
+// these routes treat Firestore as authoritative once it actually has modules
+// in it (a real migration marker, not a per-user resolveFirestoreUid check).
+
+async function knowledgeBaseUsesFirestore() {
+  if (!firebaseEnabled) return false;
+  try {
+    const snap = await db.collection('knowledgeBase').limit(1).get();
+    return !snap.empty;
+  } catch {
+    return false;
+  }
+}
+
+async function getActiveModulesFirestore(topic = null) {
+  let query = db.collection('knowledgeBase').where('isActive', '==', true);
+  if (topic) query = query.where('topic', '==', topic);
+  const snap = await query.get();
+  return snap.docs.map(d => ({ id: d.id, moduleName: d.get('moduleName'), topic: d.get('topic'), extractedJSON: d.get('extractedJSON') || {} }));
+}
+
+// One-time migration: copies every Airtable KnowledgeBase record into
+// Firestore's knowledgeBase collection (additive — doesn't touch Airtable).
+// Idempotent: uses the Airtable record id as the Firestore doc id, so
+// re-running just re-writes the same docs rather than duplicating them.
+app.post('/admin/knowledgebase/migrate', authenticateToken, async (req, res) => {
+  if (!firebaseEnabled) return sendError(res, 503, 'kb.firebase_disabled', 'Firebase is not configured.');
+  if (!AIRTABLE_API_TOKEN || !AIRTABLE_BASE_ID) return sendError(res, 503, 'kb.airtable_disabled', 'Airtable is not configured.');
+  try {
+    const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/KnowledgeBase`;
+    const response = await airtableFetch(url, { headers: airtableHeaders() });
+    const data = await response.json();
+    if (!response.ok) return sendError(res, 502, 'kb.airtable_rejected', 'Airtable rejected the request.', JSON.stringify(data));
+
+    const records = data.records || [];
+    let migrated = 0, skipped = 0;
+    for (const r of records) {
+      const f = r.fields || {};
+      if (!f.ModuleName) { skipped++; continue; }
+      await db.collection('knowledgeBase').doc(r.id).set({
+        moduleName: f.ModuleName,
+        topic: f.Topic || null,
+        version: f.Version ?? 1,
+        sourceFileName: f.SourceFile || null,
+        extractedJSON: safeJsonParse(f.ExtractedJSON, f.ExtractedJSON || null),
+        isActive: f.IsActive !== false,
+        ingestedAt: f.ProcessedAt || null,
+        migratedFrom: r.id
+      });
+      migrated++;
+    }
+    return sendSuccess(res, 200, { total: records.length, migrated, skipped });
+  } catch (err) {
+    console.error('[KnowledgeBase] Migration failed:', err);
+    return sendError(res, 500, 'kb.migration_failed', String(err));
+  }
+});
 
 app.post('/admin/ingest-pdf', authenticateToken, upload.single('pdf'), async (req, res) => {
   try {
@@ -2870,7 +2986,6 @@ app.post('/admin/ingest-pdf', authenticateToken, upload.single('pdf'), async (re
     if (!req.file) return res.status(400).json({ error: 'No PDF file received' });
     if (!moduleName) return res.status(400).json({ error: 'moduleName is required' });
     if (!topic) return res.status(400).json({ error: 'topic is required' });
-    if (!AIRTABLE_API_TOKEN || !AIRTABLE_BASE_ID) return res.status(500).json({ error: 'Airtable not configured' });
 
     const pdfParse = require('pdf-parse');
     const pdfData = await pdfParse(req.file.buffer);
@@ -2878,6 +2993,21 @@ app.post('/admin/ingest-pdf', authenticateToken, upload.single('pdf'), async (re
     if (!text || text.trim().length < 100) return res.status(422).json({ error: 'PDF appears empty or unreadable' });
 
     const extracted = await extractKnowledgeWithClaude(text, moduleName, topic);
+
+    if (await knowledgeBaseUsesFirestore()) {
+      const docRef = db.collection('knowledgeBase').doc();
+      await docRef.set({
+        moduleName, topic, sourceFileName: req.file.originalname,
+        extractedJSON: extracted, version: 1,
+        isActive: true, ingestedAt: new Date().toISOString().slice(0, 10)
+      });
+      return res.json({
+        success: true, recordId: docRef.id, moduleName, topic,
+        fieldsExtracted: Object.keys(extracted).filter(k => Array.isArray(extracted[k]) ? extracted[k].length > 0 : !!extracted[k])
+      });
+    }
+
+    if (!AIRTABLE_API_TOKEN || !AIRTABLE_BASE_ID) return res.status(500).json({ error: 'Airtable not configured' });
     const record = await saveToAirtable(AIRTABLE_API_TOKEN, AIRTABLE_BASE_ID, {
       ModuleName: moduleName, Topic: topic, SourceFile: req.file.originalname,
       ExtractedJSON: JSON.stringify(extracted), Version: 1,
@@ -2896,6 +3026,10 @@ app.post('/admin/ingest-pdf', authenticateToken, upload.single('pdf'), async (re
 
 app.get('/admin/knowledge-modules', authenticateToken, async (req, res) => {
   try {
+    if (await knowledgeBaseUsesFirestore()) {
+      const modules = await getActiveModulesFirestore();
+      return res.json({ modules });
+    }
     if (!AIRTABLE_API_TOKEN || !AIRTABLE_BASE_ID) return res.status(500).json({ error: 'Airtable not configured' });
     const modules = await getActiveModules(AIRTABLE_API_TOKEN, AIRTABLE_BASE_ID);
     res.json({ modules });
@@ -2907,17 +3041,20 @@ app.get('/admin/knowledge-modules', authenticateToken, async (req, res) => {
 
 app.get('/knowledge-context', authenticateToken, async (req, res) => {
   try {
-    if (!AIRTABLE_API_TOKEN || !AIRTABLE_BASE_ID) return res.status(500).json({ error: 'Airtable not configured' });
     const topicsParam = req.query.topics;
     const topics = topicsParam ? topicsParam.split(',').map(t => t.trim()) : null;
+    const usesFirestore = await knowledgeBaseUsesFirestore();
 
     let allModules = [];
-    if (topics && topics.length > 0) {
-      const fetches = topics.map(t => getActiveModules(AIRTABLE_API_TOKEN, AIRTABLE_BASE_ID, t));
-      const results = await Promise.all(fetches);
-      allModules = results.flat();
+    if (usesFirestore) {
+      allModules = topics && topics.length > 0
+        ? (await Promise.all(topics.map(t => getActiveModulesFirestore(t)))).flat()
+        : await getActiveModulesFirestore();
     } else {
-      allModules = await getActiveModules(AIRTABLE_API_TOKEN, AIRTABLE_BASE_ID);
+      if (!AIRTABLE_API_TOKEN || !AIRTABLE_BASE_ID) return res.status(500).json({ error: 'Airtable not configured' });
+      allModules = topics && topics.length > 0
+        ? (await Promise.all(topics.map(t => getActiveModules(AIRTABLE_API_TOKEN, AIRTABLE_BASE_ID, t)))).flat()
+        : await getActiveModules(AIRTABLE_API_TOKEN, AIRTABLE_BASE_ID);
     }
 
     const context = allModules.reduce((acc, mod) => { acc[mod.moduleName] = mod.extractedJSON; return acc; }, {});

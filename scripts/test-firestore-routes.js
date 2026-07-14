@@ -86,7 +86,12 @@ class FakeAirtable {
       select() {
         return {
           async firstPage() {
-            if (tableName === 'CoachClients') return [{ id: 'link1' }]; // always "linked"
+            if (tableName === 'CoachClients') {
+              // always "linked", and resolves to the migrated coach so
+              // GET /exercise-videos's cross-coach lookup can reach Firestore
+              const fields = { CoachId: 'migrateduser' };
+              return [{ id: 'link1', fields, get: (f) => fields[f] }];
+            }
             return [];
           },
           all: async () => []
@@ -317,6 +322,31 @@ setTimeout(() => {
     r = await req('GET', '/api/referral/stats?username=migrateduser', null);
     check('GET /api/referral/stats (migrated) 200', r.status === 200);
     check('GET /api/referral/stats (migrated) counts Firestore-referred user', r.body?.referralCode === 'REFCODE1' && r.body?.referralCount === 1);
+
+    // ── Exercise videos (coach: migrateduser, client: clientuser) ──
+    const legacyTokenClient = jwt.sign({ id: 'rec3', username: 'clientuser' }, process.env.JWT_SECRET);
+
+    r = await req('POST', '/coach/exercise-videos', legacyTokenMigrated, { exerciseName: 'Bench Press', videoUrl: 'https://example.com/bench.mp4', notes: 'grip width cue' });
+    check('POST /coach/exercise-videos (migrated) 200', r.status === 200);
+    const videoSlug = r.body?.id;
+    check('POST /coach/exercise-videos (migrated) slug id', videoSlug === 'bench-press');
+    check('POST /coach/exercise-videos (migrated) wrote to Firestore', store['coaches/uidABC123/exerciseVideos']?.[videoSlug]?.videoUrl === 'https://example.com/bench.mp4');
+
+    r = await req('GET', '/coach/exercise-videos', legacyTokenMigrated);
+    check('GET /coach/exercise-videos (migrated) 200', r.status === 200);
+    check('GET /coach/exercise-videos (migrated) lists own video', r.body?.items?.some(i => i.id === videoSlug && i.exerciseName === 'Bench Press'));
+
+    // Cross-user read: client fetches videos from their coach (migrateduser)
+    r = await req('GET', '/exercise-videos', legacyTokenClient);
+    check('GET /exercise-videos (client, coach migrated) 200', r.status === 200);
+    check('GET /exercise-videos (client, coach migrated) sees coach\'s video via Firestore', r.body?.items?.some(i => i.exerciseName === 'Bench Press' && i.coachId === 'migrateduser'));
+
+    r = await req('DELETE', `/coach/exercise-videos/${videoSlug}`, legacyTokenMigrated);
+    check('DELETE /coach/exercise-videos/:id (migrated) 200', r.status === 200);
+    check('DELETE /coach/exercise-videos/:id (migrated) removed', !store['coaches/uidABC123/exerciseVideos']?.[videoSlug]);
+
+    r = await req('DELETE', '/coach/exercise-videos/doesnotexist', legacyTokenMigrated);
+    check('DELETE /coach/exercise-videos/:id (migrated, missing) 404', r.status === 404);
 
     console.log('\n=== RESULTS ===');
     for (const { label, pass } of results) console.log((pass ? 'PASS' : 'FAIL') + ' - ' + label);
