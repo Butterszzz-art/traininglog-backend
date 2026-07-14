@@ -62,6 +62,12 @@ function escapeAirtableFormulaValue(value) {
   return String(value).replace(/'/g, "''");
 }
 
+function safeJsonParse(value, fallback = null) {
+  if (value === undefined || value === null || value === '') return fallback;
+  if (typeof value !== 'string') return value;
+  try { return JSON.parse(value); } catch { return fallback; }
+}
+
 function airtableHeaders() {
   return {
     Authorization: `Bearer ${AIRTABLE_API_TOKEN}`,
@@ -1089,10 +1095,6 @@ app.post('/macrotargets', authenticateToken, async (req, res) => {
 // POST /dailylogs — save daily macro log
 app.post('/dailylogs', authenticateToken, async (req, res) => {
   try {
-    if (!airtableEnabled) {
-      return sendError(res, 503, 'dailylogs.airtable_disabled', 'Airtable is not configured.');
-    }
-
     // Support both flat body and legacy { fields: { ... } } wrapper from frontend
     const body = req.body?.fields ? req.body.fields : req.body || {};
 
@@ -1108,6 +1110,22 @@ app.post('/dailylogs', authenticateToken, async (req, res) => {
     const proteinGrams = body.ProteinTotal  ?? body.ProteinGrams ?? body.protein       ?? null;
     const carbGrams    = body.CarbsTotal    ?? body.CarbGrams    ?? body.carbs         ?? null;
     const fatGrams     = body.FatTotal      ?? body.FatGrams     ?? body.fat           ?? null;
+
+    const uid = await resolveFirestoreUid(username);
+    if (uid) {
+      const docRef = db.collection(`users/${uid}/dailyMacros`).doc();
+      await docRef.set({
+        date: String(date),
+        calories, proteinGrams, carbGrams, fatGrams,
+        type: body.Type ? String(body.Type) : null,
+        logData: body.LogData != null ? (typeof body.LogData === 'string' ? safeJsonParse(body.LogData) : body.LogData) : null
+      });
+      return res.status(201).json({ success: true, id: docRef.id });
+    }
+
+    if (!airtableEnabled) {
+      return sendError(res, 503, 'dailylogs.airtable_disabled', 'Airtable is not configured.');
+    }
 
     const fields = {
       Date:             String(date),
@@ -1132,9 +1150,26 @@ app.post('/dailylogs', authenticateToken, async (req, res) => {
 // GET /dailylogs — fetch daily logs for a user
 app.get('/dailylogs', authenticateToken, async (req, res) => {
   try {
-    if (!airtableEnabled) return res.json({ records: [] });
     const username = typeof req.query.username === 'string' ? req.query.username.trim() : '';
     if (!username) return sendError(res, 422, 'dailylogs.missing_username', 'username query param is required.');
+
+    const uid = await resolveFirestoreUid(username);
+    if (uid) {
+      const snap = await db.collection(`users/${uid}/dailyMacros`).orderBy('date', 'desc').get();
+      const records = snap.docs.map(d => ({
+        id: d.id,
+        Date: d.get('date'),
+        Calories: d.get('calories'),
+        ProteinGrams: d.get('proteinGrams'),
+        CarbGrams: d.get('carbGrams'),
+        FatGrams: d.get('fatGrams'),
+        ...(d.get('type') ? { Type: d.get('type') } : {}),
+        ...(d.get('logData') != null ? { LogData: JSON.stringify(d.get('logData')) } : {})
+      }));
+      return res.json({ success: true, records });
+    }
+
+    if (!airtableEnabled) return res.json({ records: [] });
 
     const safeUsername = escapeAirtableFormulaValue(username);
     const records = await base(DAILY_LOGS_TABLE)
@@ -1280,8 +1315,6 @@ const MEASUREMENTS_TABLE = process.env.AIRTABLE_MEASUREMENTS_TABLE || 'BodyMeasu
 // POST /bodyweight/archive — archive a 4-week snapshot of bodyweight entries
 app.post('/bodyweight/archive', authenticateToken, async (req, res) => {
   try {
-    if (!airtableEnabled) return sendError(res, 503, 'bodyweight.airtable_disabled', 'Airtable is not configured.');
-
     const username = req.user.username;
     const { periodStart, periodEnd, entries, trend } = req.body || {};
     if (!Array.isArray(entries) || !entries.length) {
@@ -1298,6 +1331,24 @@ app.post('/bodyweight/archive', authenticateToken, async (req, res) => {
     const weightChangeKg = (startWeightKg !== null && endWeightKg !== null)
       ? Math.round((endWeightKg - startWeightKg) * 10) / 10
       : null;
+    const kgPerWeek = typeof trend?.kgPerWeek === 'number' ? Math.round(trend.kgPerWeek * 100) / 100 : null;
+    const caloriesDelta = typeof trend?.caloriesDelta === 'number' ? trend.caloriesDelta : null;
+
+    const uid = await resolveFirestoreUid(username);
+    if (uid) {
+      const docRef = db.collection(`users/${uid}/bodyweightArchives`).doc();
+      await docRef.set({
+        periodStart: periodStart ? String(periodStart) : '',
+        periodEnd: periodEnd ? String(periodEnd) : '',
+        startWeightKg, endWeightKg, avgWeightKg, weightChangeKg, kgPerWeek, caloriesDelta,
+        entryCount: entries.length,
+        entries,
+        archivedAt: new Date().toISOString()
+      });
+      return sendSuccess(res, 201, { recordId: docRef.id });
+    }
+
+    if (!airtableEnabled) return sendError(res, 503, 'bodyweight.airtable_disabled', 'Airtable is not configured.');
 
     const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(BODYWEIGHT_TABLE)}`;
     const response = await airtableFetch(url, {
@@ -1338,9 +1389,29 @@ app.post('/bodyweight/archive', authenticateToken, async (req, res) => {
 // GET /bodyweight?username= — fetch archived bodyweight snapshots
 app.get('/bodyweight', authenticateToken, async (req, res) => {
   try {
-    if (!airtableEnabled) return res.json({ success: true, items: [] });
     const username = typeof req.query.username === 'string' ? req.query.username.trim() : '';
     if (!username) return sendError(res, 422, 'bodyweight.missing_username', 'username is required.');
+
+    const uid = await resolveFirestoreUid(username);
+    if (uid) {
+      const snap = await db.collection(`users/${uid}/bodyweightArchives`).orderBy('periodStart', 'desc').get();
+      const items = snap.docs.map(d => ({
+        id: d.id,
+        periodStart: d.get('periodStart'),
+        periodEnd: d.get('periodEnd'),
+        startWeightKg: d.get('startWeightKg'),
+        endWeightKg: d.get('endWeightKg'),
+        avgWeightKg: d.get('avgWeightKg'),
+        weightChangeKg: d.get('weightChangeKg'),
+        kgPerWeek: d.get('kgPerWeek'),
+        caloriesDelta: d.get('caloriesDelta'),
+        entryCount: d.get('entryCount'),
+        archivedAt: d.get('archivedAt')
+      }));
+      return sendSuccess(res, 200, { items });
+    }
+
+    if (!airtableEnabled) return res.json({ success: true, items: [] });
 
     const safeUsername = escapeAirtableFormulaValue(username);
     const records = await base(BODYWEIGHT_TABLE)
@@ -1375,13 +1446,34 @@ app.get('/bodyweight', authenticateToken, async (req, res) => {
 // POST /measurements/sync — save individual measurement entries not yet synced
 app.post('/measurements/sync', authenticateToken, async (req, res) => {
   try {
-    if (!airtableEnabled) return sendError(res, 503, 'measurements.airtable_disabled', 'Airtable is not configured.');
-
     const username = req.user.username;
     const { entries } = req.body || {};
     if (!Array.isArray(entries) || !entries.length) {
       return sendError(res, 422, 'measurements.invalid_payload', 'entries array is required.');
     }
+
+    const uid = await resolveFirestoreUid(username);
+    if (uid) {
+      const col = db.collection(`users/${uid}/measurements`);
+      const recordIds = await Promise.all(entries.map(async e => {
+        const docRef = col.doc();
+        await docRef.set({
+          date: String(e.date || ''),
+          neck: e.neck != null ? Number(e.neck) : null,
+          shoulders: e.shoulders != null ? Number(e.shoulders) : null,
+          chest: e.chest != null ? Number(e.chest) : null,
+          waist: e.waist != null ? Number(e.waist) : null,
+          hips: e.hips != null ? Number(e.hips) : null,
+          arm: e.arm != null ? Number(e.arm) : null,
+          thigh: e.thigh != null ? Number(e.thigh) : null,
+          syncedAt: new Date().toISOString()
+        });
+        return docRef.id;
+      }));
+      return sendSuccess(res, 201, { count: recordIds.length, recordIds });
+    }
+
+    if (!airtableEnabled) return sendError(res, 503, 'measurements.airtable_disabled', 'Airtable is not configured.');
 
     const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(MEASUREMENTS_TABLE)}`;
 
@@ -1429,9 +1521,28 @@ app.post('/measurements/sync', authenticateToken, async (req, res) => {
 // GET /measurements?username= — fetch synced measurement history
 app.get('/measurements', authenticateToken, async (req, res) => {
   try {
-    if (!airtableEnabled) return res.json({ success: true, items: [] });
     const username = typeof req.query.username === 'string' ? req.query.username.trim() : '';
     if (!username) return sendError(res, 422, 'measurements.missing_username', 'username is required.');
+
+    const uid = await resolveFirestoreUid(username);
+    if (uid) {
+      const snap = await db.collection(`users/${uid}/measurements`).orderBy('date', 'desc').get();
+      const items = snap.docs.map(d => ({
+        id: d.id,
+        date: d.get('date'),
+        neck: d.get('neck'),
+        shoulders: d.get('shoulders'),
+        chest: d.get('chest'),
+        waist: d.get('waist'),
+        hips: d.get('hips'),
+        arm: d.get('arm'),
+        thigh: d.get('thigh'),
+        syncedAt: d.get('syncedAt')
+      }));
+      return sendSuccess(res, 200, { items });
+    }
+
+    if (!airtableEnabled) return res.json({ success: true, items: [] });
 
     const safeUsername = escapeAirtableFormulaValue(username);
     const records = await base(MEASUREMENTS_TABLE)
@@ -1469,13 +1580,34 @@ const CROSSFIT_TABLE = process.env.AIRTABLE_CROSSFIT_TABLE || 'CrossFitLog';
 // POST /cardio/sync — sync individual cardio entries (4-week cadence from frontend)
 app.post('/cardio/sync', authenticateToken, async (req, res) => {
   try {
-    if (!airtableEnabled) return sendError(res, 503, 'cardio.airtable_disabled', 'Airtable is not configured.');
-
     const username = req.user.username;
     const { entries } = req.body || {};
     if (!Array.isArray(entries) || !entries.length) {
       return sendError(res, 422, 'cardio.invalid_payload', 'entries array is required.');
     }
+
+    const uid = await resolveFirestoreUid(username);
+    if (uid) {
+      const col = db.collection(`users/${uid}/cardioLogs`);
+      const recordIds = await Promise.all(entries.map(async e => {
+        const docRef = col.doc();
+        await docRef.set({
+          date: String(e.date || ''),
+          type: String(e.type || ''),
+          duration: e.duration != null ? Number(e.duration) : null,
+          distance: e.distance != null ? Number(e.distance) : null,
+          calories: e.calories != null ? Number(e.calories) : null,
+          estimatedCalories: e.estimatedCalories != null ? Number(e.estimatedCalories) : null,
+          met: e.met != null ? Number(e.met) : null,
+          notes: e.notes ? String(e.notes) : '',
+          syncedAt: new Date().toISOString()
+        });
+        return docRef.id;
+      }));
+      return sendSuccess(res, 201, { count: recordIds.length, recordIds });
+    }
+
+    if (!airtableEnabled) return sendError(res, 503, 'cardio.airtable_disabled', 'Airtable is not configured.');
 
     const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(CARDIO_TABLE)}`;
     const batches = [];
@@ -1521,9 +1653,28 @@ app.post('/cardio/sync', authenticateToken, async (req, res) => {
 // GET /cardio?username= — fetch synced cardio history
 app.get('/cardio', authenticateToken, async (req, res) => {
   try {
-    if (!airtableEnabled) return res.json({ success: true, items: [] });
     const username = typeof req.query.username === 'string' ? req.query.username.trim() : '';
     if (!username) return sendError(res, 422, 'cardio.missing_username', 'username is required.');
+
+    const uid = await resolveFirestoreUid(username);
+    if (uid) {
+      const snap = await db.collection(`users/${uid}/cardioLogs`).orderBy('date', 'desc').get();
+      const items = snap.docs.map(d => ({
+        id: d.id,
+        date: d.get('date'),
+        type: d.get('type'),
+        duration: d.get('duration'),
+        distance: d.get('distance'),
+        calories: d.get('calories'),
+        estimatedCalories: d.get('estimatedCalories'),
+        met: d.get('met'),
+        notes: d.get('notes'),
+        syncedAt: d.get('syncedAt')
+      }));
+      return sendSuccess(res, 200, { items });
+    }
+
+    if (!airtableEnabled) return res.json({ success: true, items: [] });
 
     const safeUsername = escapeAirtableFormulaValue(username);
     const records = await base(CARDIO_TABLE)
@@ -1557,13 +1708,33 @@ app.get('/cardio', authenticateToken, async (req, res) => {
 // POST /crossfit/sync — sync CrossFit WOD entries (4-week cadence from frontend)
 app.post('/crossfit/sync', authenticateToken, async (req, res) => {
   try {
-    if (!airtableEnabled) return sendError(res, 503, 'crossfit.airtable_disabled', 'Airtable is not configured.');
-
     const username = req.user.username;
     const { entries } = req.body || {};
     if (!Array.isArray(entries) || !entries.length) {
       return sendError(res, 422, 'crossfit.invalid_payload', 'entries array is required.');
     }
+
+    const uid = await resolveFirestoreUid(username);
+    if (uid) {
+      const col = db.collection(`users/${uid}/crossfitLogs`);
+      const recordIds = await Promise.all(entries.map(async e => {
+        const docRef = col.doc();
+        await docRef.set({
+          date: String(e.date || ''),
+          workoutName: String(e.name || e.workoutName || ''),
+          minutes: e.minutes != null ? Number(e.minutes) : null,
+          seconds: e.seconds != null ? Number(e.seconds) : null,
+          rounds: e.rounds != null ? Number(e.rounds) : null,
+          notes: e.notes ? String(e.notes) : '',
+          exercises: e.exercises || [],
+          syncedAt: new Date().toISOString()
+        });
+        return docRef.id;
+      }));
+      return sendSuccess(res, 201, { count: recordIds.length, recordIds });
+    }
+
+    if (!airtableEnabled) return sendError(res, 503, 'crossfit.airtable_disabled', 'Airtable is not configured.');
 
     const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(CROSSFIT_TABLE)}`;
     const batches = [];
@@ -1608,9 +1779,27 @@ app.post('/crossfit/sync', authenticateToken, async (req, res) => {
 // GET /crossfit?username= — fetch synced CrossFit history
 app.get('/crossfit', authenticateToken, async (req, res) => {
   try {
-    if (!airtableEnabled) return res.json({ success: true, items: [] });
     const username = typeof req.query.username === 'string' ? req.query.username.trim() : '';
     if (!username) return sendError(res, 422, 'crossfit.missing_username', 'username is required.');
+
+    const uid = await resolveFirestoreUid(username);
+    if (uid) {
+      const snap = await db.collection(`users/${uid}/crossfitLogs`).orderBy('date', 'desc').get();
+      const items = snap.docs.map(d => ({
+        id: d.id,
+        date: d.get('date'),
+        workoutName: d.get('workoutName'),
+        minutes: d.get('minutes'),
+        seconds: d.get('seconds'),
+        rounds: d.get('rounds'),
+        notes: d.get('notes'),
+        exercises: d.get('exercises') || [],
+        syncedAt: d.get('syncedAt')
+      }));
+      return sendSuccess(res, 200, { items });
+    }
+
+    if (!airtableEnabled) return res.json({ success: true, items: [] });
 
     const safeUsername = escapeAirtableFormulaValue(username);
     const records = await base(CROSSFIT_TABLE)
@@ -1647,8 +1836,6 @@ const PROGRAMS_TABLE = process.env.AIRTABLE_PROGRAMS_TABLE || 'Programs';
 // POST /saveProgram — legacy alias used by ProgramTab.js
 async function saveProgramHandler(req, res) {
   try {
-    if (!airtableEnabled) return sendError(res, 503, 'programs.airtable_disabled', 'Airtable is not configured.');
-
     // Accept both { program } and { draft } shapes from the frontend
     const body = req.body || {};
     const program = body.program || body.draft || body;
@@ -1656,6 +1843,21 @@ async function saveProgramHandler(req, res) {
 
     if (!username) return sendError(res, 422, 'programs.missing_username', 'username / userId is required.');
     if (!program.name) return sendError(res, 422, 'programs.missing_name', 'Program name is required.');
+
+    const uid = await resolveFirestoreUid(username);
+    if (uid) {
+      const docRef = db.collection(`users/${uid}/programs`).doc();
+      await docRef.set({
+        name: String(program.name),
+        startDate: program.startDate ? String(program.startDate) : '',
+        isActive: true,
+        programData: program,
+        createdAt: new Date().toISOString()
+      });
+      return sendSuccess(res, 201, { recordId: docRef.id });
+    }
+
+    if (!airtableEnabled) return sendError(res, 503, 'programs.airtable_disabled', 'Airtable is not configured.');
 
     const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(PROGRAMS_TABLE)}`;
     const response = await airtableFetch(url, {
@@ -1694,9 +1896,23 @@ app.post('/saveProgram', authenticateToken, saveProgramHandler); // legacy alias
 // GET /programs?username=... — load all programs for a user
 app.get('/programs', authenticateToken, async (req, res) => {
   try {
-    if (!airtableEnabled) return res.json({ success: true, items: [] });
-
     const username = req.user.username;
+
+    const uid = await resolveFirestoreUid(username);
+    if (uid) {
+      const snap = await db.collection(`users/${uid}/programs`).orderBy('createdAt', 'desc').get();
+      const items = snap.docs.map(d => ({
+        id: d.id,
+        name: d.get('name') || d.get('programData')?.name || 'Unnamed',
+        startDate: d.get('startDate') || d.get('programData')?.startDate || '',
+        isActive: d.get('isActive') || false,
+        createdAt: d.get('createdAt') || '',
+        programData: d.get('programData') ?? null
+      }));
+      return sendSuccess(res, 200, { items });
+    }
+
+    if (!airtableEnabled) return res.json({ success: true, items: [] });
 
     const safeUsername = escapeAirtableFormulaValue(username);
     const records = await base(PROGRAMS_TABLE)
@@ -1730,9 +1946,27 @@ app.get('/programs', authenticateToken, async (req, res) => {
 // PATCH /programs/:id/active — set a program as active (clears others)
 app.patch('/programs/:id/active', authenticateToken, async (req, res) => {
   const { id } = req.params;
+  if (!id) return sendError(res, 400, 'programs.missing_id', 'Record ID is required.');
+
+  const uid = await resolveFirestoreUid(req.user.username);
+  if (uid) {
+    try {
+      const col = db.collection(`users/${uid}/programs`);
+      const targetSnap = await col.doc(id).get();
+      if (!targetSnap.exists) return sendError(res, 404, 'programs.not_found', 'Program not found.');
+
+      const activeSnap = await col.where('isActive', '==', true).get();
+      await Promise.all(activeSnap.docs.map(d => d.ref.set({ isActive: false }, { merge: true })));
+      await col.doc(id).set({ isActive: true }, { merge: true });
+      return sendSuccess(res, 200, { recordId: id });
+    } catch (err) {
+      console.error('PATCH /programs/:id/active (Firestore) failed:', err);
+      return sendError(res, 500, 'programs.server_error', String(err));
+    }
+  }
+
   const username = typeof req.query.username === 'string' ? req.query.username.trim()
     : (req.body?.username || '');
-  if (!id) return sendError(res, 400, 'programs.missing_id', 'Record ID is required.');
   if (!airtableEnabled) return sendError(res, 503, 'programs.airtable_disabled', 'Airtable is not configured.');
 
   try {
@@ -1764,6 +1998,22 @@ app.patch('/programs/:id/active', authenticateToken, async (req, res) => {
 app.delete('/programs/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
   if (!id) return sendError(res, 400, 'programs.missing_id', 'Record ID is required.');
+
+  const uid = await resolveFirestoreUid(req.user.username);
+  if (uid) {
+    // Ownership is implicit — the doc only exists under this uid's own subcollection.
+    try {
+      const docRef = db.collection(`users/${uid}/programs`).doc(id);
+      const snap = await docRef.get();
+      if (!snap.exists) return sendError(res, 404, 'programs.not_found', 'Program not found.');
+      await docRef.delete();
+      return sendSuccess(res, 200, { deleted: id });
+    } catch (err) {
+      console.error('DELETE /programs/:id (Firestore) failed:', err);
+      return sendError(res, 500, 'programs.server_error', String(err));
+    }
+  }
+
   if (!airtableEnabled) return sendError(res, 503, 'programs.airtable_disabled', 'Airtable is not configured.');
 
   try {
@@ -1941,6 +2191,28 @@ app.get('/api/coach/clients', authenticateToken, async (req, res) => {
   try {
     const coachId = typeof req.query.coachId === 'string' ? req.query.coachId.trim() : '';
     if (!coachId) return sendError(res, 422, 'coach.missing_coach_id', 'coachId query param is required.');
+
+    // coachId is the coach's own username (legacyMigration.js migrates
+    // CoachClients rows into coaches/{coachUid}/clients using that same key).
+    const uid = await resolveFirestoreUid(coachId);
+    if (uid) {
+      const snap = await db.collection(`coaches/${uid}/clients`).orderBy('athleteDisplayName').get();
+      const clients = snap.docs.map(d => ({
+        id: d.id,
+        clientId: d.id,
+        clientName: d.get('athleteDisplayName') || '',
+        email: d.get('email') || '',
+        status: d.get('status') || 'active',
+        trainingMode: d.get('trainingMode') || '',
+        currentProgram: d.get('currentProgram') || '',
+        lastCheckIn: d.get('lastCheckInAt') || null,
+        alertStatus: d.get('alertStatus') || 'ok',
+        currentNutritionSummary: d.get('nutritionSummary') || '',
+        latestCheckInData: d.get('latestCheckInJson') ?? null
+      }));
+      return sendSuccess(res, 200, { clients });
+    }
+
     if (!airtableEnabled) return res.json({ success: true, clients: [] });
 
     const safeCoachId = escapeAirtableFormulaValue(coachId);
@@ -2177,10 +2449,30 @@ app.put('/api/bodybuilding/daily-mission/:userId', authenticateToken, async (req
   try {
     const userId = req.params.userId;
     if (!userId) return sendError(res, 422, 'mission.missing_user_id', 'userId is required.');
-    if (!airtableEnabled) return sendSuccess(res, 200, { saved: false, reason: 'airtable_disabled' });
 
     const state = req.body || {};
     const today = new Date().toISOString().slice(0, 10);
+
+    // userId is populated with the username string (this app has no separate
+    // user-id system) — same convention legacyMigration.js relies on.
+    const uid = await resolveFirestoreUid(userId);
+    if (uid) {
+      const col = db.collection(`users/${uid}/dailyMissions`);
+      const existingSnap = await col.where('date', '==', today).get();
+      let recordId;
+      if (existingSnap.docs.length) {
+        recordId = existingSnap.docs[0].id;
+        await col.doc(recordId).set({ date: today, state, updatedAt: new Date().toISOString() }, { merge: true });
+      } else {
+        const docRef = col.doc();
+        await docRef.set({ date: today, state, updatedAt: new Date().toISOString() });
+        recordId = docRef.id;
+      }
+      return sendSuccess(res, 200, { saved: true, recordId });
+    }
+
+    if (!airtableEnabled) return sendSuccess(res, 200, { saved: false, reason: 'airtable_disabled' });
+
     const safeUserId = escapeAirtableFormulaValue(userId);
 
     // Upsert: find existing record for this user+date, update or create
@@ -2222,9 +2514,32 @@ const MOBILITY_SESSIONS_TABLE  = process.env.AIRTABLE_MOBILITY_SESSIONS_TABLE  |
 // GET /mobility/routines?username=
 app.get('/mobility/routines', authenticateToken, async (req, res) => {
   try {
-    if (!airtableEnabled) return res.json({ success: true, items: [] });
     const username = typeof req.query.username === 'string' ? req.query.username.trim() : '';
     if (!username) return sendError(res, 422, 'mobility.missing_username', 'username is required.');
+
+    const uid = await resolveFirestoreUid(username);
+    if (uid) {
+      // NOTE: only self-created routines — coach-assigned ones aren't
+      // migrated to the athlete's subcollection yet (PHASE2-NOTES.md gap #2),
+      // so unlike the Airtable path this won't surface those until that's built.
+      const snap = await db.collection(`users/${uid}/mobilityRoutines`).orderBy('createdAt', 'desc').get();
+      const items = snap.docs.map(d => ({
+        id: d.id,
+        username,
+        routineId: d.get('routineId'),
+        name: d.get('name'),
+        type: d.get('type'),
+        targetArea: d.get('targetArea'),
+        frequencyPerWeek: d.get('frequencyPerWeek'),
+        exercises: d.get('exercises') || [],
+        assignedByCoach: d.get('assignedByCoach') || false,
+        coachNotes: d.get('coachNotes') || '',
+        createdAt: d.get('createdAt')
+      }));
+      return sendSuccess(res, 200, { items });
+    }
+
+    if (!airtableEnabled) return res.json({ success: true, items: [] });
 
     const safeUsername = escapeAirtableFormulaValue(username);
     const records = await base(MOBILITY_ROUTINES_TABLE)
@@ -2259,10 +2574,28 @@ app.get('/mobility/routines', authenticateToken, async (req, res) => {
 // POST /mobility/routines — create a new mobility routine
 app.post('/mobility/routines', authenticateToken, async (req, res) => {
   try {
-    if (!airtableEnabled) return sendError(res, 503, 'mobility.airtable_disabled', 'Airtable is not configured.');
     const username = req.user.username;
     const { routineId, name, type, targetArea, frequencyPerWeek, exercises, assignedByCoach, coachNotes } = req.body || {};
     if (!name) return sendError(res, 422, 'mobility.invalid_payload', 'name is required.');
+
+    const uid = await resolveFirestoreUid(username);
+    if (uid) {
+      const docRef = db.collection(`users/${uid}/mobilityRoutines`).doc();
+      await docRef.set({
+        routineId: routineId ? String(routineId) : `routine_${Date.now()}`,
+        name: String(name),
+        type: type ? String(type) : '',
+        targetArea: targetArea ? String(targetArea) : '',
+        frequencyPerWeek: frequencyPerWeek != null ? Number(frequencyPerWeek) : null,
+        exercises: exercises || [],
+        assignedByCoach: Boolean(assignedByCoach),
+        coachNotes: coachNotes ? String(coachNotes) : '',
+        createdAt: new Date().toISOString()
+      });
+      return sendSuccess(res, 201, { recordId: docRef.id });
+    }
+
+    if (!airtableEnabled) return sendError(res, 503, 'mobility.airtable_disabled', 'Airtable is not configured.');
 
     const [record] = await base(MOBILITY_ROUTINES_TABLE).create([{
       fields: {
@@ -2290,6 +2623,21 @@ app.post('/mobility/routines', authenticateToken, async (req, res) => {
 app.delete('/mobility/routines/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
   if (!id) return sendError(res, 400, 'mobility.missing_id', 'Record ID is required.');
+
+  const uid = await resolveFirestoreUid(req.user.username);
+  if (uid) {
+    try {
+      const docRef = db.collection(`users/${uid}/mobilityRoutines`).doc(id);
+      const snap = await docRef.get();
+      if (!snap.exists) return sendError(res, 404, 'mobility.not_found', 'Routine not found.');
+      await docRef.delete();
+      return sendSuccess(res, 200, { deleted: id });
+    } catch (err) {
+      console.error('DELETE /mobility/routines/:id (Firestore) failed:', err);
+      return sendError(res, 500, 'mobility.server_error', String(err));
+    }
+  }
+
   if (!airtableEnabled) return sendError(res, 503, 'mobility.airtable_disabled', 'Airtable is not configured.');
   try {
     await base(MOBILITY_ROUTINES_TABLE).destroy([id]);
@@ -2303,9 +2651,24 @@ app.delete('/mobility/routines/:id', authenticateToken, async (req, res) => {
 // GET /mobility/sessions?username=
 app.get('/mobility/sessions', authenticateToken, async (req, res) => {
   try {
-    if (!airtableEnabled) return res.json({ success: true, items: [] });
     const username = typeof req.query.username === 'string' ? req.query.username.trim() : '';
     if (!username) return sendError(res, 422, 'mobility.missing_username', 'username is required.');
+
+    const uid = await resolveFirestoreUid(username);
+    if (uid) {
+      const snap = await db.collection(`users/${uid}/mobilitySessions`).orderBy('completedAt', 'desc').get();
+      const items = snap.docs.map(d => ({
+        id: d.id,
+        username,
+        sessionId: d.get('sessionId'),
+        routineId: d.get('routineId'),
+        completedAt: d.get('completedAt'),
+        notes: d.get('notes') || ''
+      }));
+      return sendSuccess(res, 200, { items });
+    }
+
+    if (!airtableEnabled) return res.json({ success: true, items: [] });
 
     const safeUsername = escapeAirtableFormulaValue(username);
     const records = await base(MOBILITY_SESSIONS_TABLE)
@@ -2335,10 +2698,23 @@ app.get('/mobility/sessions', authenticateToken, async (req, res) => {
 // POST /mobility/sessions — log a completed mobility session
 app.post('/mobility/sessions', authenticateToken, async (req, res) => {
   try {
-    if (!airtableEnabled) return sendError(res, 503, 'mobility.airtable_disabled', 'Airtable is not configured.');
     const username = req.user.username;
     const { sessionId, routineId, completedAt, notes } = req.body || {};
     if (!routineId) return sendError(res, 422, 'mobility.invalid_payload', 'routineId is required.');
+
+    const uid = await resolveFirestoreUid(username);
+    if (uid) {
+      const docRef = db.collection(`users/${uid}/mobilitySessions`).doc();
+      await docRef.set({
+        sessionId: sessionId ? String(sessionId) : `session_${Date.now()}`,
+        routineId: String(routineId),
+        completedAt: completedAt ? String(completedAt) : new Date().toISOString(),
+        notes: notes ? String(notes) : ''
+      });
+      return sendSuccess(res, 201, { recordId: docRef.id });
+    }
+
+    if (!airtableEnabled) return sendError(res, 503, 'mobility.airtable_disabled', 'Airtable is not configured.');
 
     const [record] = await base(MOBILITY_SESSIONS_TABLE).create([{
       fields: {
