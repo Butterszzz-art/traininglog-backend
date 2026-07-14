@@ -491,6 +491,30 @@ async function findUserByUsername(username) {
   return { id: records[0].id, username: f.Username, passwordHash, fields: f };
 }
 
+// ── Firestore migration routing ───────────────────────────────────────────────
+// Phase 2 route cutover: resolves a Firestore uid from a username, regardless
+// of whether THIS request came in on a Firebase ID token or a legacy JWT (the
+// lookup only depends on whether that username ever completed
+// /auth/signup-complete, not which token type is attached to the request).
+//
+// Per-route rule this enables: if a uid resolves, that user has migrated —
+// read/write Firestore exclusively for this route. If not, they haven't
+// migrated — read/write Airtable exactly as before. This is deliberately NOT
+// a dual-write/fallback-merge: once migrated, Firestore is the sole source of
+// truth for a converted route (legacyMigration.js already copied their
+// history at migration time), so there's no risk of a route silently serving
+// a stale partial view from two half-populated stores.
+async function resolveFirestoreUid(username) {
+  if (!firebaseEnabled || !username) return null;
+  try {
+    const snap = await db.collection('usernames').doc(String(username).toLowerCase()).get();
+    return snap.exists ? (snap.get('uid') || null) : null;
+  } catch (err) {
+    console.error('[Firestore] resolveFirestoreUid failed:', err.message);
+    return null; // fail safe to the Airtable path rather than erroring the request
+  }
+}
+
 // Get full user record by username (for plan/billing queries)
 async function getUserByUsername(username) {
   if (!airtableEnabled) return null;
@@ -975,6 +999,18 @@ app.get('/workouts', authenticateToken, async (req, res) => {
 app.get('/macrotargets', authenticateToken, async (req, res) => {
   try {
     const username = req.user.username;
+
+    // Firestore path: this user has migrated (Phase 2 route cutover) — it's
+    // the sole source of truth for them now, regardless of which auth token
+    // this particular request carries.
+    const uid = await resolveFirestoreUid(username);
+    if (uid) {
+      const userSnap = await db.collection('users').doc(uid).get();
+      const mt = userSnap.exists ? userSnap.get('macroTargets') : null;
+      const item = mt ? { id: uid, createdTime: null, Calories: mt.calories ?? null, Protein: mt.protein ?? null, Fat: mt.fat ?? null, Carbs: mt.carbs ?? null } : null;
+      return sendSuccess(res, 200, { item });
+    }
+
     if (!airtableEnabled) return sendError(res, 503, 'macrotargets.airtable_disabled', 'Airtable is not configured.');
 
     const safeUsername = escapeAirtableFormulaValue(username);
@@ -1001,11 +1037,25 @@ app.get('/macrotargets', authenticateToken, async (req, res) => {
 // POST /macrotargets — upsert macro targets for a user (one record per user)
 app.post('/macrotargets', authenticateToken, async (req, res) => {
   try {
+    const username = req.user.username;
+    const { calories, protein, fat, carbs } = req.body || {};
+
+    const uid = await resolveFirestoreUid(username);
+    if (uid) {
+      await db.collection('users').doc(uid).set({
+        macroTargets: {
+          calories: calories != null ? Number(calories) : null,
+          protein:  protein  != null ? Number(protein)  : null,
+          fat:      fat      != null ? Number(fat)      : null,
+          carbs:    carbs    != null ? Number(carbs)    : null
+        }
+      }, { merge: true });
+      return sendSuccess(res, 200, { recordId: uid });
+    }
+
     if (!airtableEnabled) {
       return sendError(res, 503, 'macrotargets.airtable_disabled', 'Airtable is not configured.');
     }
-    const username = req.user.username;
-    const { calories, protein, fat, carbs } = req.body || {};
 
     const fields = {
       [USERNAME_FIELD]: String(username),
@@ -1109,6 +1159,23 @@ app.post('/templates', authenticateToken, async (req, res) => {
   if (!templateName || !templateData) {
     return sendError(res, 400, 'templates.invalid_payload', 'templateName and templateData are required.');
   }
+
+  const uid = await resolveFirestoreUid(username);
+  if (uid) {
+    try {
+      // Storage convention matches legacyMigration.js: templateData stored
+      // parsed (not stringified) — the object shape has drifted over time
+      // (some records carry dropsetArray/restPauseArray/etc that others
+      // don't), so it's kept as-is rather than forced into a rigid schema.
+      const docRef = db.collection(`users/${uid}/templates`).doc();
+      await docRef.set({ name: String(templateName), templateData });
+      return sendSuccess(res, 200, { record: { id: docRef.id, fields: { TemplateName: templateName, Username: username } } });
+    } catch (err) {
+      console.error('POST /templates (Firestore) failed:', err);
+      return sendError(res, 500, 'templates.server_error', 'Server error saving template.');
+    }
+  }
+
   if (!airtableEnabled) {
     return sendError(res, 503, 'templates.airtable_disabled', 'Airtable is not configured.');
   }
@@ -1145,6 +1212,26 @@ app.post('/templates', authenticateToken, async (req, res) => {
 // GET /templates
 app.get('/templates', authenticateToken, async (req, res) => {
   const owner = req.user.username;
+
+  const uid = await resolveFirestoreUid(owner);
+  if (uid) {
+    try {
+      const snap = await db.collection(`users/${uid}/templates`).orderBy('name').get();
+      const items = snap.docs.map(d => ({
+        id: d.id,
+        name: d.get('name') || 'Untitled Template',
+        username: owner,
+        // Stringified to match the API's existing contract (the frontend
+        // JSON.parses this field itself) — Airtable's TemplateData was
+        // always a JSON string, so this keeps both paths interchangeable.
+        data: JSON.stringify(d.get('templateData') ?? null)
+      }));
+      return sendSuccess(res, 200, { items, owner });
+    } catch (err) {
+      console.error('GET /templates (Firestore) failed:', err);
+      return sendError(res, 500, 'templates.fetch_failed', 'Failed to load templates.', err?.message);
+    }
+  }
 
   if (!airtableEnabled) {
     return sendError(res, 503, 'templates.airtable_disabled', 'Airtable is not configured.');
@@ -1741,6 +1828,23 @@ app.post('/sendTemplate', authenticateToken, async (req, res) => {
 app.delete('/templates/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
   if (!id) return sendError(res, 400, 'templates.missing_id', 'Record ID is required.');
+
+  const uid = await resolveFirestoreUid(req.user.username);
+  if (uid) {
+    // Ownership is implicit — the doc only exists under this uid's own
+    // templates subcollection, unlike Airtable's shared-table model.
+    try {
+      const docRef = db.collection(`users/${uid}/templates`).doc(id);
+      const snap = await docRef.get();
+      if (!snap.exists) return sendError(res, 404, 'templates.not_found', 'Template not found.');
+      await docRef.delete();
+      return sendSuccess(res, 200, { deleted: id });
+    } catch (err) {
+      console.error('DELETE /templates/:id (Firestore) failed:', err);
+      return sendError(res, 500, 'templates.server_error', 'Server error deleting template.');
+    }
+  }
+
   if (!airtableEnabled) return sendError(res, 503, 'templates.airtable_disabled', 'Airtable is not configured.');
 
   try {
