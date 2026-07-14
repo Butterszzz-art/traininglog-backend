@@ -3065,6 +3065,95 @@ app.get('/knowledge-context', authenticateToken, async (req, res) => {
   }
 });
 
+// ── Exercise library ─────────────────────────────────────────────────────────
+// Greenfield collection (no Airtable equivalent) — exercises/{id}, top-level
+// and global like KnowledgeBase, seeded once from a bundled public-domain
+// dataset (free-exercise-db, Unlicense) rather than per-user migration.
+
+// One-time seed: reads the bundled dataset and writes it into Firestore.
+// Idempotent — the dataset's own slug ids are used as Firestore doc ids, so
+// re-running just re-writes the same docs rather than duplicating them.
+app.post('/admin/exercises/seed', authenticateToken, async (req, res) => {
+  if (!firebaseEnabled) return sendError(res, 503, 'exercises.firebase_disabled', 'Firebase is not configured.');
+  try {
+    const seed = require('./data/exercises-seed.json');
+    let seeded = 0;
+    const BATCH_SIZE = 400; // Firestore batch write limit is 500
+    for (let i = 0; i < seed.length; i += BATCH_SIZE) {
+      const batch = db.batch();
+      for (const e of seed.slice(i, i + BATCH_SIZE)) {
+        batch.set(db.collection('exercises').doc(e.id), {
+          name: e.name,
+          aliases: e.aliases || [],
+          muscleGroup: e.muscleGroup || 'other',
+          secondaryMuscles: e.secondaryMuscles || [],
+          equipment: e.equipment || null,
+          category: e.category || null,
+          level: e.level || null,
+          mechanic: e.mechanic || null,
+          force: e.force || null,
+          instructions: e.instructions || [],
+          archetypeRelevance: [],
+          isCustom: false,
+          createdBy: null,
+          createdAt: FieldValue.serverTimestamp()
+        });
+      }
+      await batch.commit();
+      seeded += Math.min(BATCH_SIZE, seed.length - i);
+    }
+    return sendSuccess(res, 200, { total: seed.length, seeded });
+  } catch (err) {
+    console.error('[Exercises] Seed failed:', err);
+    return sendError(res, 500, 'exercises.seed_failed', String(err));
+  }
+});
+
+// GET /exercises?q=&muscleGroup=&equipment=&limit= — search/list the library.
+// Firestore doesn't do substring/full-text search natively, so `q` matching
+// happens in-memory against name+aliases; fine at this table's size (~900
+// rows), would need a real search index (Algolia/Typesense/etc.) at scale.
+app.get('/exercises', authenticateToken, async (req, res) => {
+  if (!firebaseEnabled) return sendSuccess(res, 200, { items: [] });
+  try {
+    const q = typeof req.query.q === 'string' ? req.query.q.trim().toLowerCase() : '';
+    const muscleGroup = typeof req.query.muscleGroup === 'string' ? req.query.muscleGroup.trim() : '';
+    const equipment = typeof req.query.equipment === 'string' ? req.query.equipment.trim() : '';
+    const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
+
+    let query = db.collection('exercises');
+    if (muscleGroup) query = query.where('muscleGroup', '==', muscleGroup);
+    if (equipment) query = query.where('equipment', '==', equipment);
+
+    const snap = await query.get();
+    let items = snap.docs.map(d => ({
+      id: d.id,
+      name: d.get('name'),
+      aliases: d.get('aliases') || [],
+      muscleGroup: d.get('muscleGroup'),
+      secondaryMuscles: d.get('secondaryMuscles') || [],
+      equipment: d.get('equipment'),
+      category: d.get('category'),
+      level: d.get('level'),
+      mechanic: d.get('mechanic'),
+      force: d.get('force'),
+      instructions: d.get('instructions') || [],
+      isCustom: d.get('isCustom') || false
+    }));
+
+    if (q) {
+      items = items.filter(e =>
+        e.name.toLowerCase().includes(q) || e.aliases.some(a => a.toLowerCase().includes(q))
+      );
+    }
+
+    return sendSuccess(res, 200, { items: items.slice(0, limit), total: items.length });
+  } catch (err) {
+    console.error('[Exercises] Fetch failed:', err);
+    return sendError(res, 500, 'exercises.fetch_failed', String(err));
+  }
+});
+
 // Keep Render free tier awake — pings itself every 14 min
 setInterval(() => {
   const url = process.env.RENDER_EXTERNAL_URL || 'https://traininglog-backend.onrender.com';

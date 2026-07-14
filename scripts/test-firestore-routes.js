@@ -68,7 +68,14 @@ function collection(colPath) {
   };
   return api;
 }
-const fakeDb = { collection };
+function batch() {
+  const ops = [];
+  return {
+    set(docRef, data, opts) { ops.push(() => docRef.set(data, opts)); return this; },
+    async commit() { for (const op of ops) await op(); }
+  };
+}
+const fakeDb = { collection, batch };
 
 require.cache[require.resolve(firebasePath)] = {
   id: firebasePath, filename: firebasePath, loaded: true,
@@ -347,6 +354,20 @@ setTimeout(() => {
 
     r = await req('DELETE', '/coach/exercise-videos/doesnotexist', legacyTokenMigrated);
     check('DELETE /coach/exercise-videos/:id (migrated, missing) 404', r.status === 404);
+
+    // ── Exercise library (global, not per-user — real bundled dataset) ──
+    r = await req('POST', '/admin/exercises/seed', legacyTokenMigrated);
+    check('POST /admin/exercises/seed 200', r.status === 200);
+    check('POST /admin/exercises/seed seeded the whole real dataset (873)', r.body?.total === 873 && r.body?.seeded === 873);
+    check('POST /admin/exercises/seed wrote to Firestore', Object.keys(store['exercises'] || {}).length === 873);
+
+    r = await req('GET', '/exercises?q=bench%20press', legacyTokenMigrated);
+    check('GET /exercises (q=bench press) 200', r.status === 200);
+    check('GET /exercises (q=bench press) finds Dumbbell Bench Press', r.body?.items?.some(i => i.name === 'Dumbbell Bench Press'));
+
+    r = await req('GET', '/exercises?muscleGroup=biceps&limit=5', legacyTokenMigrated);
+    check('GET /exercises (muscleGroup=biceps) 200', r.status === 200);
+    check('GET /exercises (muscleGroup=biceps) respects limit', r.body?.items?.length === 5 && r.body?.items?.every(i => i.muscleGroup === 'biceps'));
 
     console.log('\n=== RESULTS ===');
     for (const { label, pass } of results) console.log((pass ? 'PASS' : 'FAIL') + ' - ' + label);
