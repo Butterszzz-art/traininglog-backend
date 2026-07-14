@@ -43,18 +43,18 @@ Verify each conversion with the same method used for MacroTargets/Templates: `no
 
 | Route(s) | Table | Status |
 |---|---|---|
-| `GET/POST /macrotargets` | MacroTargets | ✅ Converted (this pass) |
-| `POST/GET/DELETE /templates` | Templates | ✅ Converted (this pass) |
+| `GET/POST /macrotargets` | MacroTargets | ✅ Converted |
+| `POST/GET/DELETE /templates` | Templates | ✅ Converted |
+| `POST/GET /dailylogs` | DailyMacros | ✅ Converted |
+| `POST /bodyweight/archive`, `GET /bodyweight` | BodyweightLog | ✅ Converted |
+| `POST /measurements/sync`, `GET /measurements` | BodyMeasurements | ✅ Converted |
+| `POST /cardio/sync`, `GET /cardio` | CardioLog | ✅ Converted |
+| `POST /crossfit/sync`, `GET /crossfit` | CrossFitLog | ✅ Converted |
+| `POST /programs` (+ `/saveProgram` alias), `GET /programs`, `PATCH /programs/:id/active`, `DELETE /programs/:id` | Programs | ✅ Converted. PATCH/DELETE resolve uid from the caller's own `req.user.username`, not the query/body username param (matches DELETE's pre-existing ownership model); PATCH checks the target doc exists before setting `isActive` to avoid silently creating a doc from a bad id. |
+| `PUT /api/bodybuilding/daily-mission/:userId` | DailyMissionState | ✅ Converted. Upserts by date within `users/{uid}/dailyMissions`. |
+| `GET/POST/DELETE /mobility/routines`, `GET/POST /mobility/sessions` | MobilityRoutines, MobilitySessions | ✅ Converted. **Caveat carried over from gap #2:** the Airtable path's `GET /mobility/routines` shows a user's own routines *plus every coach-assigned routine system-wide* (a pre-existing quirk, not something this conversion changes); the Firestore path only shows the migrated user's own subcollection, so coach-assigned routines won't appear for migrated users until gap #2 is addressed. |
+| `GET /api/coach/clients` | CoachClients | ✅ Converted. `coachId` query param resolves as the coach's own username. |
 | `GET/POST /workouts` | Workouts | Not converted. Low real-world value — table is nearly empty (see gap #4), but still worth converting for correctness/future data. |
-| `POST/GET /dailylogs` | DailyMacros | Not converted. |
-| `POST /bodyweight/archive`, `GET /bodyweight` | BodyweightLog | Not converted. |
-| `POST /measurements/sync`, `GET /measurements` | BodyMeasurements | Not converted. |
-| `POST /cardio/sync`, `GET /cardio` | CardioLog | Not converted. |
-| `POST /crossfit/sync`, `GET /crossfit` | CrossFitLog | Not converted. |
-| `POST /programs` (+ `/saveProgram` alias), `GET /programs`, `PATCH /programs/:id/active`, `DELETE /programs/:id` | Programs | Not converted. |
-| `PUT /api/bodybuilding/daily-mission/:userId` | DailyMissionState | Not converted. |
-| `GET/POST/DELETE /mobility/routines`, `GET/POST /mobility/sessions` | MobilityRoutines, MobilitySessions | Not converted. Coach-assigned routines still need the cross-account reference from gap #2 above. |
-| `GET /api/coach/clients` | CoachClients | Not converted. |
 | `POST /coach/workouts` | Workouts (writes to a **client's** data, not the caller's) | Not converted — needs `resolveFirestoreUid` on the *target athlete's* username, not the coach's. Handle deliberately, same caveat as `/sendTemplate`. |
 | `POST /sendTemplate` | Templates (writes to a **different user's** templates) | Not converted — the recipient's uid needs resolving, not the sender's. Deferred this pass. |
 | `POST/GET/DELETE /coach/exercise-videos`, `GET /exercise-videos` | ExerciseVideos | Not converted — no decided Firestore home yet (known gap #3). Decide the collection shape before converting. |
