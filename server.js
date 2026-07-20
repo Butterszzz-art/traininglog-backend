@@ -2235,8 +2235,11 @@ const DAILY_MISSION_TABLE      = process.env.AIRTABLE_DAILY_MISSION_TABLE || 'Da
 // GET /api/coach/clients?coachId= — return all clients linked to a coach
 app.get('/api/coach/clients', authenticateToken, async (req, res) => {
   try {
-    const coachId = typeof req.query.coachId === 'string' ? req.query.coachId.trim() : '';
-    if (!coachId) return sendError(res, 422, 'coach.missing_coach_id', 'coachId query param is required.');
+    const requestedCoachId = typeof req.query.coachId === 'string' ? req.query.coachId.trim() : '';
+    if (requestedCoachId && requestedCoachId !== req.user.username) {
+      return sendError(res, 403, 'coach.forbidden', 'coachId does not match the authenticated user.');
+    }
+    const coachId = req.user.username;
 
     // coachId is the coach's own username (legacyMigration.js migrates
     // CoachClients rows into coaches/{coachUid}/clients using that same key).
@@ -2305,6 +2308,174 @@ async function verifyCoachClientLink(coachUsername, clientUsername) {
     .firstPage();
   return records.length > 0;
 }
+
+// ── Real client linking (invite / accept / remove) ──────────────────────────
+// Not wired up to the mobile app yet — the current "Add Client" UI there just
+// writes a local, unlinked record on the coach's own device. This is the
+// real, server-side relationship for when that UI is ready to call it: it
+// links a coach to an ACTUAL registered athlete account (looked up by
+// username) rather than a freeform note, so both sides can see and act on the
+// relationship. Firestore-only — legacy (non-migrated) accounts fall back to
+// the existing Airtable CoachClients table, which none of this touches.
+//
+// Flow: coach invites by username (POST .../invite, status "pending") →
+// client accepts (POST .../accept) → status flips to "active" on both mirror
+// docs. Mirrors are written on each side — coaches/{coachUid}/clients/{clientUid}
+// for the coach's roster (already read by GET /api/coach/clients above) and
+// users/{clientUid}/coachInvites/{coachUid} for the client's own view — so
+// each party can query their side without depending on the other's collection.
+
+const coachInviteLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: { code: 'coach.rate_limited', message: 'Too many requests. Try again shortly.' } }
+});
+
+// Firebase-auth'd requests carry the caller's uid on req.user already;
+// legacy JWTs only carry {id, username}, so fall back to the same
+// usernames/{} lookup the rest of the migration uses.
+async function resolveCallerUid(user) {
+  if (user?.uid) return user.uid;
+  return resolveFirestoreUid(user?.username);
+}
+
+// POST /api/coach/clients/invite — body: { clientUsername }
+// Coach invites an existing athlete account to link as a client.
+app.post('/api/coach/clients/invite', authenticateToken, coachInviteLimiter, async (req, res) => {
+  if (!firebaseEnabled) return sendError(res, 503, 'coach.firebase_disabled', 'Client linking requires a migrated (Firebase) account.');
+  try {
+    const clientUsername = typeof req.body?.clientUsername === 'string' ? req.body.clientUsername.trim() : '';
+    if (!USERNAME_RE.test(clientUsername)) {
+      return sendError(res, 422, 'coach.invalid_username', 'Enter a valid client username.');
+    }
+    if (clientUsername.toLowerCase() === String(req.user.username || '').toLowerCase()) {
+      return sendError(res, 422, 'coach.cannot_invite_self', 'You can’t add yourself as a client.');
+    }
+
+    const coachUid = await resolveCallerUid(req.user);
+    if (!coachUid) {
+      return sendError(res, 409, 'coach.not_migrated', 'Your account needs to complete migration before linking clients. Contact support.');
+    }
+
+    const clientUid = await resolveFirestoreUid(clientUsername);
+    if (!clientUid) {
+      return sendError(res, 404, 'coach.client_not_found', 'No account found with that username.');
+    }
+
+    const clientDocRef = db.collection(`coaches/${coachUid}/clients`).doc(clientUid);
+    const existing = await clientDocRef.get();
+    if (existing.exists) {
+      const status = existing.get('status');
+      return sendError(res, 409, 'coach.already_linked',
+        status === 'pending' ? 'An invite is already pending for this client.' : 'This client is already linked to your roster.');
+    }
+
+    const clientUserSnap = await db.collection('users').doc(clientUid).get();
+    const clientEmail = clientUserSnap.exists ? (clientUserSnap.get('email') || '') : '';
+    const inviteRef = db.collection(`users/${clientUid}/coachInvites`).doc(coachUid);
+    const now = FieldValue.serverTimestamp();
+
+    const batch = db.batch();
+    batch.set(clientDocRef, {
+      athleteDisplayName: clientUsername,
+      email: clientEmail,
+      status: 'pending',
+      invitedBy: req.user.username,
+      invitedAt: now
+    });
+    batch.set(inviteRef, {
+      coachUsername: req.user.username,
+      status: 'pending',
+      invitedAt: now
+    });
+    await batch.commit();
+
+    return sendSuccess(res, 201, {
+      client: { id: clientUid, clientId: clientUid, clientName: clientUsername, email: clientEmail, status: 'pending' }
+    });
+  } catch (err) {
+    console.error('POST /api/coach/clients/invite failed:', err);
+    return sendError(res, 500, 'coach.server_error', String(err));
+  }
+});
+
+// POST /api/coach/clients/accept — body: { coachUsername }. Called by the
+// invited athlete to confirm the relationship; flips both mirror docs to active.
+app.post('/api/coach/clients/accept', authenticateToken, coachInviteLimiter, async (req, res) => {
+  if (!firebaseEnabled) return sendError(res, 503, 'coach.firebase_disabled', 'Client linking requires a migrated (Firebase) account.');
+  try {
+    const coachUsername = typeof req.body?.coachUsername === 'string' ? req.body.coachUsername.trim() : '';
+    if (!USERNAME_RE.test(coachUsername)) {
+      return sendError(res, 422, 'coach.invalid_username', 'Missing or invalid coach username.');
+    }
+
+    const clientUid = await resolveCallerUid(req.user);
+    if (!clientUid) {
+      return sendError(res, 409, 'coach.not_migrated', 'Your account needs to complete migration first. Contact support.');
+    }
+    const coachUid = await resolveFirestoreUid(coachUsername);
+    if (!coachUid) {
+      return sendError(res, 404, 'coach.not_found', 'No coach account found with that username.');
+    }
+
+    const inviteRef = db.collection(`users/${clientUid}/coachInvites`).doc(coachUid);
+    const clientDocRef = db.collection(`coaches/${coachUid}/clients`).doc(clientUid);
+    const [inviteSnap, clientSnap] = await Promise.all([inviteRef.get(), clientDocRef.get()]);
+
+    if (!inviteSnap.exists || !clientSnap.exists) {
+      return sendError(res, 404, 'coach.invite_not_found', 'No pending invite from that coach.');
+    }
+    if (inviteSnap.get('status') !== 'pending') {
+      return sendError(res, 409, 'coach.invite_not_pending', 'This invite is no longer pending.');
+    }
+
+    const now = FieldValue.serverTimestamp();
+    const batch = db.batch();
+    batch.set(inviteRef, { status: 'active', acceptedAt: now }, { merge: true });
+    batch.set(clientDocRef, { status: 'active', acceptedAt: now }, { merge: true });
+    await batch.commit();
+
+    return sendSuccess(res, 200, { coachUsername, status: 'active' });
+  } catch (err) {
+    console.error('POST /api/coach/clients/accept failed:', err);
+    return sendError(res, 500, 'coach.server_error', String(err));
+  }
+});
+
+// DELETE /api/coach/clients/:clientUid — coach removes (or cancels a pending
+// invite to) a client. Client-initiated unlink is a natural follow-up to add
+// once the mobile app actually surfaces this relationship, not built yet.
+app.delete('/api/coach/clients/:clientUid', authenticateToken, async (req, res) => {
+  if (!firebaseEnabled) return sendError(res, 503, 'coach.firebase_disabled', 'Client linking requires a migrated (Firebase) account.');
+  try {
+    const clientUid = String(req.params.clientUid || '').trim();
+    if (!clientUid) return sendError(res, 422, 'coach.missing_client_id', 'clientUid is required.');
+
+    const coachUid = await resolveCallerUid(req.user);
+    if (!coachUid) {
+      return sendError(res, 409, 'coach.not_migrated', 'Your account needs to complete migration first. Contact support.');
+    }
+
+    const clientDocRef = db.collection(`coaches/${coachUid}/clients`).doc(clientUid);
+    const existing = await clientDocRef.get();
+    if (!existing.exists) {
+      return sendError(res, 404, 'coach.not_linked', 'This client is not linked to your roster.');
+    }
+
+    const inviteRef = db.collection(`users/${clientUid}/coachInvites`).doc(coachUid);
+    const batch = db.batch();
+    batch.delete(clientDocRef);
+    batch.delete(inviteRef);
+    await batch.commit();
+
+    return sendSuccess(res, 200, { clientUid, removed: true });
+  } catch (err) {
+    console.error('DELETE /api/coach/clients/:clientUid failed:', err);
+    return sendError(res, 500, 'coach.server_error', String(err));
+  }
+});
 
 // POST /coach/workouts — coach logs a workout on behalf of a linked client
 app.post('/coach/workouts', authenticateToken, async (req, res) => {
