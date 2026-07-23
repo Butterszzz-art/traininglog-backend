@@ -44,6 +44,16 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // coaches/{coachUid}/leads/{leadId} — pre-signup intake submissions from
+    // the public client-intake form. Written by the server (Admin SDK, via
+    // POST /api/intake) on behalf of a prospect who has no account yet, so
+    // there's no uid to check a write against — same reasoning as clients
+    // above: server-only write, coach-only read.
+    match /coaches/{coachUid}/leads/{leadId} {
+      allow read: if request.auth != null && request.auth.uid == coachUid;
+      allow write: if false;
+    }
+
     // exercises/{exerciseId} — greenfield shared library (not yet built).
     // Readable by any signed-in user; writes stay server-side until a
     // moderation/ownership model exists for user-submitted (isCustom) entries.
