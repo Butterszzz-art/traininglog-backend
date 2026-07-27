@@ -611,61 +611,12 @@ function generateReferralCode(username) {
   return `${base36}-${rand}`;
 }
 
-// Register
-app.post('/register', loginLimiter, async (req, res) => {
-  const { username, password } = req.body || {};
-
-  if (!username || !password) {
-    return sendError(res, 400, 'auth.missing_credentials', 'Username and password are required.');
-  }
-  if (String(username).length < 2 || String(username).length > 64) {
-    return sendError(res, 400, 'auth.invalid_username', 'Username must be between 2 and 64 characters.');
-  }
-  if (String(password).length < 6 || String(password).length > 128) {
-    return sendError(res, 400, 'auth.weak_password', 'Password must be between 6 and 128 characters.');
-  }
-  if (!airtableEnabled) {
-    return sendError(res, 503, 'auth.not_configured', 'User storage is not configured.');
-  }
-
-  try {
-    const existing = await findUserByUsername(username);
-    if (existing) {
-      return sendError(res, 409, 'auth.username_taken', 'That username is already taken.');
-    }
-
-    const passwordHash = await bcrypt.hash(password, 12);
-    const referralCode = generateReferralCode(username);
-    const referredBy = req.body.referredBy || '';
-    const fields = {
-      Username: String(username),
-      PasswordHash: passwordHash,
-      CreatedAt: new Date().toISOString(),
-    };
-    // Optional fields — only written if the Airtable table has them
-    const optionalFields = {
-      UserPlan: 'free',
-      ReferralCode: referralCode,
-      ReferredBy: referredBy || '',
-      ReferralCredits: 0,
-      ProgramGenCount: 0,
-    };
-
-    // Try with all fields first; if Airtable rejects unknown fields, fall back to core only
-    let record;
-    try {
-      [record] = await base(USERS_TABLE).create([{ fields: { ...fields, ...optionalFields } }]);
-    } catch (e1) {
-      console.warn('[REGISTER] Full create failed, retrying with core fields only:', e1.message);
-      [record] = await base(USERS_TABLE).create([{ fields }]);
-    }
-
-    const token = jwt.sign({ id: record.id, username: String(username) }, JWT_SECRET, { expiresIn: '7d' });
-    return sendSuccess(res, 201, { token, username: String(username) });
-  } catch (e) {
-    console.error('[REGISTER] Failed:', e.message || e);
-    return sendError(res, 500, 'auth.register_failed', `Failed to create account: ${e.message}`);
-  }
+// Register — hard cutover (see /login): Airtable no longer accepts new
+// accounts. Every client now goes through Firebase signup + /auth/signup-complete.
+// Route kept (rather than deleted) so a rollback is a one-line revert.
+app.post('/register', loginLimiter, async (_req, res) => {
+  return sendError(res, 410, 'auth.legacy_registration_disabled',
+    'Username/password signup has moved. Please use the app’s sign-up flow.');
 });
 
 // Login
@@ -716,9 +667,14 @@ app.post('/login', loginLimiter, async (req, res) => {
       return sendError(res, 401, 'auth.invalid_credentials', 'Invalid credentials.');
     }
 
-    const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '7d' });
-    console.info(`[LOGIN] Success for username: "${username}"`);
-    return sendSuccess(res, 200, { token, username: user.username });
+    // Hard cutover: credentials are verified against the Airtable record (so
+    // wrong-password guesses still get generic invalid_credentials above,
+    // same as before), but no legacy JWT is issued anymore. The verified
+    // owner must reclaim via Firebase signup + legacyPassword, which is what
+    // migrates their data into Firestore (see /auth/signup-complete).
+    console.info(`[LOGIN] Verified legacy credentials for "${username}" — migration required`);
+    return sendError(res, 409, 'auth.legacy_migration_required',
+      'This account hasn’t been migrated yet. Use Sign Up with this username and your existing password to continue.');
   } catch (e) {
     console.error('[LOGIN] Failed:', e);
     return sendError(res, 500, 'auth.token_failure', 'Failed to sign in.');
