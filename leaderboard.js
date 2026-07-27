@@ -1,11 +1,15 @@
 const express = require('express');
 const Airtable = require('airtable');
 const jwt = require('jsonwebtoken');
+const { db, firebaseEnabled } = require('./firebase');
 
 const router = express.Router();
 
-const airtable = new Airtable({ apiKey: process.env.AIRTABLE_API_TOKEN || process.env.AIRTABLE_TOKEN || process.env.AIRTABLE_API_KEY });
-const base = airtable.base(process.env.AIRTABLE_BASE_ID || '');
+const airtableApiKey = process.env.AIRTABLE_API_TOKEN || process.env.AIRTABLE_TOKEN || process.env.AIRTABLE_API_KEY;
+const airtableBaseId = process.env.AIRTABLE_BASE_ID;
+const airtableEnabled = Boolean(airtableApiKey && airtableBaseId);
+const airtable = new Airtable({ apiKey: airtableApiKey });
+const base = airtable.base(airtableBaseId || '');
 
 function authenticateToken(req, res, next) {
   const token = (req.headers['authorization'] || '').split(' ')[1];
@@ -37,28 +41,68 @@ function computeVolumeFromWorkout(workout) {
   }, 0);
 }
 
+// Firestore is authoritative for any username that has migrated (same rule
+// every other route in server.js follows) — Airtable's Workouts table only
+// still holds real data for usernames that haven't reclaimed their account
+// yet. Reading Airtable alone here silently dropped every migrated user's
+// volume once their workouts moved to Firestore.
 router.get('/leaderboard', authenticateToken, async (_req, res) => {
   try {
-    const records = await base('Workouts')
-      .select({ fields: ['Username', 'SessionVolume', 'WorkoutJSON'], pageSize: 100 })
-      .all();
-
     const leaderboardMap = new Map();
-    records.forEach(record => {
-      const fields    = record.fields || {};
-      const username  = String(fields.Username || '').trim();
-      if (!username) return;
+    const migratedUsernames = new Set();
 
-      let sessionVolume = Number(fields.SessionVolume);
-      if (!Number.isFinite(sessionVolume)) {
-        sessionVolume = computeVolumeFromWorkout(parseMaybeJson(fields.WorkoutJSON));
+    if (firebaseEnabled) {
+      const usersSnap = await db.collection('users').get();
+      const uidToUsername = new Map();
+      usersSnap.forEach(doc => {
+        const username = doc.get('username');
+        if (username) {
+          uidToUsername.set(doc.id, username);
+          migratedUsernames.add(username.toLowerCase());
+        }
+      });
+
+      const workoutsSnap = await db.collectionGroup('workouts').get();
+      workoutsSnap.forEach(doc => {
+        const uid = doc.ref.parent.parent?.id;
+        const username = uid && uidToUsername.get(uid);
+        if (!username) return;
+
+        const sessionVolume = Number(doc.get('sessionVolume')) || 0;
+        const current = leaderboardMap.get(username) || { username, totalVolume: 0, workoutCount: 0 };
+        current.totalVolume  += sessionVolume;
+        current.workoutCount += 1;
+        leaderboardMap.set(username, current);
+      });
+    }
+
+    if (airtableEnabled) {
+      try {
+        const records = await base('Workouts')
+          .select({ fields: ['Username', 'SessionVolume', 'WorkoutJSON'], pageSize: 100 })
+          .all();
+
+        records.forEach(record => {
+          const fields   = record.fields || {};
+          const username = String(fields.Username || '').trim();
+          if (!username || migratedUsernames.has(username.toLowerCase())) return;
+
+          let sessionVolume = Number(fields.SessionVolume);
+          if (!Number.isFinite(sessionVolume)) {
+            sessionVolume = computeVolumeFromWorkout(parseMaybeJson(fields.WorkoutJSON));
+          }
+
+          const current = leaderboardMap.get(username) || { username, totalVolume: 0, workoutCount: 0 };
+          current.totalVolume  += sessionVolume;
+          current.workoutCount += 1;
+          leaderboardMap.set(username, current);
+        });
+      } catch (err) {
+        // Non-fatal — still-migrating users' data above is real and shouldn't
+        // be thrown away because the legacy fallback source hiccuped.
+        console.error('[leaderboard] Airtable fallback failed:', err.message);
       }
-
-      const current = leaderboardMap.get(username) || { username, totalVolume: 0, workoutCount: 0 };
-      current.totalVolume  += sessionVolume;
-      current.workoutCount += 1;
-      leaderboardMap.set(username, current);
-    });
+    }
 
     const items = Array.from(leaderboardMap.values()).sort((a, b) => b.totalVolume - a.totalVolume);
     return res.json({ success: true, items });

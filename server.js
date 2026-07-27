@@ -11,6 +11,7 @@ const { router: aiRouter } = require('./src/routes/ai');
 const { upload, extractKnowledgeWithClaude, saveToAirtable, getActiveModules } = require('./knowledgeBase');
 const { auth: fbAuth, db, FieldValue, firebaseEnabled, projectId: firebaseProjectId, initError: firebaseInitError } = require('./firebase');
 const { migrateLegacyUserData } = require('./legacyMigration');
+const { berekenClient } = require('./src/intakeCalculations');
 
 const app = express();
 
@@ -610,61 +611,12 @@ function generateReferralCode(username) {
   return `${base36}-${rand}`;
 }
 
-// Register
-app.post('/register', loginLimiter, async (req, res) => {
-  const { username, password } = req.body || {};
-
-  if (!username || !password) {
-    return sendError(res, 400, 'auth.missing_credentials', 'Username and password are required.');
-  }
-  if (String(username).length < 2 || String(username).length > 64) {
-    return sendError(res, 400, 'auth.invalid_username', 'Username must be between 2 and 64 characters.');
-  }
-  if (String(password).length < 6 || String(password).length > 128) {
-    return sendError(res, 400, 'auth.weak_password', 'Password must be between 6 and 128 characters.');
-  }
-  if (!airtableEnabled) {
-    return sendError(res, 503, 'auth.not_configured', 'User storage is not configured.');
-  }
-
-  try {
-    const existing = await findUserByUsername(username);
-    if (existing) {
-      return sendError(res, 409, 'auth.username_taken', 'That username is already taken.');
-    }
-
-    const passwordHash = await bcrypt.hash(password, 12);
-    const referralCode = generateReferralCode(username);
-    const referredBy = req.body.referredBy || '';
-    const fields = {
-      Username: String(username),
-      PasswordHash: passwordHash,
-      CreatedAt: new Date().toISOString(),
-    };
-    // Optional fields — only written if the Airtable table has them
-    const optionalFields = {
-      UserPlan: 'free',
-      ReferralCode: referralCode,
-      ReferredBy: referredBy || '',
-      ReferralCredits: 0,
-      ProgramGenCount: 0,
-    };
-
-    // Try with all fields first; if Airtable rejects unknown fields, fall back to core only
-    let record;
-    try {
-      [record] = await base(USERS_TABLE).create([{ fields: { ...fields, ...optionalFields } }]);
-    } catch (e1) {
-      console.warn('[REGISTER] Full create failed, retrying with core fields only:', e1.message);
-      [record] = await base(USERS_TABLE).create([{ fields }]);
-    }
-
-    const token = jwt.sign({ id: record.id, username: String(username) }, JWT_SECRET, { expiresIn: '7d' });
-    return sendSuccess(res, 201, { token, username: String(username) });
-  } catch (e) {
-    console.error('[REGISTER] Failed:', e.message || e);
-    return sendError(res, 500, 'auth.register_failed', `Failed to create account: ${e.message}`);
-  }
+// Register — hard cutover (see /login): Airtable no longer accepts new
+// accounts. Every client now goes through Firebase signup + /auth/signup-complete.
+// Route kept (rather than deleted) so a rollback is a one-line revert.
+app.post('/register', loginLimiter, async (_req, res) => {
+  return sendError(res, 410, 'auth.legacy_registration_disabled',
+    'Username/password signup has moved. Please use the app’s sign-up flow.');
 });
 
 // Login
@@ -715,9 +667,14 @@ app.post('/login', loginLimiter, async (req, res) => {
       return sendError(res, 401, 'auth.invalid_credentials', 'Invalid credentials.');
     }
 
-    const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '7d' });
-    console.info(`[LOGIN] Success for username: "${username}"`);
-    return sendSuccess(res, 200, { token, username: user.username });
+    // Hard cutover: credentials are verified against the Airtable record (so
+    // wrong-password guesses still get generic invalid_credentials above,
+    // same as before), but no legacy JWT is issued anymore. The verified
+    // owner must reclaim via Firebase signup + legacyPassword, which is what
+    // migrates their data into Firestore (see /auth/signup-complete).
+    console.info(`[LOGIN] Verified legacy credentials for "${username}" — migration required`);
+    return sendError(res, 409, 'auth.legacy_migration_required',
+      'This account hasn’t been migrated yet. Use Sign Up with this username and your existing password to continue.');
   } catch (e) {
     console.error('[LOGIN] Failed:', e);
     return sendError(res, 500, 'auth.token_failure', 'Failed to sign in.');
@@ -2473,6 +2430,124 @@ app.delete('/api/coach/clients/:clientUid', authenticateToken, async (req, res) 
     return sendSuccess(res, 200, { clientUid, removed: true });
   } catch (err) {
     console.error('DELETE /api/coach/clients/:clientUid failed:', err);
+    return sendError(res, 500, 'coach.server_error', String(err));
+  }
+});
+
+// ── Client intake (leads) ───────────────────────────────────────────────────
+// Single-tenant for now: one coach account (INTAKE_COACH_USERNAME) owns every
+// lead. A prospect fills out the public intake form before they have (or
+// necessarily ever get) a Pocket Coach account, so there's no uid to attach
+// the write to on their side — this mirrors ClientIntake's standalone app,
+// just pointed at this backend's Firestore project instead of a separate one.
+// Promoting a lead to a real client re-uses the existing invite flow above
+// once they sign up.
+const INTAKE_COACH_USERNAME = process.env.INTAKE_COACH_USERNAME || null;
+
+const intakeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: { code: 'intake.rate_limited', message: 'Too many submissions. Try again later.' } }
+});
+
+// POST /api/intake — public, unauthenticated. body: { intake, instellingen? }
+app.post('/api/intake', intakeLimiter, async (req, res) => {
+  if (!firebaseEnabled) return sendError(res, 503, 'intake.firebase_disabled', 'Intake requires a migrated (Firebase) backend.');
+  if (!INTAKE_COACH_USERNAME) return sendError(res, 503, 'intake.not_configured', 'INTAKE_COACH_USERNAME is not set.');
+
+  try {
+    const intake = req.body?.intake;
+    const naam = typeof intake?.persoonsgegevens?.naam === 'string' ? intake.persoonsgegevens.naam.trim() : '';
+    if (!naam || typeof intake?.persoonsgegevens?.gewicht !== 'number' || typeof intake?.persoonsgegevens?.vetpercentage !== 'number') {
+      return sendError(res, 422, 'intake.invalid_payload', 'intake.persoonsgegevens.naam, gewicht and vetpercentage are required.');
+    }
+    const instellingen = (req.body?.instellingen && typeof req.body.instellingen === 'object') ? req.body.instellingen : {};
+
+    const coachUid = await resolveFirestoreUid(INTAKE_COACH_USERNAME);
+    if (!coachUid) {
+      return sendError(res, 503, 'intake.coach_not_found', 'Configured intake coach account was not found.');
+    }
+
+    let calculations;
+    try {
+      calculations = berekenClient(intake, instellingen);
+    } catch (err) {
+      return sendError(res, 422, 'intake.calculation_failed', 'Could not compute results from the submitted intake.', String(err));
+    }
+
+    const leadRef = db.collection(`coaches/${coachUid}/leads`).doc();
+    await leadRef.set({
+      naam,
+      createdAt: FieldValue.serverTimestamp(),
+      status: 'new',
+      intake,
+      instellingen,
+      calculations
+    });
+
+    return sendSuccess(res, 201, { leadId: leadRef.id, calculations });
+  } catch (err) {
+    console.error('POST /api/intake failed:', err);
+    return sendError(res, 500, 'intake.server_error', String(err));
+  }
+});
+
+// GET /api/coach/leads — authenticated, coach-only. Returns every pending
+// intake lead for the calling coach, newest first.
+app.get('/api/coach/leads', authenticateToken, async (req, res) => {
+  if (!firebaseEnabled) return sendError(res, 503, 'coach.firebase_disabled', 'Leads require a migrated (Firebase) account.');
+  try {
+    const coachUid = await resolveCallerUid(req.user);
+    if (!coachUid) {
+      return sendError(res, 409, 'coach.not_migrated', 'Your account needs to complete migration before viewing leads. Contact support.');
+    }
+
+    const snap = await db.collection(`coaches/${coachUid}/leads`).orderBy('createdAt', 'desc').get();
+    const leads = snap.docs.map(d => ({
+      id: d.id,
+      naam: d.get('naam') || '',
+      createdAt: d.get('createdAt') || null,
+      status: d.get('status') || 'new',
+      intake: d.get('intake') || null,
+      instellingen: d.get('instellingen') || null,
+      calculations: d.get('calculations') || null
+    }));
+
+    return sendSuccess(res, 200, { leads });
+  } catch (err) {
+    console.error('GET /api/coach/leads failed:', err);
+    return sendError(res, 500, 'coach.server_error', String(err));
+  }
+});
+
+// PATCH /api/coach/leads/:id — authenticated, coach-only. body: { status }.
+// Used once a lead is converted (invited as a real client via the endpoint
+// below) or dismissed, so it stops showing as an open, actionable lead.
+const LEAD_STATUSES = ['new', 'converted', 'dismissed'];
+app.patch('/api/coach/leads/:id', authenticateToken, async (req, res) => {
+  if (!firebaseEnabled) return sendError(res, 503, 'coach.firebase_disabled', 'Leads require a migrated (Firebase) account.');
+  try {
+    const coachUid = await resolveCallerUid(req.user);
+    if (!coachUid) {
+      return sendError(res, 409, 'coach.not_migrated', 'Your account needs to complete migration before updating leads. Contact support.');
+    }
+
+    const leadId = String(req.params.id || '').trim();
+    const status = typeof req.body?.status === 'string' ? req.body.status.trim() : '';
+    if (!leadId || !LEAD_STATUSES.includes(status)) {
+      return sendError(res, 422, 'coach.invalid_payload', `status must be one of: ${LEAD_STATUSES.join(', ')}.`);
+    }
+
+    const leadRef = db.collection(`coaches/${coachUid}/leads`).doc(leadId);
+    const existing = await leadRef.get();
+    if (!existing.exists) return sendError(res, 404, 'coach.lead_not_found', 'This lead does not exist.');
+
+    await leadRef.set({ status }, { merge: true });
+    return sendSuccess(res, 200, { leadId, status });
+  } catch (err) {
+    console.error('PATCH /api/coach/leads/:id failed:', err);
     return sendError(res, 500, 'coach.server_error', String(err));
   }
 });
