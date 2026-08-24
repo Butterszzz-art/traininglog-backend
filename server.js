@@ -235,32 +235,6 @@ const loginLimiter = rateLimit({
   message: { success: false, error: { code: 'auth.rate_limited', message: 'Too many login attempts. Try again in 15 minutes.' } }
 });
 
-// ── Airtable schema check (startup only) ──────────────────────────────────────
-async function verifyAirtableModelDefinitions() {
-  if (!AIRTABLE_BASE_ID || !AIRTABLE_API_TOKEN) return;
-  try {
-    const response = await fetch(
-      `https://api.airtable.com/v0/meta/bases/${AIRTABLE_BASE_ID}/tables`,
-      { headers: airtableHeaders() }
-    );
-    if (!response.ok) return;
-    const { tables = [] } = await response.json();
-
-    for (const name of [WORKOUTS_TABLE, MACRO_TARGETS_TABLE]) {
-      const table = tables.find(t => t.name === name);
-      if (!table) { console.warn(`[Airtable] Missing table: ${name}`); continue; }
-      const field = (table.fields || []).find(f => f.name === USERNAME_FIELD);
-      if (!field) { console.warn(`[Airtable] ${name} missing ${USERNAME_FIELD} field`); continue; }
-      if (field.type !== 'singleLineText')
-        console.warn(`[Airtable] ${name}.${USERNAME_FIELD} should be singleLineText (got ${field.type})`);
-    }
-  } catch (err) {
-    console.warn('[Airtable] Schema check failed:', err?.message);
-  }
-}
-
-verifyAirtableModelDefinitions();
-
 function computeSessionVolume(workout) {
   if (!workout || typeof workout !== 'object') return 0;
   const sets = Array.isArray(workout.sets)
@@ -285,43 +259,17 @@ app.get('/health', async (_req, res) => {
   const hasBaseId = Boolean(process.env.AIRTABLE_BASE_ID);
   const hasJwt    = Boolean(process.env.JWT_SECRET);
 
-  const tableChecks = {};
-  // ExerciseVideos intentionally excluded: that Airtable table was never
-  // actually created (confirmed via direct probe — 403
-  // INVALID_PERMISSIONS_OR_MODEL_NOT_FOUND, same signature as other
-  // never-existed legacy tables found during the Phase 2 audit). The
-  // feature now lives in Firestore (coaches/{uid}/exerciseVideos) since the
-  // Phase 2 route cutover, so this was a permanent false alarm — every
-  // /health check has been returning HTTP 503 because of it, masking any
-  // real problem behind a status that's always red.
-  const requiredTables = ['Users', 'Templates', 'Programs', 'Workouts', 'MacroTargets', 'DailyMacros', 'CoachClients'];
-  let airtableReachable = null;
-  let airtableError = null;
-
-  if (hasToken && hasBaseId) {
-    for (const tableName of requiredTables) {
-      try {
-        await new Promise((resolve, reject) => {
-          base(tableName).select({ maxRecords: 1 }).firstPage((err) => {
-            if (err) reject(err); else resolve();
-          });
-        });
-        tableChecks[tableName] = 'OK';
-        if (airtableReachable !== false) airtableReachable = true;
-      } catch (e) {
-        tableChecks[tableName] = `MISSING or ERROR: ${e.message || e}`;
-        if (tableName === 'Users') {
-          airtableReachable = false;
-          airtableError = e.message || String(e);
-        }
-      }
-    }
-  }
-
-  const missingTables = Object.entries(tableChecks).filter(([, v]) => v !== 'OK').map(([k]) => k);
-  const ok = hasToken && hasBaseId && hasJwt && airtableReachable !== false;
-  res.status(ok && !missingTables.length ? 200 : 503).json({
-    status: ok ? (missingTables.length ? 'tables_missing' : 'ok') : 'misconfigured',
+  // This used to ping all 7 Airtable tables live on every /health call —
+  // removed. Firestore is the actual source of truth post-Phase-2, so
+  // Airtable being unreachable no longer means the app is unhealthy; it was
+  // also actively broken (Airtable's account is over its monthly API quota,
+  // see the requestTimeout/noRetryIfRateLimited comment on the Airtable
+  // client above), so this loop was taking the full ~60s timeout budget on
+  // every single health check and returning 504 instead of ever answering.
+  // "enabled" below is just an env-var presence check, no network call.
+  const ok = hasJwt;
+  res.status(ok ? 200 : 503).json({
+    status: ok ? 'ok' : 'misconfigured',
     env: {
       AIRTABLE_TOKEN:   hasToken  ? 'SET' : 'MISSING',
       AIRTABLE_BASE_ID: hasBaseId ? 'SET' : 'MISSING',
@@ -334,11 +282,8 @@ app.get('/health', async (_req, res) => {
       initError: firebaseInitError || null,
     },
     airtable: {
-      enabled:       airtableEnabled,
-      reachable:     airtableReachable,
-      error:         airtableError,
-      tables:        tableChecks,
-      missingTables,
+      enabled: airtableEnabled,
+      note: 'Legacy fallback for not-yet-migrated accounts only — no longer live-checked here.',
     },
   });
 });
@@ -885,27 +830,13 @@ app.post('/auth/signup-complete', loginLimiter, async (req, res) => {
         await db.collection('users').doc(fbUser.uid).set({ isCoach: true }, { merge: true });
         await fbAuth.setCustomUserClaims(fbUser.uid, { username, tier, isCoach: true });
       }
-    } else if (airtableEnabled) {
-      // Brand-new signup — best-effort Airtable row so plan/Stripe flows keep
-      // working until those routes move to Firestore.
-      const fields = { Username: username, CreatedAt: new Date().toISOString() };
-      const optionalFields = {
-        UserPlan: 'free',
-        ReferralCode: referralCode,
-        ReferredBy: referredByCode || '',
-        ReferralCredits: 0,
-        ProgramGenCount: 0,
-      };
-      try {
-        await base(USERS_TABLE).create([{ fields: { ...fields, ...optionalFields } }]);
-      } catch (e1) {
-        try {
-          await base(USERS_TABLE).create([{ fields }]);
-        } catch (e2) {
-          console.error(`[AUTH] Airtable Users row failed for "${username}":`, e2.message);
-        }
-      }
     }
+    // Brand-new (non-reclaim) signups used to also write a "best-effort"
+    // Airtable Users row here, for plan/Stripe routes that read from Airtable
+    // at the time. Those routes were converted to read from Firestore in the
+    // Phase 2 cutover (see the users/{uid} write above, which already sets
+    // userPlan/referralCode/stripeCustomerId/etc.) — that Airtable row had
+    // nothing left reading it, just a doomed write on every single signup.
 
     console.info(`[AUTH] Signup complete for "${username}" (uid ${fbUser.uid})`);
     return sendSuccess(res, 201, { username, referralCode });
