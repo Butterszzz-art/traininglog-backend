@@ -15,6 +15,21 @@ const { berekenClient } = require('./src/intakeCalculations');
 
 const app = express();
 
+// Trust exactly one reverse-proxy hop. Required now that this runs as a
+// Cloud Function: Google's load balancer sits in front of every request and
+// sets X-Forwarded-For, but Express's default (trust nothing) makes
+// express-rate-limit treat that header as spoofed, throwing
+// ERR_ERL_UNEXPECTED_X_FORWARDED_FOR on every rate-limited route — which was
+// silently hanging requests (signup, intake, /health, username checks)
+// instead of ever sending a response. `true` (trust every hop, unbounded)
+// fixes that error but trips a *different* express-rate-limit check
+// (ERR_ERL_PERMISSIVE_TRUST_PROXY) since it'd let a client forge its own
+// X-Forwarded-For prefix to dodge rate limiting; `1` trusts only the single
+// real hop Google's infrastructure adds, which is both correct and what
+// express-rate-limit expects. Render never had a proxy hop in front of the
+// app, so this was never needed until now.
+app.set('trust proxy', 1);
+
 // ── Environment validation ────────────────────────────────────────────────────
 // Required: AIRTABLE_TOKEN, AIRTABLE_BASE_ID, JWT_SECRET, ANTHROPIC_API_KEY
 const missing = ['AIRTABLE_TOKEN', 'AIRTABLE_BASE_ID', 'JWT_SECRET']
@@ -22,7 +37,18 @@ const missing = ['AIRTABLE_TOKEN', 'AIRTABLE_BASE_ID', 'JWT_SECRET']
 if (missing.length) {
   console.warn(`[WARN] Missing env vars: ${missing.join(', ')}`);
 }
-if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET environment variable is required.');
+// Deliberately not a hard throw here (it used to be): this file is now also
+// require()'d by functions-entry.js, including during `firebase deploy`'s
+// local "discovery" pass, which runs this module without the real Secret
+// Manager value for JWT_SECRET — a throw at load time crashes that pass even
+// though the actual deployed function has JWT_SECRET set correctly. All real
+// uses of JWT_SECRET are inside request handlers (jwt.verify/jwt.sign), so a
+// genuinely missing secret in a live deployment now fails per-request
+// instead of refusing to start — same trade-off already made for
+// Stripe/Airtable/Firebase elsewhere in this file.
+if (!process.env.JWT_SECRET) {
+  console.error('[FATAL] JWT_SECRET is not set — every authenticated route will fail until this is configured.');
+}
 
 const AIRTABLE_BASE_ID   = process.env.AIRTABLE_BASE_ID;
 const AIRTABLE_API_TOKEN = process.env.AIRTABLE_API_TOKEN || process.env.AIRTABLE_TOKEN || null;
@@ -38,8 +64,20 @@ const USERNAME_FIELD      = 'Username';
 
 // ── Airtable client ───────────────────────────────────────────────────────────
 const airtableEnabled = Boolean(AIRTABLE_API_TOKEN && AIRTABLE_BASE_ID);
+// This account has hit Airtable's monthly API request quota (confirmed via
+// direct probe: every call gets an instant 429 PUBLIC_API_BILLING_LIMIT_EXCEEDED,
+// from anywhere, not just from this deployment) — so every Airtable call
+// fails right now regardless of network path. Two settings to stop that from
+// turning into a hang instead of a fast, catchable error:
+// - requestTimeout: defaults to 5 minutes in this package, far longer than
+//   Cloud Run's 60s request budget (this used to run on Render, which had no
+//   such limit).
+// - noRetryIfRateLimited: this package retries 429s with backoff by default,
+//   which on a *persistent* 429 (a monthly quota, not a transient burst) just
+//   burns through the whole request budget retrying against a wall that
+//   won't open until next month's reset or a plan upgrade.
 const base = airtableEnabled
-  ? new Airtable({ apiKey: AIRTABLE_API_TOKEN }).base(AIRTABLE_BASE_ID)
+  ? new Airtable({ apiKey: AIRTABLE_API_TOKEN, requestTimeout: 8000, noRetryIfRateLimited: true }).base(AIRTABLE_BASE_ID)
   : null;
 
 if (!airtableEnabled) {
@@ -197,32 +235,6 @@ const loginLimiter = rateLimit({
   message: { success: false, error: { code: 'auth.rate_limited', message: 'Too many login attempts. Try again in 15 minutes.' } }
 });
 
-// ── Airtable schema check (startup only) ──────────────────────────────────────
-async function verifyAirtableModelDefinitions() {
-  if (!AIRTABLE_BASE_ID || !AIRTABLE_API_TOKEN) return;
-  try {
-    const response = await fetch(
-      `https://api.airtable.com/v0/meta/bases/${AIRTABLE_BASE_ID}/tables`,
-      { headers: airtableHeaders() }
-    );
-    if (!response.ok) return;
-    const { tables = [] } = await response.json();
-
-    for (const name of [WORKOUTS_TABLE, MACRO_TARGETS_TABLE]) {
-      const table = tables.find(t => t.name === name);
-      if (!table) { console.warn(`[Airtable] Missing table: ${name}`); continue; }
-      const field = (table.fields || []).find(f => f.name === USERNAME_FIELD);
-      if (!field) { console.warn(`[Airtable] ${name} missing ${USERNAME_FIELD} field`); continue; }
-      if (field.type !== 'singleLineText')
-        console.warn(`[Airtable] ${name}.${USERNAME_FIELD} should be singleLineText (got ${field.type})`);
-    }
-  } catch (err) {
-    console.warn('[Airtable] Schema check failed:', err?.message);
-  }
-}
-
-verifyAirtableModelDefinitions();
-
 function computeSessionVolume(workout) {
   if (!workout || typeof workout !== 'object') return 0;
   const sets = Array.isArray(workout.sets)
@@ -247,43 +259,17 @@ app.get('/health', async (_req, res) => {
   const hasBaseId = Boolean(process.env.AIRTABLE_BASE_ID);
   const hasJwt    = Boolean(process.env.JWT_SECRET);
 
-  const tableChecks = {};
-  // ExerciseVideos intentionally excluded: that Airtable table was never
-  // actually created (confirmed via direct probe — 403
-  // INVALID_PERMISSIONS_OR_MODEL_NOT_FOUND, same signature as other
-  // never-existed legacy tables found during the Phase 2 audit). The
-  // feature now lives in Firestore (coaches/{uid}/exerciseVideos) since the
-  // Phase 2 route cutover, so this was a permanent false alarm — every
-  // /health check has been returning HTTP 503 because of it, masking any
-  // real problem behind a status that's always red.
-  const requiredTables = ['Users', 'Templates', 'Programs', 'Workouts', 'MacroTargets', 'DailyMacros', 'CoachClients'];
-  let airtableReachable = null;
-  let airtableError = null;
-
-  if (hasToken && hasBaseId) {
-    for (const tableName of requiredTables) {
-      try {
-        await new Promise((resolve, reject) => {
-          base(tableName).select({ maxRecords: 1 }).firstPage((err) => {
-            if (err) reject(err); else resolve();
-          });
-        });
-        tableChecks[tableName] = 'OK';
-        if (airtableReachable !== false) airtableReachable = true;
-      } catch (e) {
-        tableChecks[tableName] = `MISSING or ERROR: ${e.message || e}`;
-        if (tableName === 'Users') {
-          airtableReachable = false;
-          airtableError = e.message || String(e);
-        }
-      }
-    }
-  }
-
-  const missingTables = Object.entries(tableChecks).filter(([, v]) => v !== 'OK').map(([k]) => k);
-  const ok = hasToken && hasBaseId && hasJwt && airtableReachable !== false;
-  res.status(ok && !missingTables.length ? 200 : 503).json({
-    status: ok ? (missingTables.length ? 'tables_missing' : 'ok') : 'misconfigured',
+  // This used to ping all 7 Airtable tables live on every /health call —
+  // removed. Firestore is the actual source of truth post-Phase-2, so
+  // Airtable being unreachable no longer means the app is unhealthy; it was
+  // also actively broken (Airtable's account is over its monthly API quota,
+  // see the requestTimeout/noRetryIfRateLimited comment on the Airtable
+  // client above), so this loop was taking the full ~60s timeout budget on
+  // every single health check and returning 504 instead of ever answering.
+  // "enabled" below is just an env-var presence check, no network call.
+  const ok = hasJwt;
+  res.status(ok ? 200 : 503).json({
+    status: ok ? 'ok' : 'misconfigured',
     env: {
       AIRTABLE_TOKEN:   hasToken  ? 'SET' : 'MISSING',
       AIRTABLE_BASE_ID: hasBaseId ? 'SET' : 'MISSING',
@@ -296,11 +282,8 @@ app.get('/health', async (_req, res) => {
       initError: firebaseInitError || null,
     },
     airtable: {
-      enabled:       airtableEnabled,
-      reachable:     airtableReachable,
-      error:         airtableError,
-      tables:        tableChecks,
-      missingTables,
+      enabled: airtableEnabled,
+      note: 'Legacy fallback for not-yet-migrated accounts only — no longer live-checked here.',
     },
   });
 });
@@ -847,27 +830,13 @@ app.post('/auth/signup-complete', loginLimiter, async (req, res) => {
         await db.collection('users').doc(fbUser.uid).set({ isCoach: true }, { merge: true });
         await fbAuth.setCustomUserClaims(fbUser.uid, { username, tier, isCoach: true });
       }
-    } else if (airtableEnabled) {
-      // Brand-new signup — best-effort Airtable row so plan/Stripe flows keep
-      // working until those routes move to Firestore.
-      const fields = { Username: username, CreatedAt: new Date().toISOString() };
-      const optionalFields = {
-        UserPlan: 'free',
-        ReferralCode: referralCode,
-        ReferredBy: referredByCode || '',
-        ReferralCredits: 0,
-        ProgramGenCount: 0,
-      };
-      try {
-        await base(USERS_TABLE).create([{ fields: { ...fields, ...optionalFields } }]);
-      } catch (e1) {
-        try {
-          await base(USERS_TABLE).create([{ fields }]);
-        } catch (e2) {
-          console.error(`[AUTH] Airtable Users row failed for "${username}":`, e2.message);
-        }
-      }
     }
+    // Brand-new (non-reclaim) signups used to also write a "best-effort"
+    // Airtable Users row here, for plan/Stripe routes that read from Airtable
+    // at the time. Those routes were converted to read from Firestore in the
+    // Phase 2 cutover (see the users/{uid} write above, which already sets
+    // userPlan/referralCode/stripeCustomerId/etc.) — that Airtable row had
+    // nothing left reading it, just a doomed write on every single signup.
 
     console.info(`[AUTH] Signup complete for "${username}" (uid ${fbUser.uid})`);
     return sendSuccess(res, 201, { username, referralCode });
@@ -1862,6 +1831,205 @@ app.get('/crossfit', authenticateToken, async (req, res) => {
   } catch (err) {
     console.error('GET /crossfit failed:', err);
     return sendError(res, 500, 'crossfit.server_error', String(err));
+  }
+});
+
+// ── Fitbit ────────────────────────────────────────────────────────────────────
+// OAuth 2.0 Authorization Code flow (steps/activity only for now). Tokens live
+// in their own top-level collection (fitbitTokens/{uid}) rather than on the
+// user doc so they're never exposed if the client SDK ever reads users/{uid}
+// directly — that collection is server-only, see firestore.rules.
+const FITBIT_CLIENT_ID     = process.env.FITBIT_CLIENT_ID || null;
+const FITBIT_CLIENT_SECRET = process.env.FITBIT_CLIENT_SECRET || null;
+const FITBIT_REDIRECT_URI  = process.env.FITBIT_REDIRECT_URI || null;
+const fitbitEnabled = Boolean(FITBIT_CLIENT_ID && FITBIT_CLIENT_SECRET && FITBIT_REDIRECT_URI);
+if (!fitbitEnabled) console.warn('[WARN] Fitbit disabled — FITBIT_CLIENT_ID/FITBIT_CLIENT_SECRET/FITBIT_REDIRECT_URI not set.');
+
+const FITBIT_APP_URL = process.env.APP_URL || 'https://pocketcoachcoms.org';
+
+function fitbitBasicAuthHeader() {
+  return 'Basic ' + Buffer.from(`${FITBIT_CLIENT_ID}:${FITBIT_CLIENT_SECRET}`).toString('base64');
+}
+
+async function requestFitbitToken(bodyParams) {
+  const response = await fetch('https://api.fitbit.com/oauth2/token', {
+    method: 'POST',
+    headers: {
+      Authorization: fitbitBasicAuthHeader(),
+      'Content-Type': 'application/x-www-form-urlencoded'
+    },
+    body: new URLSearchParams(bodyParams)
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data?.errors?.[0]?.message || 'Fitbit token request failed');
+  return data;
+}
+
+async function saveFitbitTokens(uid, tokenResponse) {
+  await db.collection('fitbitTokens').doc(uid).set({
+    accessToken: tokenResponse.access_token,
+    refreshToken: tokenResponse.refresh_token,
+    expiresAt: Date.now() + (Number(tokenResponse.expires_in) || 0) * 1000,
+    fitbitUserId: tokenResponse.user_id || null,
+    scope: tokenResponse.scope || '',
+    updatedAt: new Date().toISOString()
+  }, { merge: true });
+}
+
+// Returns a valid access token for uid, refreshing it if expired, or null if
+// not connected / the refresh token was revoked on Fitbit's side.
+async function getValidFitbitAccessToken(uid) {
+  const ref = db.collection('fitbitTokens').doc(uid);
+  const snap = await ref.get();
+  if (!snap.exists) return null;
+
+  const token = snap.data();
+  if (token.expiresAt > Date.now() + 60000) return token.accessToken;
+
+  try {
+    const refreshed = await requestFitbitToken({ grant_type: 'refresh_token', refresh_token: token.refreshToken });
+    await saveFitbitTokens(uid, refreshed);
+    return refreshed.access_token;
+  } catch (err) {
+    console.error('[Fitbit] token refresh failed, clearing stored token:', err.message);
+    await ref.delete().catch(() => {});
+    return null;
+  }
+}
+
+// GET /api/fitbit/status
+app.get('/api/fitbit/status', authenticateToken, async (req, res) => {
+  if (!fitbitEnabled) return sendError(res, 503, 'fitbit.disabled', 'Fitbit integration is not configured.');
+  if (!req.user.uid) return sendSuccess(res, 200, { connected: false });
+  try {
+    const snap = await db.collection('fitbitTokens').doc(req.user.uid).get();
+    return sendSuccess(res, 200, { connected: snap.exists });
+  } catch (err) {
+    console.error('GET /api/fitbit/status failed:', err);
+    return sendError(res, 500, 'fitbit.server_error', String(err));
+  }
+});
+
+// GET /api/fitbit/connect — returns the Fitbit consent-screen URL for the frontend to redirect to
+app.get('/api/fitbit/connect', authenticateToken, (req, res) => {
+  if (!fitbitEnabled) return sendError(res, 503, 'fitbit.disabled', 'Fitbit integration is not configured.');
+  if (!req.user.uid) {
+    return sendError(res, 403, 'fitbit.requires_firebase_auth', 'Please sign in again before connecting Fitbit.');
+  }
+  // Fitbit's redirect back to /callback carries no Authorization header, so the
+  // uid rides in a short-lived signed state param instead (CSRF protection too).
+  const state = jwt.sign({ uid: req.user.uid }, JWT_SECRET, { expiresIn: '10m' });
+  const url = 'https://www.fitbit.com/oauth2/authorize?' + new URLSearchParams({
+    response_type: 'code',
+    client_id: FITBIT_CLIENT_ID,
+    redirect_uri: FITBIT_REDIRECT_URI,
+    scope: 'activity',
+    state
+  });
+  return sendSuccess(res, 200, { url });
+});
+
+// GET /api/fitbit/callback — Fitbit redirects the user's browser here after
+// consent; not authenticateToken since it's a direct browser navigation, not
+// a fetch call from the frontend.
+app.get('/api/fitbit/callback', async (req, res) => {
+  const { code, state, error } = req.query;
+  if (error || !code || !state) {
+    return res.redirect(`${FITBIT_APP_URL}/?fitbit=error`);
+  }
+
+  let uid;
+  try {
+    ({ uid } = jwt.verify(String(state), JWT_SECRET));
+  } catch {
+    return res.redirect(`${FITBIT_APP_URL}/?fitbit=error`);
+  }
+
+  try {
+    const tokenResponse = await requestFitbitToken({
+      grant_type: 'authorization_code',
+      code: String(code),
+      redirect_uri: FITBIT_REDIRECT_URI,
+      client_id: FITBIT_CLIENT_ID
+    });
+    await saveFitbitTokens(uid, tokenResponse);
+    return res.redirect(`${FITBIT_APP_URL}/?fitbit=connected`);
+  } catch (err) {
+    console.error('GET /api/fitbit/callback failed:', err.message);
+    return res.redirect(`${FITBIT_APP_URL}/?fitbit=error`);
+  }
+});
+
+// POST /api/fitbit/disconnect
+app.post('/api/fitbit/disconnect', authenticateToken, async (req, res) => {
+  if (!req.user.uid) return sendSuccess(res, 200, {});
+  const ref = db.collection('fitbitTokens').doc(req.user.uid);
+  try {
+    const snap = await ref.get();
+    if (snap.exists) {
+      const { accessToken } = snap.data();
+      await fetch('https://api.fitbit.com/oauth2/revoke', {
+        method: 'POST',
+        headers: {
+          Authorization: fitbitBasicAuthHeader(),
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: new URLSearchParams({ token: accessToken })
+      }).catch(err => console.warn('[Fitbit] revoke call failed (non-fatal):', err.message));
+    }
+    await ref.delete();
+    return sendSuccess(res, 200, {});
+  } catch (err) {
+    console.error('POST /api/fitbit/disconnect failed:', err);
+    return sendError(res, 500, 'fitbit.server_error', String(err));
+  }
+});
+
+// GET /api/fitbit/activity?date=YYYY-MM-DD — steps/activity summary for one
+// day (defaults to today). Fetched live from Fitbit and cached in Firestore.
+app.get('/api/fitbit/activity', authenticateToken, async (req, res) => {
+  if (!fitbitEnabled) return sendError(res, 503, 'fitbit.disabled', 'Fitbit integration is not configured.');
+  if (!req.user.uid) {
+    return sendError(res, 403, 'fitbit.requires_firebase_auth', 'Please sign in again before syncing Fitbit.');
+  }
+
+  const date = typeof req.query.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date)
+    ? req.query.date
+    : new Date().toISOString().slice(0, 10);
+
+  try {
+    const accessToken = await getValidFitbitAccessToken(req.user.uid);
+    if (!accessToken) return sendError(res, 409, 'fitbit.not_connected', 'Fitbit is not connected.');
+
+    const response = await fetch(`https://api.fitbit.com/1/user/-/activities/date/${date}.json`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Accept-Language': 'en_GB' // forces metric units regardless of the Fitbit account's own locale
+      }
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      return sendError(res, 502, 'fitbit.api_error', 'Fitbit API request failed.',
+        data?.errors?.[0]?.message || JSON.stringify(data));
+    }
+
+    const summary = data.summary || {};
+    const activity = {
+      date,
+      steps:            Number(summary.steps) || 0,
+      distanceKm:       Number(summary.distances?.find(d => d.activity === 'total')?.distance) || 0,
+      caloriesOut:      Number(summary.caloriesOut) || 0,
+      activeMinutes:    (Number(summary.fairlyActiveMinutes) || 0) + (Number(summary.veryActiveMinutes) || 0),
+      sedentaryMinutes: Number(summary.sedentaryMinutes) || 0,
+      syncedAt: new Date().toISOString()
+    };
+
+    await db.collection(`users/${req.user.uid}/fitbitActivity`).doc(date).set(activity, { merge: true });
+
+    return sendSuccess(res, 200, { activity });
+  } catch (err) {
+    console.error('GET /api/fitbit/activity failed:', err);
+    return sendError(res, 500, 'fitbit.server_error', String(err));
   }
 });
 
@@ -3393,14 +3561,19 @@ app.get('/exercises', authenticateToken, async (req, res) => {
   }
 });
 
-// Keep Render free tier awake — pings itself every 14 min
-setInterval(() => {
-  const url = process.env.RENDER_EXTERNAL_URL || 'https://traininglog-backend.onrender.com';
-  fetch(`${url}/health`).catch(() => {});
-}, 14 * 60 * 1000);
+// Only bind a port when this file is run directly (`node server.js`), e.g.
+// local dev or a non-serverless host. When required as a module — by
+// functions/index.js, wrapping this same app in a Firebase Cloud Function —
+// the platform's own runtime handles the HTTP server, so calling app.listen()
+// here too would be redundant (and on Cloud Run/Functions, PORT is managed by
+// the platform, not meant for the app to self-bind outside its own request
+// lifecycle).
+if (require.main === module) {
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => {
+    console.log(`API listening on :${PORT}`);
+    console.log('CORS allowlist:', allowed.length ? allowed : '[none → allow all]');
+  });
+}
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`API listening on :${PORT}`);
-  console.log('CORS allowlist:', allowed.length ? allowed : '[none → allow all]');
-});
+module.exports = app;

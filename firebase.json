@@ -1,4 +1,21 @@
 {
+  "functions": [
+    {
+      "source": ".",
+      "codebase": "default",
+      "disallowLegacyRuntimeConfig": true,
+      "ignore": [
+        "node_modules",
+        ".git",
+        ".claude",
+        "tests",
+        "scripts",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ]
+    }
+  ],
   "firestore": {
     "rules": "firestore.rules"
   }
