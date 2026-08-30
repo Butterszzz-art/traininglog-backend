@@ -2569,6 +2569,35 @@ app.post('/api/coach/clients/accept', authenticateToken, coachInviteLimiter, asy
   }
 });
 
+// GET /api/client/coach-invites — authenticated athlete's own view of
+// users/{uid}/coachInvites, both pending (needs an Accept action) and
+// active (already linked). The invite/accept routes above have existed
+// since this flow was built, but nothing ever read this collection back —
+// there was no way for an athlete to see or act on an invite at all.
+app.get('/api/client/coach-invites', authenticateToken, async (req, res) => {
+  if (!firebaseEnabled) return sendError(res, 503, 'coach.firebase_disabled', 'Client linking requires a migrated (Firebase) account.');
+  try {
+    const clientUid = await resolveCallerUid(req.user);
+    if (!clientUid) {
+      return sendError(res, 409, 'coach.not_migrated', 'Your account needs to complete migration first. Contact support.');
+    }
+
+    const snap = await db.collection(`users/${clientUid}/coachInvites`).orderBy('invitedAt', 'desc').get();
+    const invites = snap.docs.map(d => ({
+      coachUid: d.id,
+      coachUsername: d.get('coachUsername') || '',
+      status: d.get('status') || 'pending',
+      invitedAt: d.get('invitedAt') || null,
+      acceptedAt: d.get('acceptedAt') || null
+    }));
+
+    return sendSuccess(res, 200, { invites });
+  } catch (err) {
+    console.error('GET /api/client/coach-invites failed:', err);
+    return sendError(res, 500, 'coach.server_error', String(err));
+  }
+});
+
 // DELETE /api/coach/clients/:clientUid — coach removes (or cancels a pending
 // invite to) a client. Client-initiated unlink is a natural follow-up to add
 // once the mobile app actually surfaces this relationship, not built yet.
@@ -2598,6 +2627,164 @@ app.delete('/api/coach/clients/:clientUid', authenticateToken, async (req, res) 
     return sendSuccess(res, 200, { clientUid, removed: true });
   } catch (err) {
     console.error('DELETE /api/coach/clients/:clientUid failed:', err);
+    return sendError(res, 500, 'coach.server_error', String(err));
+  }
+});
+
+// ── Coach → client assignment + notes ───────────────────────────────────────
+// Program assignment, macro/nutrition summary, and notes were all coach-side
+// UI features (both coach/coach.js and coaching-enhanced.js) that only ever
+// wrote to the COACH'S OWN browser localStorage — nothing reached the
+// client's account at all, despite UI copy implying it did. currentProgram
+// and nutritionSummary already exist as real fields on the coach's client
+// doc (read by GET /api/coach/clients above); this PATCH is the missing
+// write side. Notes are new: mirrored the same way coachInvites already is
+// (coach-side history + client-side inbox) so each party queries their own
+// side without needing read access into the other's collection.
+
+// PATCH /api/coach/clients/:clientUid — body: { currentProgram?, nutritionSummary?, trainingMode? }
+app.patch('/api/coach/clients/:clientUid', authenticateToken, coachInviteLimiter, async (req, res) => {
+  if (!firebaseEnabled) return sendError(res, 503, 'coach.firebase_disabled', 'Client linking requires a migrated (Firebase) account.');
+  try {
+    const clientUid = String(req.params.clientUid || '').trim();
+    if (!clientUid) return sendError(res, 422, 'coach.missing_client_id', 'clientUid is required.');
+
+    const fields = {};
+    for (const key of ['currentProgram', 'nutritionSummary', 'trainingMode']) {
+      if (typeof req.body?.[key] === 'string') fields[key] = req.body[key].slice(0, 2000);
+    }
+    if (!Object.keys(fields).length) {
+      return sendError(res, 422, 'coach.invalid_payload', 'Provide at least one of currentProgram, nutritionSummary, trainingMode.');
+    }
+
+    const coachUid = await resolveCallerUid(req.user);
+    if (!coachUid) {
+      return sendError(res, 409, 'coach.not_migrated', 'Your account needs to complete migration first. Contact support.');
+    }
+
+    const clientDocRef = db.collection(`coaches/${coachUid}/clients`).doc(clientUid);
+    const existing = await clientDocRef.get();
+    if (!existing.exists) {
+      return sendError(res, 404, 'coach.not_linked', 'This client is not linked to your roster.');
+    }
+
+    const now = FieldValue.serverTimestamp();
+    const batch = db.batch();
+    batch.set(clientDocRef, { ...fields, updatedAt: now }, { merge: true });
+    // Mirror onto the client's own doc so their app can show what their
+    // coach has set, the same mirroring pattern coachInvites already uses.
+    batch.set(db.collection(`users/${clientUid}/coachAssignment`).doc(coachUid), {
+      coachUsername: req.user.username,
+      ...fields,
+      updatedAt: now
+    }, { merge: true });
+    await batch.commit();
+
+    return sendSuccess(res, 200, { clientUid, ...fields });
+  } catch (err) {
+    console.error('PATCH /api/coach/clients/:clientUid failed:', err);
+    return sendError(res, 500, 'coach.server_error', String(err));
+  }
+});
+
+// GET /api/client/coach-assignment — authenticated athlete's own view of
+// whatever their coach(es) have set via the PATCH above.
+app.get('/api/client/coach-assignment', authenticateToken, async (req, res) => {
+  if (!firebaseEnabled) return sendError(res, 503, 'coach.firebase_disabled', 'Client linking requires a migrated (Firebase) account.');
+  try {
+    const clientUid = await resolveCallerUid(req.user);
+    if (!clientUid) {
+      return sendError(res, 409, 'coach.not_migrated', 'Your account needs to complete migration first. Contact support.');
+    }
+    const snap = await db.collection(`users/${clientUid}/coachAssignment`).get();
+    const assignments = snap.docs.map(d => ({ coachUid: d.id, ...d.data() }));
+    return sendSuccess(res, 200, { assignments });
+  } catch (err) {
+    console.error('GET /api/client/coach-assignment failed:', err);
+    return sendError(res, 500, 'coach.server_error', String(err));
+  }
+});
+
+const coachNoteLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: { code: 'coach.rate_limited', message: 'Too many requests. Try again shortly.' } }
+});
+
+// POST /api/coach/clients/:clientUid/notes — body: { text }
+app.post('/api/coach/clients/:clientUid/notes', authenticateToken, coachNoteLimiter, async (req, res) => {
+  if (!firebaseEnabled) return sendError(res, 503, 'coach.firebase_disabled', 'Client linking requires a migrated (Firebase) account.');
+  try {
+    const clientUid = String(req.params.clientUid || '').trim();
+    const text = typeof req.body?.text === 'string' ? req.body.text.trim().slice(0, 4000) : '';
+    if (!clientUid) return sendError(res, 422, 'coach.missing_client_id', 'clientUid is required.');
+    if (!text) return sendError(res, 422, 'coach.invalid_payload', 'text is required.');
+
+    const coachUid = await resolveCallerUid(req.user);
+    if (!coachUid) {
+      return sendError(res, 409, 'coach.not_migrated', 'Your account needs to complete migration first. Contact support.');
+    }
+
+    const clientDocRef = db.collection(`coaches/${coachUid}/clients`).doc(clientUid);
+    const existing = await clientDocRef.get();
+    if (!existing.exists) {
+      return sendError(res, 404, 'coach.not_linked', 'This client is not linked to your roster.');
+    }
+
+    const now = FieldValue.serverTimestamp();
+    const noteRef = db.collection(`coaches/${coachUid}/clients/${clientUid}/notes`).doc();
+    const note = { text, from: req.user.username, coachUsername: req.user.username, createdAt: now };
+
+    const batch = db.batch();
+    batch.set(noteRef, note);
+    batch.set(db.collection(`users/${clientUid}/coachNotes`).doc(noteRef.id), note);
+    await batch.commit();
+
+    return sendSuccess(res, 201, { noteId: noteRef.id });
+  } catch (err) {
+    console.error('POST /api/coach/clients/:clientUid/notes failed:', err);
+    return sendError(res, 500, 'coach.server_error', String(err));
+  }
+});
+
+// GET /api/coach/clients/:clientUid/notes — coach's own sent-notes history
+// for one client (their own subcollection, not the client's mirror).
+app.get('/api/coach/clients/:clientUid/notes', authenticateToken, async (req, res) => {
+  if (!firebaseEnabled) return sendError(res, 503, 'coach.firebase_disabled', 'Client linking requires a migrated (Firebase) account.');
+  try {
+    const clientUid = String(req.params.clientUid || '').trim();
+    if (!clientUid) return sendError(res, 422, 'coach.missing_client_id', 'clientUid is required.');
+
+    const coachUid = await resolveCallerUid(req.user);
+    if (!coachUid) {
+      return sendError(res, 409, 'coach.not_migrated', 'Your account needs to complete migration first. Contact support.');
+    }
+
+    const snap = await db.collection(`coaches/${coachUid}/clients/${clientUid}/notes`).orderBy('createdAt', 'desc').limit(100).get();
+    const notes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    return sendSuccess(res, 200, { notes });
+  } catch (err) {
+    console.error('GET /api/coach/clients/:clientUid/notes failed:', err);
+    return sendError(res, 500, 'coach.server_error', String(err));
+  }
+});
+
+// GET /api/client/coach-notes — authenticated athlete's own inbox of notes
+// sent by any coach they're linked to.
+app.get('/api/client/coach-notes', authenticateToken, async (req, res) => {
+  if (!firebaseEnabled) return sendError(res, 503, 'coach.firebase_disabled', 'Client linking requires a migrated (Firebase) account.');
+  try {
+    const clientUid = await resolveCallerUid(req.user);
+    if (!clientUid) {
+      return sendError(res, 409, 'coach.not_migrated', 'Your account needs to complete migration first. Contact support.');
+    }
+    const snap = await db.collection(`users/${clientUid}/coachNotes`).orderBy('createdAt', 'desc').limit(100).get();
+    const notes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    return sendSuccess(res, 200, { notes });
+  } catch (err) {
+    console.error('GET /api/client/coach-notes failed:', err);
     return sendError(res, 500, 'coach.server_error', String(err));
   }
 });
@@ -3320,7 +3507,22 @@ app.post('/ai/chat', authenticateToken, async (req, res) => {
   }
 });
 
-app.use('/api/ai', aiRouter);
+// aiRouter (src/routes/ai.js) was mounted with no auth and no rate limit at
+// all — every route under it (chat, checkin-summary, coach-draft-message,
+// macro-advice, generate-program, ...) calls the real Anthropic API and was
+// reachable by anyone on the internet with no credentials, spending real
+// money per request with no attribution. Gating the whole mount, including
+// /api/ai/health, keeps this consistent with every other protected area of
+// the API rather than picking routes to exempt.
+const aiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: { code: 'ai.rate_limited', message: 'Too many AI requests. Try again shortly.' } }
+});
+
+app.use('/api/ai', authenticateToken, aiLimiter, aiRouter);
 app.use('/', leaderboardRoute);
 
 // ── Knowledge Base routes ────────────────────────────────────────────────────
