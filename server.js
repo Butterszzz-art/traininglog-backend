@@ -3320,7 +3320,22 @@ app.post('/ai/chat', authenticateToken, async (req, res) => {
   }
 });
 
-app.use('/api/ai', aiRouter);
+// aiRouter (src/routes/ai.js) was mounted with no auth and no rate limit at
+// all — every route under it (chat, checkin-summary, coach-draft-message,
+// macro-advice, generate-program, ...) calls the real Anthropic API and was
+// reachable by anyone on the internet with no credentials, spending real
+// money per request with no attribution. Gating the whole mount, including
+// /api/ai/health, keeps this consistent with every other protected area of
+// the API rather than picking routes to exempt.
+const aiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: { code: 'ai.rate_limited', message: 'Too many AI requests. Try again shortly.' } }
+});
+
+app.use('/api/ai', authenticateToken, aiLimiter, aiRouter);
 app.use('/', leaderboardRoute);
 
 // ── Knowledge Base routes ────────────────────────────────────────────────────
