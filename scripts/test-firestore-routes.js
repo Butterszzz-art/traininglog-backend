@@ -117,7 +117,11 @@ const jwt = require(path.join(BACKEND_DIR, 'node_modules/jsonwebtoken'));
 const legacyTokenMigrated = jwt.sign({ id: 'rec1', username: 'migrateduser' }, process.env.JWT_SECRET);
 const legacyTokenUnmigrated = jwt.sign({ id: 'rec2', username: 'legacyonlyuser' }, process.env.JWT_SECRET);
 
-require(path.join(BACKEND_DIR, 'server.js')); // self-listens on process.env.PORT
+// server.js only self-listens when run directly (require.main === module) —
+// since the Cloud Functions migration it exports the Express app instead, so
+// this harness has to start listening itself.
+const app = require(path.join(BACKEND_DIR, 'server.js'));
+app.listen(TEST_PORT);
 
 setTimeout(() => {
   const port = TEST_PORT;
