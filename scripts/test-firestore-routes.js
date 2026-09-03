@@ -31,6 +31,7 @@ const store = {}; // collectionPath -> { docId -> data }
 function docRefFor(colPath, docId) {
   return {
     id: docId,
+    __colPath: colPath,
     async get() {
       const data = store[colPath][docId];
       return { exists: !!data, get: (f) => data?.[f], data: () => data };
@@ -75,11 +76,32 @@ function batch() {
     async commit() { for (const op of ops) await op(); }
   };
 }
-const fakeDb = { collection, batch };
+// Minimal recursiveDelete: removes the doc itself plus every collection this
+// harness has created under it (docRefFor's .collection() names them
+// `${parentColPath}/${docId}/${subName}`, so a simple path-prefix match finds
+// all of them without needing a real Firestore tree walk).
+async function recursiveDelete(docRef) {
+  const prefix = `${docRef.__colPath}/${docRef.id}`;
+  if (store[docRef.__colPath]) delete store[docRef.__colPath][docRef.id];
+  for (const key of Object.keys(store)) {
+    if (key === prefix || key.startsWith(`${prefix}/`)) delete store[key];
+  }
+}
+const fakeDb = { collection, batch, recursiveDelete };
 
 require.cache[require.resolve(firebasePath)] = {
   id: firebasePath, filename: firebasePath, loaded: true,
-  exports: { auth: {}, db: fakeDb, FieldValue: { serverTimestamp: () => 'TS' }, firebaseEnabled: true, projectId: 'test-project', initError: null }
+  exports: {
+    // getUser/setCustomUserClaims/deleteUser: minimal stubs so
+    // applyEntitlement() and DELETE /account can run end-to-end here too,
+    // not just the Firestore-only routes the rest of this harness covers.
+    auth: {
+      getUser: async () => ({ customClaims: {} }),
+      setCustomUserClaims: async () => {},
+      deleteUser: async () => {}
+    },
+    db: fakeDb, FieldValue: { serverTimestamp: () => 'TS' }, firebaseEnabled: true, projectId: 'test-project', initError: null
+  }
 };
 
 // Mock the 'airtable' package too — verifyCoachClientLink() deliberately
@@ -110,12 +132,17 @@ class FakeAirtable {
 require.cache[airtablePath] = { id: airtablePath, filename: airtablePath, loaded: true, exports: FakeAirtable };
 
 // Pre-seed: "migrateduser" has completed signup-complete (usernames doc exists)
-store['usernames'] = { migrateduser: { uid: 'uidABC123' }, clientuser: { uid: 'uidClient456' } };
-store['users'] = { uidABC123: { username: 'migrateduser', referralCode: 'REFCODE1' } };
+store['usernames'] = { migrateduser: { uid: 'uidABC123' }, clientuser: { uid: 'uidClient456' }, deleteuser: { uid: 'uidDelete789' } };
+store['users'] = { uidABC123: { username: 'migrateduser', referralCode: 'REFCODE1' }, uidDelete789: { username: 'deleteuser', userPlan: 'pro' } };
 
 const jwt = require(path.join(BACKEND_DIR, 'node_modules/jsonwebtoken'));
 const legacyTokenMigrated = jwt.sign({ id: 'rec1', username: 'migrateduser' }, process.env.JWT_SECRET);
 const legacyTokenUnmigrated = jwt.sign({ id: 'rec2', username: 'legacyonlyuser' }, process.env.JWT_SECRET);
+// Dedicated fixture for the account-deletion test — kept separate from
+// migrateduser/uidABC123 since every other test in this file depends on
+// that user still existing afterward, and deletion is (deliberately)
+// irreversible in this harness too.
+const legacyTokenDelete = jwt.sign({ id: 'rec3', username: 'deleteuser' }, process.env.JWT_SECRET);
 
 // server.js only self-listens when run directly (require.main === module) —
 // since the Cloud Functions migration it exports the Express app instead, so
@@ -375,6 +402,29 @@ setTimeout(() => {
 
     r = await req('GET', '/exercises?limit=1000', legacyTokenMigrated);
     check('GET /exercises (limit=1000) returns the whole dataset for local caching', r.body?.items?.length === 873);
+
+    // ── DELETE /account (migrated user, Apple App Store Guideline 5.1.1(v)) ──
+    // Uses a dedicated fixture (deleteuser/uidDelete789) rather than
+    // migrateduser/uidABC123 — every test above this point still needs that
+    // user to exist, and deletion is (deliberately) irreversible here too.
+    // Seed a subcollection under both users/{uid} and coaches/{uid} so
+    // recursiveDelete's cleanup is actually exercised, not just the two
+    // top-level docs.
+    store['users/uidDelete789/templates'] = { tpl1: { templateName: 'Old Program' } };
+    store['coaches'] = store['coaches'] || {};
+    store['coaches']['uidDelete789'] = { username: 'deleteuser' };
+    store['coaches/uidDelete789/clients'] = { client1: { athleteDisplayName: 'Some Athlete' } };
+
+    r = await req('DELETE', '/account', legacyTokenDelete);
+    check('DELETE /account (migrated) 200', r.status === 200 && r.body?.success === true);
+    check('DELETE /account (migrated) removed users/{uid}', !store['users']['uidDelete789']);
+    check('DELETE /account (migrated) removed users/{uid} subcollection', !store['users/uidDelete789/templates']?.['tpl1']);
+    check('DELETE /account (migrated) removed coaches/{uid}', !store['coaches']?.['uidDelete789']);
+    check('DELETE /account (migrated) removed coaches/{uid} subcollection', !store['coaches/uidDelete789/clients']?.['client1']);
+    check('DELETE /account (migrated) removed usernames mapping', !store['usernames']['deleteuser']);
+
+    r = await req('DELETE', '/account', legacyTokenDelete);
+    check('DELETE /account (already deleted) idempotent, not an error', r.status === 200);
 
     console.log('\n=== RESULTS ===');
     for (const { label, pass } of results) console.log((pass ? 'PASS' : 'FAIL') + ' - ' + label);

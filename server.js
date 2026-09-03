@@ -195,6 +195,17 @@ function authenticateToken(req, res, next) {
   });
 }
 
+// ── Stripe (requires STRIPE_SECRET_KEY) ────────────────────────────────────────
+// Initialized here, above CORS/body-parsing, because the webhook route below
+// needs `stripe`/`stripeEnabled` and must itself be registered before the
+// global express.json() middleware (see that route for why).
+const stripeEnabled = Boolean(process.env.STRIPE_SECRET_KEY);
+let stripe = null;
+if (stripeEnabled) {
+  const Stripe = require('stripe');
+  stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+}
+
 // ── CORS ──────────────────────────────────────────────────────────────────────
 const defaultOrigins = 'https://pocketcoachcoms.org,http://localhost:5173';
 const allowed = (process.env.CORS_ORIGINS ?? defaultOrigins)
@@ -222,6 +233,102 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
 }));
+
+// POST /api/stripe/webhook — Stripe calls this directly, not through the app,
+// so it must see the RAW request body to verify the signature
+// (stripe.webhooks.constructEvent needs the exact bytes Stripe signed, not a
+// re-serialized JSON object). Registered with its own express.raw() ABOVE
+// the blanket express.json() call right below — Express stops at the first
+// route that sends a response, so express.json() never touches this path.
+// Configure this URL + get the matching secret from the Stripe Dashboard →
+// Developers → Webhooks, and set STRIPE_WEBHOOK_SECRET.
+//
+// This closes gap #6 from PHASE2-NOTES.md: no webhook existed anywhere in
+// this codebase, so userPlan/subStatus never actually updated after a real
+// Stripe checkout completed — a paying user's account stayed on "free"
+// until someone manually fixed it.
+const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET || null;
+
+app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  if (!stripeEnabled || !stripeWebhookSecret) {
+    console.warn('[Stripe webhook] Event received but Stripe/webhook secret is not configured — ignoring.');
+    return res.status(503).send('Stripe webhook not configured');
+  }
+
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(req.body, req.headers['stripe-signature'], stripeWebhookSecret);
+  } catch (err) {
+    console.error('[Stripe webhook] Signature verification failed:', err.message);
+    return res.status(400).send(`Webhook signature verification failed: ${err.message}`);
+  }
+
+  try {
+    switch (event.type) {
+      case 'checkout.session.completed': {
+        const session = event.data.object;
+        const { username, plan, billing } = session.metadata || {};
+        if (username && plan) {
+          await applyEntitlement({
+            username, plan, status: 'active', billingCycle: billing || 'monthly',
+            source: 'stripe', sourceCustomerId: session.customer,
+          });
+        }
+        break;
+      }
+      case 'customer.subscription.created':
+      case 'customer.subscription.updated': {
+        const sub = event.data.object;
+        const { username, plan, billing } = sub.metadata || {};
+        if (username && plan) {
+          await applyEntitlement({
+            username, plan, status: sub.status, // active | trialing | past_due | unpaid | ...
+            periodEnd: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
+            billingCycle: billing || 'monthly',
+            source: 'stripe', sourceCustomerId: sub.customer,
+          });
+        }
+        break;
+      }
+      case 'customer.subscription.deleted': {
+        const sub = event.data.object;
+        const { username } = sub.metadata || {};
+        if (username) {
+          await applyEntitlement({
+            username, plan: 'free', status: 'canceled',
+            source: 'stripe', sourceCustomerId: sub.customer,
+          });
+        }
+        break;
+      }
+      case 'invoice.payment_failed': {
+        // Renewal failed — Stripe will retry per its retry schedule (or per
+        // Smart Retries if enabled); reflect past_due immediately rather
+        // than waiting for the eventual subscription.updated/deleted event.
+        const invoice = event.data.object;
+        if (invoice.subscription) {
+          const sub = await stripe.subscriptions.retrieve(invoice.subscription);
+          const { username, plan, billing } = sub.metadata || {};
+          if (username && plan) {
+            await applyEntitlement({
+              username, plan, status: 'past_due', billingCycle: billing || 'monthly',
+              source: 'stripe', sourceCustomerId: sub.customer,
+            });
+          }
+        }
+        break;
+      }
+      default:
+        break; // unhandled event types are fine to ignore
+    }
+    return res.json({ received: true });
+  } catch (err) {
+    console.error(`[Stripe webhook] Failed handling ${event.type}:`, err.message);
+    // 500 so Stripe retries — a failure here is our-side (e.g. a Firestore
+    // write error), not a reason to tell Stripe the event was bad.
+    return res.status(500).send('Webhook handler failed');
+  }
+});
 
 app.use(express.json({ limit: '256kb' }));
 
@@ -325,14 +432,6 @@ app.get('/api/user/plan', authenticateToken, async (req, res) => {
   }
 });
 
-// ── Stripe checkout (requires STRIPE_SECRET_KEY) ─────────────────────────────
-const stripeEnabled = Boolean(process.env.STRIPE_SECRET_KEY);
-let stripe = null;
-if (stripeEnabled) {
-  const Stripe = require('stripe');
-  stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-}
-
 app.post('/api/stripe/create-checkout-session', authenticateToken, async (req, res) => {
   if (!stripeEnabled) return res.status(503).json({ error: 'Stripe not configured' });
   const { username, plan, billing } = req.body;
@@ -407,6 +506,292 @@ app.get('/api/stripe/portal', authenticateToken, async (req, res) => {
   } catch (err) {
     console.error('[Stripe portal]', err.message);
     return res.status(500).json({ error: 'Could not create portal session' });
+  }
+});
+
+// ── Apple In-App Purchase (IAP) ─────────────────────────────────────────────────
+// Skeleton for the iOS payment rail. Apple Guideline 3.1.1 requires digital
+// subscriptions consumed inside the app to go through StoreKit, not an
+// external processor — the Stripe checkout above is fine for web/Android but
+// cannot be the purchase path inside the iOS build. This receives Apple's
+// server-to-server notifications and converges on applyEntitlement(), the
+// same users/{uid} write path the Stripe webhook above uses.
+//
+// NOT production-ready — disabled by default (APPLE_IAP_ENABLED) so an
+// unfinished/unverified integration can't silently grant free access.
+// Remaining manual work before flipping it on, all in IAP-SETUP.md:
+//   1. `npm install @apple/app-store-server-library` (Apple's own library —
+//      it verifies the JWS signature chain up to Apple's Root CA, which is
+//      the one part of this that must not be hand-rolled: skipping proper
+//      chain verification means anyone could POST a self-signed payload and
+//      grant themselves Pro for free).
+//   2. Create the Pro/Coach auto-renewable subscription products in App
+//      Store Connect → Monetization → Subscriptions, and update
+//      APPLE_PRODUCT_PLAN_MAP below with their real product ids.
+//   3. Generate an App Store Server API key (Users and Access → Integrations)
+//      and set APPLE_BUNDLE_ID / APPLE_IAP_SANDBOX.
+//   4. Point App Store Connect's Server Notifications V2 URL at
+//      POST /api/iap/apple/notifications (production and sandbox are
+//      separate URLs, both need setting).
+//   5. Wire an actual StoreKit purchase call into the frontend — see the
+//      `purchaseViaIAP` stub in src/js/payments.js — once ios/ exists and a
+//      Capacitor IAP plugin is installed.
+//   6. Test end-to-end against Apple's sandbox before enabling in production.
+//
+// The exact method names on SignedDataVerifier below (verifyAndDecode*) are
+// written against this library's documented shape at the time this was
+// written — confirm them against the installed version's current docs
+// before relying on this, library APIs do shift between versions.
+const appleIapEnabled = process.env.APPLE_IAP_ENABLED === 'true';
+let appleSignedDataVerifier = null;
+if (appleIapEnabled) {
+  try {
+    const { SignedDataVerifier, Environment } = require('@apple/app-store-server-library');
+    // Apple's published root certificates (Apple Root CA - G3) — download
+    // the .cer files from https://www.apple.com/certificateauthority/ and
+    // load them here (e.g. as Buffers) per IAP-SETUP.md. Left empty until
+    // that manual step is done, which is also why appleIapEnabled defaults
+    // to false: an empty root-CA list can't verify anything.
+    const appleRootCAs = [];
+    appleSignedDataVerifier = new SignedDataVerifier(
+      appleRootCAs,
+      true, // enableOnlineChecks — asks Apple's OCSP responder about revocation
+      process.env.APPLE_IAP_SANDBOX === 'true' ? Environment.SANDBOX : Environment.PRODUCTION,
+      process.env.APPLE_BUNDLE_ID || 'com.pocketcoach.app'
+    );
+  } catch (err) {
+    console.error('[Apple IAP] Failed to initialize SignedDataVerifier — is @apple/app-store-server-library installed and are the APPLE_* env vars set?', err.message);
+    appleSignedDataVerifier = null;
+  }
+}
+
+// Apple product id → { plan, billingCycle }. Placeholder ids — replace with
+// the real identifiers once the products exist in App Store Connect. Kept on
+// the same 'pro'/'coach' plan names the Stripe path uses so
+// applyEntitlement() doesn't need to know which rail a call came from.
+const APPLE_PRODUCT_PLAN_MAP = {
+  'com.pocketcoach.app.pro.monthly':   { plan: 'pro',   billingCycle: 'monthly' },
+  'com.pocketcoach.app.pro.annual':    { plan: 'pro',   billingCycle: 'annual'  },
+  'com.pocketcoach.app.coach.monthly': { plan: 'coach', billingCycle: 'monthly' },
+  'com.pocketcoach.app.coach.annual':  { plan: 'coach', billingCycle: 'annual'  },
+};
+
+// Maps Apple's V2 notificationType to a status/plan override. Anything not
+// listed here (SUBSCRIBED, DID_RENEW, DID_CHANGE_RENEWAL_STATUS, etc.) just
+// means "still active" — the transaction's own expiresDate is what actually
+// gates access, not the notification type.
+function appleEntitlementFromNotification(notificationType) {
+  if (['EXPIRED', 'REFUND', 'REVOKE', 'GRACE_PERIOD_EXPIRED'].includes(notificationType)) {
+    return { plan: 'free', status: 'canceled' };
+  }
+  if (notificationType === 'DID_FAIL_TO_RENEW') return { status: 'past_due' };
+  return { status: 'active' };
+}
+
+// POST /api/iap/apple/notifications — App Store Server Notifications V2.
+// Configure in App Store Connect → your app → App Information → App Store
+// Server Notifications. Apple retries on non-2xx, so this always returns 200
+// once the payload has been durably applied (or was safely ignorable).
+app.post('/api/iap/apple/notifications', async (req, res) => {
+  if (!appleIapEnabled || !appleSignedDataVerifier) {
+    console.warn('[Apple IAP] Notification received but IAP is not enabled/configured — ignoring.');
+    return res.status(503).send('Apple IAP not configured');
+  }
+
+  try {
+    const signedPayload = req.body?.signedPayload;
+    if (!signedPayload) return res.status(400).send('Missing signedPayload');
+
+    // This is the check that must not be skipped: it verifies the JWS chain
+    // up to Apple's pinned Root CA, not just that *some* key signed it.
+    const notification = await appleSignedDataVerifier.verifyAndDecodeNotification(signedPayload);
+    const transactionInfo = notification.data?.signedTransactionInfo
+      ? await appleSignedDataVerifier.verifyAndDecodeTransaction(notification.data.signedTransactionInfo)
+      : null;
+
+    if (transactionInfo?.appAccountToken && transactionInfo?.productId) {
+      const mapped = APPLE_PRODUCT_PLAN_MAP[transactionInfo.productId];
+      if (mapped) {
+        const derived = appleEntitlementFromNotification(notification.notificationType);
+        await applyEntitlement({
+          uid: transactionInfo.appAccountToken, // set at purchase time on the client — see payments.js
+          plan: derived.plan || mapped.plan,
+          status: derived.status,
+          billingCycle: mapped.billingCycle,
+          periodEnd: transactionInfo.expiresDate ? new Date(transactionInfo.expiresDate).toISOString() : null,
+          source: 'apple',
+          sourceCustomerId: transactionInfo.originalTransactionId,
+        });
+      } else {
+        console.warn(`[Apple IAP] Unrecognized productId "${transactionInfo.productId}" — check APPLE_PRODUCT_PLAN_MAP.`);
+      }
+    }
+
+    return res.status(200).send();
+  } catch (err) {
+    console.error('[Apple IAP] Failed handling notification:', err.message);
+    return res.status(500).send('Notification handler failed');
+  }
+});
+
+// POST /api/iap/apple/verify — called by the client immediately after a
+// purchase completes, alongside (not instead of) the server notification
+// above, since server notifications can lag by seconds to minutes and a user
+// who just paid shouldn't stare at a locked feature while waiting. Body:
+// { signedTransaction } — the JWS string StoreKit 2's
+// Transaction.jsonRepresentation gives the client right after purchase.
+app.post('/api/iap/apple/verify', authenticateToken, async (req, res) => {
+  if (!appleIapEnabled || !appleSignedDataVerifier) {
+    return sendError(res, 503, 'iap.apple_disabled', 'Apple IAP is not configured yet.');
+  }
+  const { signedTransaction } = req.body || {};
+  if (!signedTransaction) return sendError(res, 400, 'iap.missing_transaction', 'signedTransaction is required.');
+
+  try {
+    const transactionInfo = await appleSignedDataVerifier.verifyAndDecodeTransaction(signedTransaction);
+    const mapped = APPLE_PRODUCT_PLAN_MAP[transactionInfo.productId];
+    if (!mapped) return sendError(res, 400, 'iap.unknown_product', 'Unrecognized product id.');
+
+    const uid = await resolveFirestoreUid(req.user.username);
+    if (!uid) return sendError(res, 400, 'iap.no_account', 'No Firestore account for this session.');
+
+    await applyEntitlement({
+      uid, plan: mapped.plan, status: 'active', billingCycle: mapped.billingCycle,
+      periodEnd: transactionInfo.expiresDate ? new Date(transactionInfo.expiresDate).toISOString() : null,
+      source: 'apple', sourceCustomerId: transactionInfo.originalTransactionId,
+    });
+
+    return sendSuccess(res, 200, { plan: mapped.plan });
+  } catch (err) {
+    console.error('[Apple IAP] Transaction verification failed:', err.message);
+    return sendError(res, 400, 'iap.verification_failed', 'Could not verify transaction with Apple.');
+  }
+});
+
+// ── Account deletion ──────────────────────────────────────────────────────────
+// Apple App Store Guideline 5.1.1(v) requires apps that support account
+// creation to also offer in-app, self-service account deletion — pointing
+// users at a support email does not satisfy it. This must remove enough that
+// the same username/email can be used to sign up again afterward.
+//
+// Primary path is Firebase/Firestore (the only track new signups use since
+// /register and /login were retired — see the 410 responses above). A
+// best-effort Airtable cleanup also runs for two leftover cases: (a) accounts
+// that reclaimed a pre-Firebase username before the Airtable reclaim path was
+// removed and may still have an old Users row, and (b) any account that never
+// migrated at all, callable here only for as long as it still holds an
+// unexpired legacy JWT. Each Airtable table delete is independent and
+// swallows its own error so one failing table (e.g. a stale rate limit)
+// doesn't stop the rest — this endpoint should make maximum forward
+// progress, not succeed or fail atomically.
+//
+// Only cancels the Stripe rail — an Apple IAP subscription (see
+// applyEntitlement/subSource below) cannot be canceled from our backend at
+// all; Apple is the merchant of record and only the user (iOS Settings →
+// [name] → Subscriptions) or an App Store Connect refund can stop it. This
+// only stops us from continuing to *grant* access once the account is gone.
+async function cancelStripeSubscriptions(customerId) {
+  if (!stripeEnabled || !customerId) return;
+  try {
+    const subs = await stripe.subscriptions.list({ customer: customerId, status: 'all', limit: 100 });
+    await Promise.all(
+      subs.data
+        .filter(s => !['canceled', 'incomplete_expired'].includes(s.status))
+        .map(s => stripe.subscriptions.cancel(s.id).catch(err =>
+          console.error(`[Account deletion] Failed to cancel subscription ${s.id}:`, err.message)))
+    );
+  } catch (err) {
+    console.error('[Account deletion] Stripe subscription lookup failed:', err.message);
+  }
+}
+
+// recursiveDelete walks users/{uid} and coaches/{uid} and every subcollection
+// under them (templates, workouts + their sets, programs, macro/body/cardio/
+// crossfit logs, mobility routines & sessions, coach clients & exercise
+// videos — see PHASE2-NOTES.md's collection-home table) in one call each, so
+// this doesn't need to know every subcollection name individually.
+async function deleteFirestoreAccount(uid, username) {
+  await db.recursiveDelete(db.collection('users').doc(uid));
+  await db.recursiveDelete(db.collection('coaches').doc(uid)); // no-op if this user never coached anyone
+  await db.collection('usernames').doc(String(username).toLowerCase()).delete();
+}
+
+// Every Airtable table that stores per-user rows keyed by the plain Username
+// field (USERNAME_FIELD) — mirrors the route-cutover table in PHASE2-NOTES.md.
+// DailyMissionState (keyed by UserId) and CoachClients (keyed by CoachId/
+// ClientId/ClientName) are handled separately below since they use different
+// field names.
+//
+// A function, not a plain array: several of these table constants
+// (BODYWEIGHT_TABLE, CARDIO_TABLE, PROGRAMS_TABLE, MOBILITY_*_TABLE etc.) are
+// declared further down the file, after this point in module load order —
+// building the array eagerly here would throw "Cannot access ... before
+// initialization". Called lazily inside deleteLegacyAirtableAccount(), at
+// request time, well after the whole module (and every const in it) has
+// finished loading.
+function legacyUsernameKeyedTables() {
+  return [
+    WORKOUTS_TABLE, MACRO_TARGETS_TABLE, DAILY_LOGS_TABLE, TEMPLATES_TABLE_NAME,
+    BODYWEIGHT_TABLE, MEASUREMENTS_TABLE, CARDIO_TABLE, CROSSFIT_TABLE,
+    PROGRAMS_TABLE, MOBILITY_ROUTINES_TABLE, MOBILITY_SESSIONS_TABLE,
+  ];
+}
+
+async function deleteAirtableRecordsWhere(tableName, formula) {
+  if (!airtableEnabled) return;
+  try {
+    const records = await base(tableName).select({ filterByFormula: formula }).all();
+    for (let i = 0; i < records.length; i += 10) {
+      const chunk = records.slice(i, i + 10).map(r => r.id);
+      if (chunk.length) await base(tableName).destroy(chunk);
+    }
+  } catch (err) {
+    console.error(`[Account deletion] Failed clearing ${tableName}:`, err.message);
+  }
+}
+
+async function deleteLegacyAirtableAccount(username, userRecordId) {
+  const safe = escapeAirtableFormulaValue(username);
+  for (const table of legacyUsernameKeyedTables()) {
+    await deleteAirtableRecordsWhere(table, `{${USERNAME_FIELD}}='${safe}'`);
+  }
+  await deleteAirtableRecordsWhere(DAILY_MISSION_TABLE, `{UserId}='${safe}'`);
+  await deleteAirtableRecordsWhere(COACH_CLIENTS_TABLE,
+    `OR({CoachId}='${safe}',{ClientId}='${safe}',{ClientName}='${safe}')`);
+  if (userRecordId) {
+    try { await base(USERS_TABLE).destroy([userRecordId]); }
+    catch (err) { console.error('[Account deletion] Failed deleting Users row:', err.message); }
+  }
+}
+
+app.delete('/account', authenticateToken, async (req, res) => {
+  const username = req.user?.username;
+  if (!username) return sendError(res, 400, 'account.no_username', 'No username on this session.');
+
+  try {
+    const uid = await resolveFirestoreUid(username);
+    const legacyUser = airtableEnabled ? await getUserByUsername(username) : null;
+
+    let stripeCustomerId = legacyUser?.fields?.StripeCustomerId || null;
+    if (uid) {
+      const snap = await db.collection('users').doc(uid).get();
+      stripeCustomerId = snap.get('stripeCustomerId') || stripeCustomerId;
+    }
+    await cancelStripeSubscriptions(stripeCustomerId);
+
+    if (uid) await deleteFirestoreAccount(uid, username);
+    if (legacyUser || !uid) await deleteLegacyAirtableAccount(username, legacyUser?.id);
+
+    if (uid && firebaseEnabled) {
+      await fbAuth.deleteUser(uid).catch(err =>
+        console.error('[Account deletion] Failed deleting Firebase Auth user:', err.message));
+    }
+
+    console.info(`[Account deletion] Completed for "${username}" (uid: ${uid || 'none'})`);
+    return sendSuccess(res, 200, { deleted: true });
+  } catch (err) {
+    console.error('[DELETE /account]', err.message);
+    return sendError(res, 500, 'account.delete_failed', 'Could not delete account. Please try again or contact support.');
   }
 });
 
@@ -546,22 +931,49 @@ async function updateUserPlan(recordId, fields) {
   }
 }
 
-// Sync the tier custom claim after a plan change. The Stripe webhook handler
-// (PAY-2) must call this alongside updateUserPlan — claims are what gate the
-// routes for Firebase-auth'd users, and they only refresh on the next ID-token
-// refresh (client forces it with getIdToken(true) after checkout).
-async function syncTierClaim(username, tier) {
-  if (!firebaseEnabled || !username) return false;
+// Single write path for subscription state — the Stripe webhook and the
+// Apple IAP handlers (both further down) both call this, so both payment
+// rails converge on the exact same users/{uid} fields that
+// GET /api/user/plan already reads, instead of each rail growing its own
+// slightly-different update logic. Also syncs the `tier` custom claim, since
+// that's what gates routes for Firebase-auth'd users and only refreshes on
+// the client's next ID-token refresh (getIdToken(true) after checkout).
+//
+// Supersedes the old syncTierClaim() helper (PAY-1, never had a caller) —
+// same claim-sync behavior, plus subStatus/periodEnd/billingCycle/source.
+//
+// Accepts EITHER `username` (the Stripe rail's checkout/subscription
+// metadata carries username, not uid) OR `uid` directly (the Apple rail
+// resolves uid from the appAccountToken set at purchase time — see
+// payments.js — since Apple notifications don't carry a username at all).
+async function applyEntitlement({ username, uid, plan, status, periodEnd = null, billingCycle = null, source, sourceCustomerId = null }) {
+  if (!firebaseEnabled) return false;
+  let resolvedUid = uid || null;
   try {
-    const snap = await db.collection('usernames').doc(String(username).toLowerCase()).get();
-    if (!snap.exists) return false; // legacy user, no Firebase account yet
-    const uid = snap.get('uid');
-    const { customClaims = {} } = await fbAuth.getUser(uid);
-    await fbAuth.setCustomUserClaims(uid, { ...customClaims, tier });
-    await db.collection('users').doc(uid).set({ userPlan: tier }, { merge: true });
+    if (!resolvedUid && username) {
+      resolvedUid = await resolveFirestoreUid(username);
+    }
+    if (!resolvedUid) {
+      console.warn(`[applyEntitlement] No Firestore uid for ${username ? `username "${username}"` : `uid "${uid}"`} — cannot apply entitlement.`);
+      return false;
+    }
+
+    const fields = {
+      userPlan: plan,
+      subStatus: status,
+      subCurrentPeriodEnd: periodEnd,
+      billingCycle,
+      subSource: source, // 'stripe' | 'apple' — which rail owns this subscription
+    };
+    if (source === 'stripe' && sourceCustomerId) fields.stripeCustomerId = sourceCustomerId;
+    if (source === 'apple' && sourceCustomerId) fields.appleOriginalTransactionId = sourceCustomerId;
+    await db.collection('users').doc(resolvedUid).set(fields, { merge: true });
+
+    const { customClaims = {} } = await fbAuth.getUser(resolvedUid);
+    await fbAuth.setCustomUserClaims(resolvedUid, { ...customClaims, tier: plan });
     return true;
   } catch (err) {
-    console.error('[syncTierClaim] Failed:', err.message);
+    console.error('[applyEntitlement] Failed:', err.message);
     return false;
   }
 }
