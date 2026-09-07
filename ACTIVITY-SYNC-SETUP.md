@@ -25,8 +25,9 @@ directly (Google OAuth 2.0 via Google Cloud Console, not `dev.fitbit.com`).
    status, add your own Google account(s) as test users (required to
    complete consent until the app passes Google's verification review for
    >100 users).
-6. On the **Data Access** page, add scope
-   `https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly`.
+6. On the **Data Access** page, add both scopes:
+   `https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly`
+   and `https://www.googleapis.com/auth/googlehealth.sleep.readonly`.
 7. Copy the **Client ID** and **Client Secret**.
 
 ## 2. Firebase secrets
@@ -56,10 +57,17 @@ gets redirected back to after consent (`?activitySync=connected` /
   distance (km), calories out, active/sedentary minutes for that day, built
   from one `dailyRollUp` call per data type. Cached to
   `users/{uid}/activitySync/{date}`.
+- `GET /api/activity-sync/sleep?date=YYYY-MM-DD&goalMinutes=480` (auth
+  required) → last night's bedtime/wake time, sleep-stage minutes (light/
+  deep/REM/awake), awakening count, and an estimated 0-100 sleep score +
+  label. Sleep has no `dailyRollUp` (sessions can span midnight), so this
+  uses the `dataTypes.dataPoints` `list` method instead and picks the
+  session that ends latest in a window covering the prior evening through
+  midday of `date`. Cached to `users/{uid}/activitySync/{date}.sleep`
+  (merged into the same doc as `/activity`, not a separate collection).
 
-Only the `activity_and_fitness.readonly` scope is requested. Heart rate,
-sleep, and weight are not wired up yet — add scopes + new data-type fetches
-to `/api/activity-sync/activity` if/when those are needed.
+Heart rate and weight are not wired up yet — add scopes + new data-type
+fetches if/when those are needed.
 
 ⚠️ **The per-data-type response field names in `server.js`
 (`ACTIVITY_SYNC_DATA_TYPES`) are confirmed for `steps` only** (`countSum`,
@@ -69,6 +77,14 @@ to the first numeric field it finds and logs a warning if the guessed field
 name is wrong, so it degrades gracefully, but check the logs after the
 first real connect and fix the `valueKey`s in `ACTIVITY_SYNC_DATA_TYPES` if
 you see those warnings.
+
+⚠️ **`fetchSleepSession`'s query parameter names (`startTime`/`endTime`) are
+also an unverified guess** — check
+`https://developers.google.com/health/reference/rest/v4/users.dataTypes.dataPoints/list`
+if `/api/activity-sync/sleep` errors out, and adjust. The sleep score
+formula (`computeSleepScore` in `server.js`) is an original estimate, not a
+reproduction of Fitbit's or Google's own (undisclosed) scoring — don't
+present it in the UI as anything more than an in-app estimate.
 
 ## 4. Rate limits / token lifetime
 

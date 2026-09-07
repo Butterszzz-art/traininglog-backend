@@ -2140,7 +2140,10 @@ const activitySyncEnabled = Boolean(GOOGLE_HEALTH_CLIENT_ID && GOOGLE_HEALTH_CLI
 if (!activitySyncEnabled) console.warn('[WARN] Activity Sync disabled — GOOGLE_HEALTH_CLIENT_ID/GOOGLE_HEALTH_CLIENT_SECRET/GOOGLE_HEALTH_REDIRECT_URI not set.');
 
 const ACTIVITY_SYNC_APP_URL = process.env.APP_URL || 'https://pocketcoachcoms.org';
-const ACTIVITY_SYNC_SCOPE = 'https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly';
+const ACTIVITY_SYNC_SCOPE = [
+  'https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly',
+  'https://www.googleapis.com/auth/googlehealth.sleep.readonly'
+].join(' ');
 const GOOGLE_HEALTH_API_BASE = 'https://health.googleapis.com/v4';
 
 async function requestGoogleHealthToken(bodyParams) {
@@ -2389,6 +2392,117 @@ app.get('/api/activity-sync/activity', authenticateToken, async (req, res) => {
     return sendSuccess(res, 200, { activity });
   } catch (err) {
     console.error('GET /api/activity-sync/activity failed:', err);
+    return sendError(res, 500, 'activity_sync.server_error', String(err));
+  }
+});
+
+// Sleep has no dailyRollUp (sessions can span midnight), so it's fetched via
+// the `list` method instead of the dailyRollUp POST the other data types use.
+// ⚠️ The exact query parameter names below (time-range filter, pagination)
+// are a best-effort guess pending a real response to verify against
+// https://developers.google.com/health/reference/rest/v4/users.dataTypes.dataPoints/list
+// — if this 404s/400s in practice, check that reference and adjust.
+// "Last night" is attributed to the day the user wakes up: query a window
+// from the prior evening through midday of `date`, and take whichever
+// session's interval ends latest in that window (handles naps/multiple
+// sessions by picking the main overnight one).
+async function fetchSleepSession(accessToken, healthUserId, date) {
+  const dayStart = new Date(date + 'T12:00:00Z');
+  const windowStart = new Date(dayStart.getTime() - 24 * 60 * 60 * 1000).toISOString();
+  const windowEnd = dayStart.toISOString();
+
+  const response = await fetch(
+    `${GOOGLE_HEALTH_API_BASE}/users/${healthUserId}/dataTypes/sleep/dataPoints`
+    + `?startTime=${encodeURIComponent(windowStart)}&endTime=${encodeURIComponent(windowEnd)}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  const data = await response.json();
+  if (!response.ok) throw new Error(data?.error?.message || 'sleep dataPoints.list failed');
+
+  const points = data.dataPoints || data.point || [];
+  if (!points.length) return null;
+
+  // Pick the session with the latest interval.endTime within the window.
+  const latest = points.reduce((best, p) => {
+    const end = new Date(p?.sleep?.interval?.endTime || 0).getTime();
+    const bestEnd = new Date(best?.sleep?.interval?.endTime || 0).getTime();
+    return end > bestEnd ? p : best;
+  }, points[0]);
+
+  const interval = latest?.sleep?.interval;
+  if (!interval?.startTime || !interval?.endTime) return null;
+
+  const stageMinutes = { LIGHT: 0, DEEP: 0, REM: 0, AWAKE: 0 };
+  for (const stage of latest?.sleep?.stages || []) {
+    const type = String(stage?.type || '').toUpperCase();
+    const mins = (new Date(stage.endTime) - new Date(stage.startTime)) / 60000;
+    if (Number.isFinite(mins) && mins > 0 && type in stageMinutes) stageMinutes[type] += mins;
+  }
+  const sleepMinutes = stageMinutes.LIGHT + stageMinutes.DEEP + stageMinutes.REM;
+  const timeInBedMinutes = (new Date(interval.endTime) - new Date(interval.startTime)) / 60000;
+  const awakenings = (latest?.sleep?.shortAwakenings || []).length;
+
+  return {
+    bedtime: interval.startTime,
+    wakeTime: interval.endTime,
+    sleepMinutes: Math.round(sleepMinutes),
+    timeInBedMinutes: Math.round(timeInBedMinutes),
+    lightMinutes: Math.round(stageMinutes.LIGHT),
+    deepMinutes: Math.round(stageMinutes.DEEP),
+    remMinutes: Math.round(stageMinutes.REM),
+    awakeMinutes: Math.round(stageMinutes.AWAKE),
+    awakenings
+  };
+}
+
+// Original estimate — Google/Fitbit's own sleep-scoring algorithms are not
+// public, so this is NOT a reproduction of any vendor's score. Weighted on
+// duration-vs-goal (50pts), the deep+REM "restorative" proportion of total
+// sleep (35pts, scored against ~45% as a typical healthy reference ratio),
+// and restfulness (15pts, -1 per awakening). The frontend must label this
+// as an estimate, not present it as an authoritative/clinical score.
+function computeSleepScore({ sleepMinutes, deepMinutes, remMinutes, awakenings }, goalMinutes) {
+  const goal = Number(goalMinutes) > 0 ? Number(goalMinutes) : 480; // default 8h
+  const durationScore = Math.min(sleepMinutes / goal, 1) * 50;
+  const restorativeRatio = sleepMinutes > 0 ? (deepMinutes + remMinutes) / sleepMinutes : 0;
+  const qualityScore = Math.min(restorativeRatio / 0.45, 1) * 35;
+  const restfulnessScore = Math.max(15 - Math.min(awakenings, 15), 0);
+  const score = Math.round(durationScore + qualityScore + restfulnessScore);
+  const label = score >= 90 ? 'Excellent' : score >= 80 ? 'Good' : score >= 60 ? 'Fair' : 'Poor';
+  return { score, label };
+}
+
+// GET /api/activity-sync/sleep?date=YYYY-MM-DD&goalMinutes=480 — last
+// night's sleep (defaults to the night ending on `date`, or today).
+// goalMinutes is optional, passed in from the frontend's own
+// settings.profile.goals.sleepTarget (hours*60) rather than looked up
+// server-side, since profile goals live client-side in this app.
+app.get('/api/activity-sync/sleep', authenticateToken, async (req, res) => {
+  if (!activitySyncEnabled) return sendError(res, 503, 'activity_sync.disabled', 'Activity Sync is not configured.');
+  if (!req.user.uid) {
+    return sendError(res, 403, 'activity_sync.requires_firebase_auth', 'Please sign in again before syncing sleep.');
+  }
+
+  const date = typeof req.query.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date)
+    ? req.query.date
+    : new Date().toISOString().slice(0, 10);
+  const goalMinutes = Number(req.query.goalMinutes) > 0 ? Number(req.query.goalMinutes) : 480;
+
+  try {
+    const session = await getValidActivitySyncSession(req.user.uid);
+    if (!session) return sendError(res, 409, 'activity_sync.not_connected', 'Activity Sync is not connected.');
+
+    const sleepSession = await fetchSleepSession(session.accessToken, session.healthUserId, date);
+    if (!sleepSession) return sendError(res, 404, 'activity_sync.no_sleep_data', 'No sleep data found for that night.');
+
+    const { score, label } = computeSleepScore(sleepSession, goalMinutes);
+    const sleep = { date, ...sleepSession, score, label, syncedAt: new Date().toISOString() };
+
+    await db.collection(`users/${req.user.uid}/activitySync`).doc(date).set({ sleep }, { merge: true });
+
+    return sendSuccess(res, 200, { sleep });
+  } catch (err) {
+    console.error('GET /api/activity-sync/sleep failed:', err);
     return sendError(res, 500, 'activity_sync.server_error', String(err));
   }
 });
