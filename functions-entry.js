@@ -18,10 +18,18 @@ const { defineSecret } = require('firebase-functions/params');
 const jwtSecret = defineSecret('JWT_SECRET');
 const anthropicApiKey = defineSecret('ANTHROPIC_API_KEY');
 const intakeCoachUsername = defineSecret('INTAKE_COACH_USERNAME');
+const googleHealthClientId = defineSecret('GOOGLE_HEALTH_CLIENT_ID');
+const googleHealthClientSecret = defineSecret('GOOGLE_HEALTH_CLIENT_SECRET');
+const googleHealthRedirectUri = defineSecret('GOOGLE_HEALTH_REDIRECT_URI');
 
 const app = require('./server');
 
 // All routes (POST /api/intake, /login, /coach/*, etc.) are served under
 // this one function via Express's own internal routing — Firebase Hosting
 // (once set up) or direct callers hit this same URL for every path.
-exports.api = onRequest({ secrets: [jwtSecret, anthropicApiKey, intakeCoachUsername] }, app);
+exports.api = onRequest({
+  secrets: [
+    jwtSecret, anthropicApiKey, intakeCoachUsername,
+    googleHealthClientId, googleHealthClientSecret, googleHealthRedirectUri
+  ]
+}, app);

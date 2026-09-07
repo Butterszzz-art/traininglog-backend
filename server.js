@@ -2119,163 +2119,245 @@ app.get('/crossfit', authenticateToken, async (req, res) => {
   }
 });
 
-// ── Fitbit ────────────────────────────────────────────────────────────────────
-// OAuth 2.0 Authorization Code flow (steps/activity only for now). Tokens live
-// in their own top-level collection (fitbitTokens/{uid}) rather than on the
-// user doc so they're never exposed if the client SDK ever reads users/{uid}
-// directly — that collection is server-only, see firestore.rules.
-const FITBIT_CLIENT_ID     = process.env.FITBIT_CLIENT_ID || null;
-const FITBIT_CLIENT_SECRET = process.env.FITBIT_CLIENT_SECRET || null;
-const FITBIT_REDIRECT_URI  = process.env.FITBIT_REDIRECT_URI || null;
-const fitbitEnabled = Boolean(FITBIT_CLIENT_ID && FITBIT_CLIENT_SECRET && FITBIT_REDIRECT_URI);
-if (!fitbitEnabled) console.warn('[WARN] Fitbit disabled — FITBIT_CLIENT_ID/FITBIT_CLIENT_SECRET/FITBIT_REDIRECT_URI not set.');
+// ── Activity Sync (Google Health API) ───────────────────────────────────────
+// OAuth 2.0 Authorization Code flow (activity_and_fitness scope only, for
+// now). Tokens live in their own top-level collection (activitySyncTokens/{uid})
+// rather than on the user doc so they're never exposed if the client SDK ever
+// reads users/{uid} directly — that collection is server-only, see
+// firestore.rules.
+//
+// This replaces the old Fitbit Web API integration, which Google is turning
+// down September 30, 2026. Google Health API is a different platform: OAuth
+// runs through Google's own accounts.google.com / oauth2.googleapis.com
+// endpoints (registered in Google Cloud Console, not dev.fitbit.com), and
+// there's an extra step vs. Fitbit — the token response carries no user id,
+// so a users.getIdentity call resolves the Health-API-internal user id
+// (`healthUserId`) that every later dataTypes.dataPoints call needs.
+const GOOGLE_HEALTH_CLIENT_ID     = process.env.GOOGLE_HEALTH_CLIENT_ID || null;
+const GOOGLE_HEALTH_CLIENT_SECRET = process.env.GOOGLE_HEALTH_CLIENT_SECRET || null;
+const GOOGLE_HEALTH_REDIRECT_URI  = process.env.GOOGLE_HEALTH_REDIRECT_URI || null;
+const activitySyncEnabled = Boolean(GOOGLE_HEALTH_CLIENT_ID && GOOGLE_HEALTH_CLIENT_SECRET && GOOGLE_HEALTH_REDIRECT_URI);
+if (!activitySyncEnabled) console.warn('[WARN] Activity Sync disabled — GOOGLE_HEALTH_CLIENT_ID/GOOGLE_HEALTH_CLIENT_SECRET/GOOGLE_HEALTH_REDIRECT_URI not set.');
 
-const FITBIT_APP_URL = process.env.APP_URL || 'https://pocketcoachcoms.org';
+const ACTIVITY_SYNC_APP_URL = process.env.APP_URL || 'https://pocketcoachcoms.org';
+const ACTIVITY_SYNC_SCOPE = 'https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly';
+const GOOGLE_HEALTH_API_BASE = 'https://health.googleapis.com/v4';
 
-function fitbitBasicAuthHeader() {
-  return 'Basic ' + Buffer.from(`${FITBIT_CLIENT_ID}:${FITBIT_CLIENT_SECRET}`).toString('base64');
-}
-
-async function requestFitbitToken(bodyParams) {
-  const response = await fetch('https://api.fitbit.com/oauth2/token', {
+async function requestGoogleHealthToken(bodyParams) {
+  const response = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
-    headers: {
-      Authorization: fitbitBasicAuthHeader(),
-      'Content-Type': 'application/x-www-form-urlencoded'
-    },
-    body: new URLSearchParams(bodyParams)
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      ...bodyParams,
+      client_id: GOOGLE_HEALTH_CLIENT_ID,
+      client_secret: GOOGLE_HEALTH_CLIENT_SECRET
+    })
   });
   const data = await response.json();
-  if (!response.ok) throw new Error(data?.errors?.[0]?.message || 'Fitbit token request failed');
+  if (!response.ok) throw new Error(data?.error_description || data?.error || 'Google token request failed');
   return data;
 }
 
-async function saveFitbitTokens(uid, tokenResponse) {
-  await db.collection('fitbitTokens').doc(uid).set({
+// Resolves the Health-API-internal user id for the access token's account.
+// Any of the readonly scopes (activity_and_fitness included) authorizes this call.
+async function fetchHealthUserId(accessToken) {
+  const response = await fetch(`${GOOGLE_HEALTH_API_BASE}/users/me/identity`, {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data?.error?.message || 'users.getIdentity failed');
+  return data.healthUserId;
+}
+
+async function saveActivitySyncTokens(uid, tokenResponse, healthUserId) {
+  await db.collection('activitySyncTokens').doc(uid).set({
     accessToken: tokenResponse.access_token,
-    refreshToken: tokenResponse.refresh_token,
+    // Google only returns a refresh_token on first consent (or when prompt=consent
+    // forces re-consent) — a refresh call's response has none, so don't overwrite
+    // a previously-stored one with undefined.
+    ...(tokenResponse.refresh_token ? { refreshToken: tokenResponse.refresh_token } : {}),
     expiresAt: Date.now() + (Number(tokenResponse.expires_in) || 0) * 1000,
-    fitbitUserId: tokenResponse.user_id || null,
+    ...(healthUserId ? { healthUserId } : {}),
     scope: tokenResponse.scope || '',
     updatedAt: new Date().toISOString()
   }, { merge: true });
 }
 
-// Returns a valid access token for uid, refreshing it if expired, or null if
-// not connected / the refresh token was revoked on Fitbit's side.
-async function getValidFitbitAccessToken(uid) {
-  const ref = db.collection('fitbitTokens').doc(uid);
+// Returns { accessToken, healthUserId } for uid, refreshing the access token
+// if expired, or null if not connected / the refresh token was revoked on
+// Google's side.
+async function getValidActivitySyncSession(uid) {
+  const ref = db.collection('activitySyncTokens').doc(uid);
   const snap = await ref.get();
   if (!snap.exists) return null;
 
   const token = snap.data();
-  if (token.expiresAt > Date.now() + 60000) return token.accessToken;
+  if (token.expiresAt > Date.now() + 60000) {
+    return { accessToken: token.accessToken, healthUserId: token.healthUserId };
+  }
 
   try {
-    const refreshed = await requestFitbitToken({ grant_type: 'refresh_token', refresh_token: token.refreshToken });
-    await saveFitbitTokens(uid, refreshed);
-    return refreshed.access_token;
+    const refreshed = await requestGoogleHealthToken({ grant_type: 'refresh_token', refresh_token: token.refreshToken });
+    await saveActivitySyncTokens(uid, refreshed);
+    return { accessToken: refreshed.access_token, healthUserId: token.healthUserId };
   } catch (err) {
-    console.error('[Fitbit] token refresh failed, clearing stored token:', err.message);
+    console.error('[ActivitySync] token refresh failed, clearing stored token:', err.message);
     await ref.delete().catch(() => {});
     return null;
   }
 }
 
-// GET /api/fitbit/status
-app.get('/api/fitbit/status', authenticateToken, async (req, res) => {
-  if (!fitbitEnabled) return sendError(res, 503, 'fitbit.disabled', 'Fitbit integration is not configured.');
+// GET /api/activity-sync/status
+app.get('/api/activity-sync/status', authenticateToken, async (req, res) => {
+  if (!activitySyncEnabled) return sendError(res, 503, 'activity_sync.disabled', 'Activity Sync is not configured.');
   if (!req.user.uid) return sendSuccess(res, 200, { connected: false });
   try {
-    const snap = await db.collection('fitbitTokens').doc(req.user.uid).get();
+    const snap = await db.collection('activitySyncTokens').doc(req.user.uid).get();
     return sendSuccess(res, 200, { connected: snap.exists });
   } catch (err) {
-    console.error('GET /api/fitbit/status failed:', err);
-    return sendError(res, 500, 'fitbit.server_error', String(err));
+    console.error('GET /api/activity-sync/status failed:', err);
+    return sendError(res, 500, 'activity_sync.server_error', String(err));
   }
 });
 
-// GET /api/fitbit/connect — returns the Fitbit consent-screen URL for the frontend to redirect to
-app.get('/api/fitbit/connect', authenticateToken, (req, res) => {
-  if (!fitbitEnabled) return sendError(res, 503, 'fitbit.disabled', 'Fitbit integration is not configured.');
+// GET /api/activity-sync/connect — returns the Google consent-screen URL for the frontend to redirect to
+app.get('/api/activity-sync/connect', authenticateToken, (req, res) => {
+  if (!activitySyncEnabled) return sendError(res, 503, 'activity_sync.disabled', 'Activity Sync is not configured.');
   if (!req.user.uid) {
-    return sendError(res, 403, 'fitbit.requires_firebase_auth', 'Please sign in again before connecting Fitbit.');
+    return sendError(res, 403, 'activity_sync.requires_firebase_auth', 'Please sign in again before connecting Activity Sync.');
   }
-  // Fitbit's redirect back to /callback carries no Authorization header, so the
+  // Google's redirect back to /callback carries no Authorization header, so the
   // uid rides in a short-lived signed state param instead (CSRF protection too).
   const state = jwt.sign({ uid: req.user.uid }, JWT_SECRET, { expiresIn: '10m' });
-  const url = 'https://www.fitbit.com/oauth2/authorize?' + new URLSearchParams({
+  const url = 'https://accounts.google.com/o/oauth2/v2/auth?' + new URLSearchParams({
     response_type: 'code',
-    client_id: FITBIT_CLIENT_ID,
-    redirect_uri: FITBIT_REDIRECT_URI,
-    scope: 'activity',
+    client_id: GOOGLE_HEALTH_CLIENT_ID,
+    redirect_uri: GOOGLE_HEALTH_REDIRECT_URI,
+    scope: ACTIVITY_SYNC_SCOPE,
+    access_type: 'offline', // required to get a refresh_token back
+    prompt: 'consent',      // forces a refresh_token on every connect, not just the first ever
     state
   });
   return sendSuccess(res, 200, { url });
 });
 
-// GET /api/fitbit/callback — Fitbit redirects the user's browser here after
-// consent; not authenticateToken since it's a direct browser navigation, not
-// a fetch call from the frontend.
-app.get('/api/fitbit/callback', async (req, res) => {
+// GET /api/activity-sync/callback — Google redirects the user's browser here
+// after consent; not authenticateToken since it's a direct browser
+// navigation, not a fetch call from the frontend.
+app.get('/api/activity-sync/callback', async (req, res) => {
   const { code, state, error } = req.query;
   if (error || !code || !state) {
-    return res.redirect(`${FITBIT_APP_URL}/?fitbit=error`);
+    return res.redirect(`${ACTIVITY_SYNC_APP_URL}/?activitySync=error`);
   }
 
   let uid;
   try {
     ({ uid } = jwt.verify(String(state), JWT_SECRET));
   } catch {
-    return res.redirect(`${FITBIT_APP_URL}/?fitbit=error`);
+    return res.redirect(`${ACTIVITY_SYNC_APP_URL}/?activitySync=error`);
   }
 
   try {
-    const tokenResponse = await requestFitbitToken({
+    const tokenResponse = await requestGoogleHealthToken({
       grant_type: 'authorization_code',
       code: String(code),
-      redirect_uri: FITBIT_REDIRECT_URI,
-      client_id: FITBIT_CLIENT_ID
+      redirect_uri: GOOGLE_HEALTH_REDIRECT_URI
     });
-    await saveFitbitTokens(uid, tokenResponse);
-    return res.redirect(`${FITBIT_APP_URL}/?fitbit=connected`);
+    const healthUserId = await fetchHealthUserId(tokenResponse.access_token);
+    await saveActivitySyncTokens(uid, tokenResponse, healthUserId);
+    return res.redirect(`${ACTIVITY_SYNC_APP_URL}/?activitySync=connected`);
   } catch (err) {
-    console.error('GET /api/fitbit/callback failed:', err.message);
-    return res.redirect(`${FITBIT_APP_URL}/?fitbit=error`);
+    console.error('GET /api/activity-sync/callback failed:', err.message);
+    return res.redirect(`${ACTIVITY_SYNC_APP_URL}/?activitySync=error`);
   }
 });
 
-// POST /api/fitbit/disconnect
-app.post('/api/fitbit/disconnect', authenticateToken, async (req, res) => {
+// POST /api/activity-sync/disconnect
+app.post('/api/activity-sync/disconnect', authenticateToken, async (req, res) => {
   if (!req.user.uid) return sendSuccess(res, 200, {});
-  const ref = db.collection('fitbitTokens').doc(req.user.uid);
+  const ref = db.collection('activitySyncTokens').doc(req.user.uid);
   try {
     const snap = await ref.get();
     if (snap.exists) {
       const { accessToken } = snap.data();
-      await fetch('https://api.fitbit.com/oauth2/revoke', {
+      await fetch('https://oauth2.googleapis.com/revoke', {
         method: 'POST',
-        headers: {
-          Authorization: fitbitBasicAuthHeader(),
-          'Content-Type': 'application/x-www-form-urlencoded'
-        },
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({ token: accessToken })
-      }).catch(err => console.warn('[Fitbit] revoke call failed (non-fatal):', err.message));
+      }).catch(err => console.warn('[ActivitySync] revoke call failed (non-fatal):', err.message));
     }
     await ref.delete();
     return sendSuccess(res, 200, {});
   } catch (err) {
-    console.error('POST /api/fitbit/disconnect failed:', err);
-    return sendError(res, 500, 'fitbit.server_error', String(err));
+    console.error('POST /api/activity-sync/disconnect failed:', err);
+    return sendError(res, 500, 'activity_sync.server_error', String(err));
   }
 });
 
-// GET /api/fitbit/activity?date=YYYY-MM-DD — steps/activity summary for one
-// day (defaults to today). Fetched live from Fitbit and cached in Firestore.
-app.get('/api/fitbit/activity', authenticateToken, async (req, res) => {
-  if (!fitbitEnabled) return sendError(res, 503, 'fitbit.disabled', 'Fitbit integration is not configured.');
+// Data types fetched for the daily summary, and where each lands in the
+// assembled `activity` object below. NOTE: the exact RollupValue field name
+// per data type (the `valueKey`) is confirmed for steps only (`countSum`,
+// per Google's docs); the others are best-effort guesses pending a real
+// response to check against — extractRollupValue() below falls back through
+// a few common field-name candidates and logs a warning if none hit, so a
+// naming miss degrades to a 0 in that one field instead of breaking the
+// whole request.
+const ACTIVITY_SYNC_DATA_TYPES = [
+  { dataType: 'steps',            unionKey: 'steps',           valueKey: 'countSum' },
+  { dataType: 'distance',         unionKey: 'distance',        valueKey: 'distanceMetersSum' },
+  { dataType: 'active-minutes',   unionKey: 'activeMinutes',   valueKey: 'durationMinutesSum' },
+  { dataType: 'total-calories',   unionKey: 'totalCalories',   valueKey: 'caloriesSum' },
+  { dataType: 'sedentary-period', unionKey: 'sedentaryPeriod', valueKey: 'durationMinutesSum' }
+];
+
+function civilDate(dateStr) {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return { date: { year, month, day } };
+}
+
+function extractRollupValue(rollupPoint, unionKey, valueKey) {
+  const union = rollupPoint?.[unionKey];
+  if (!union) return 0;
+  if (typeof union[valueKey] === 'number') return union[valueKey];
+  // Fallback: grab whatever the first numeric field in the union object is,
+  // in case the real field name differs from our valueKey guess above.
+  const firstNumeric = Object.values(union).find(v => typeof v === 'number');
+  if (typeof firstNumeric === 'number') {
+    console.warn(`[ActivitySync] "${valueKey}" not found on ${unionKey} rollup value, used fallback field instead — update ACTIVITY_SYNC_DATA_TYPES.`);
+    return firstNumeric;
+  }
+  return 0;
+}
+
+async function fetchDailyRollup(accessToken, healthUserId, dataType, date) {
+  const start = civilDate(date);
+  const nextDay = new Date(date + 'T00:00:00Z');
+  nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+  const end = civilDate(nextDay.toISOString().slice(0, 10));
+
+  const response = await fetch(
+    `${GOOGLE_HEALTH_API_BASE}/users/${healthUserId}/dataTypes/${dataType}/dataPoints:dailyRollUp`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ range: { start, end }, windowSizeDays: 1 })
+    }
+  );
+  const data = await response.json();
+  if (!response.ok) throw new Error(data?.error?.message || `dailyRollUp(${dataType}) failed`);
+  return data.rollupDataPoints?.[0] || null;
+}
+
+// GET /api/activity-sync/activity?date=YYYY-MM-DD — steps/activity summary
+// for one day (defaults to today). Fetched live from Google Health API and
+// cached in Firestore.
+app.get('/api/activity-sync/activity', authenticateToken, async (req, res) => {
+  if (!activitySyncEnabled) return sendError(res, 503, 'activity_sync.disabled', 'Activity Sync is not configured.');
   if (!req.user.uid) {
-    return sendError(res, 403, 'fitbit.requires_firebase_auth', 'Please sign in again before syncing Fitbit.');
+    return sendError(res, 403, 'activity_sync.requires_firebase_auth', 'Please sign in again before syncing activity.');
   }
 
   const date = typeof req.query.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date)
@@ -2283,38 +2365,31 @@ app.get('/api/fitbit/activity', authenticateToken, async (req, res) => {
     : new Date().toISOString().slice(0, 10);
 
   try {
-    const accessToken = await getValidFitbitAccessToken(req.user.uid);
-    if (!accessToken) return sendError(res, 409, 'fitbit.not_connected', 'Fitbit is not connected.');
+    const session = await getValidActivitySyncSession(req.user.uid);
+    if (!session) return sendError(res, 409, 'activity_sync.not_connected', 'Activity Sync is not connected.');
 
-    const response = await fetch(`https://api.fitbit.com/1/user/-/activities/date/${date}.json`, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Accept-Language': 'en_GB' // forces metric units regardless of the Fitbit account's own locale
-      }
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      return sendError(res, 502, 'fitbit.api_error', 'Fitbit API request failed.',
-        data?.errors?.[0]?.message || JSON.stringify(data));
+    const rollups = {};
+    for (const { dataType } of ACTIVITY_SYNC_DATA_TYPES) {
+      rollups[dataType] = await fetchDailyRollup(session.accessToken, session.healthUserId, dataType, date);
     }
 
-    const summary = data.summary || {};
+    const val = (dataType, unionKey, valueKey) => extractRollupValue(rollups[dataType], unionKey, valueKey);
     const activity = {
       date,
-      steps:            Number(summary.steps) || 0,
-      distanceKm:       Number(summary.distances?.find(d => d.activity === 'total')?.distance) || 0,
-      caloriesOut:      Number(summary.caloriesOut) || 0,
-      activeMinutes:    (Number(summary.fairlyActiveMinutes) || 0) + (Number(summary.veryActiveMinutes) || 0),
-      sedentaryMinutes: Number(summary.sedentaryMinutes) || 0,
+      steps:            val('steps', 'steps', 'countSum'),
+      distanceKm:       val('distance', 'distance', 'distanceMetersSum') / 1000,
+      caloriesOut:      val('total-calories', 'totalCalories', 'caloriesSum'),
+      activeMinutes:    val('active-minutes', 'activeMinutes', 'durationMinutesSum'),
+      sedentaryMinutes: val('sedentary-period', 'sedentaryPeriod', 'durationMinutesSum'),
       syncedAt: new Date().toISOString()
     };
 
-    await db.collection(`users/${req.user.uid}/fitbitActivity`).doc(date).set(activity, { merge: true });
+    await db.collection(`users/${req.user.uid}/activitySync`).doc(date).set(activity, { merge: true });
 
     return sendSuccess(res, 200, { activity });
   } catch (err) {
-    console.error('GET /api/fitbit/activity failed:', err);
-    return sendError(res, 500, 'fitbit.server_error', String(err));
+    console.error('GET /api/activity-sync/activity failed:', err);
+    return sendError(res, 500, 'activity_sync.server_error', String(err));
   }
 });
 
