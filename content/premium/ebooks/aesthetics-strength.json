@@ -1,0 +1,686 @@
+{
+  "id": "aesthetics-strength",
+  "kind": "ebook",
+  "title": "Aesthetics & Strength",
+  "subtitle": "The training principles behind strength and aesthetics",
+  "topic": "training",
+  "order": 1,
+  "summary": "Everything you need to train for strength and aesthetics: scientifically effective training principles, how to apply them, how to power-build, body-build or powerlift, recovery techniques, and how to program for yourself in the long term.",
+  "chapters": [
+    {
+      "id": "hypertrophy-volume",
+      "title": "Hypertrophy: Volume, Exercises and Rest",
+      "sections": [
+        {
+          "heading": "How many working sets per week per muscle elicit optimal muscle growth?",
+          "body": [
+            "There is a dose relationship between the number of working sets and the resulting muscle growth: the more working sets, the more muscle growth, up to a point. The bands are fewer than 5 sets, 5-9 sets and 10+ sets, with the optimal curve ending at 12-15 sets, after which diminishing returns come in.",
+            "Recent literature has also proposed that you can go up to 44-52 working sets, but conditions have to be met: it can only be applied to one muscle group, and the other muscle groups must be trained with lower volume (preferably maintenance volume) and relatively low intensity, 2-3 RIR."
+          ]
+        },
+        {
+          "heading": "How many working sets per session (per day) is optimal for muscle growth?",
+          "body": [
+            "The number of working sets per session that elicits the most muscle growth is 6-8 working sets per muscle per session. If your weekly working set goal for chest is 12 sets, you could do 6 sets in each of two separate sessions."
+          ]
+        },
+        {
+          "heading": "What rep counts elicit the most muscle growth?",
+          "body": [
+            "It can be anywhere from 5-30 reps, but the most optimal rep range for growth is around 6-15 reps, because of the relationship with load, which is another strong factor for growth."
+          ]
+        },
+        {
+          "heading": "How many sets of an exercise should I do?",
+          "body": ["Doing 2-3 sets is better than 1 set, and 4-6 sets elicited equal growth to 2-3 sets."]
+        },
+        {
+          "heading": "More exercises and fewer sets, or fewer exercises and more sets?",
+          "body": [
+            "As long as you are doing more than 1 set per exercise you can apply either form of training, and it also depends on how you like to train. It is recommended to have an exercise covering the functions of the muscle, and one that covers the part of the muscle you are looking to primarily hit."
+          ]
+        },
+        {
+          "heading": "What exercises should I do?",
+          "body": [
+            "From a bodybuilding standpoint, pick the exercises that generate the most stimulus in comparison to fatigue. After you filter those, pick an exercise that: 1. gives a stretch in the lengthened position, where tension is at its highest; 2. is easily progressively overloadable (load); and 3. feels good on your joints, ligaments and connective tissue, and does not produce any discomfort except for muscle growth."
+          ]
+        },
+        {
+          "heading": "Does exercise order matter? Single joint before multi joint? Which exercise will get stronger first?",
+          "body": [
+            "Exercise order has no effect on muscle growth, including doing single joint exercises before multi joint exercises or the other way around.",
+            "However, the exercise you do first in your lifting session is the one that will get the strongest over time. From a progressive overload perspective this is a priority, so the first exercise should be the one you are primarily looking to overload: a multi joint exercise that covers the most checks in the exercise selection criteria. You do of course want to overload the rest too."
+          ]
+        },
+        {
+          "heading": "How long should I rest in between sets?",
+          "body": ["Resting 2 minutes elicits more muscle growth than resting less than 1 minute."]
+        },
+        {
+          "heading": "How long should a rep last?",
+          "body": ["Between 2 and 8 seconds, and not longer than 10 seconds."]
+        },
+        {
+          "heading": "What is the relation between rest break and working sets?",
+          "body": [
+            "Generally, the longer you rest (2 minutes or more), the fewer working sets you do, and the less you rest (1 minute or less), the more working sets you do."
+          ]
+        },
+        {
+          "heading": "How often should I swap exercises? Is there any benefit?",
+          "body": [
+            "Changing exercises too often, such as every session, can diminish muscle growth. Systematically changing exercises can elicit more muscle growth than keeping the same exercise. Changing as often as every mesocycle (4-6 weeks) is recommended."
+          ]
+        },
+        {
+          "heading": "What is pre-exhaust, and does it work?",
+          "body": [
+            "The pre-exhaustion (PE) system in resistance training is widely used by athletes and practitioners with the goal of enhancing muscular adaptations. It consists of performing a single-joint exercise before a multiple-joint exercise to increase the overload (muscle activation and/or training volume) in a given muscle.",
+            "In general, PE does not alter the neuromuscular activity of the target muscle in the multi-joint exercise, but it does allow for a greater training volume."
+          ]
+        },
+        {
+          "heading": "How should the rep count distribution look?",
+          "body": [
+            "Generally, 25% of exercises should be 5-10 reps (usually one exercise), 50% should be 10-20 reps (usually two) and 25% should be 20-30 reps (one exercise). That meets the volume criteria."
+          ]
+        },
+        {
+          "heading": "How do I adapt my program for imbalances?",
+          "body": [
+            "Adapting to imbalances is not something I would recommend to a beginner, but if you have at least 2 years of training you can take this next step. You must understand RIR training and know how to listen to your body.",
+            "Adapting for imbalances is lowering volume on the strong muscle groups and increasing it on the weak groups after a period of low volume, so you are essentially periodizing for one muscle group only. To aid this, most of your volume should come from isolative compound exercises, such as a leg press instead of a squat, for the strong muscle group. If you only have one strong group to do this with, train only the last set to failure and the rest at 1-2 RIR.",
+            "The point is to allocate more of the volume to one muscle group without changing the total weekly volume, as the compensation."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hypertrophy-intensity",
+      "title": "Hypertrophy: Intensity",
+      "sections": [
+        {
+          "heading": "Train to failure or not to failure?",
+          "body": [
+            "To scale intensity, it is important to know what failure is. It is defined as the point at which a person cannot complete another repetition with good form.",
+            "When working set volume is equated, training to failure or a few reps shy of failure elicits the same muscle growth. The latest review suggests you can build muscle through weight training without always pushing yourself to the point of complete exhaustion. Training until your muscles cannot do any more reps does not seem to harm your progress, but there are no long-term studies to know for sure.",
+            "For older adults, pushing to total muscle exhaustion might not be necessary to see improvements in strength and muscle function. In fact, it could cause discomfort, safety concerns and fatigue. For experienced gym-goers, pushing to failure might have more benefits, but be careful not to overdo it, because of the bigger effect it has on your CNS and injury risk compared with training a couple of reps shy of failure. The maximum threshold should be 3-4 RIR.",
+            "Some relevant data on non-failure training: when people push themselves close to failure, the rate at which motor units fire decreases, but the starting firing rate increases. This suggests that not pushing to failure during training actually increased the activation of lower-threshold motor units.",
+            "However, beginners and intermediate trainees often underestimate their proximity to failure by 5-6 reps, leading to inaccurate interpretations of the research. Training within a certain proximity of failure (commonly within five reps) is crucial for muscle growth.",
+            "Training to failure can still be incorporated, but it should be limited, especially for compound exercises, as it can induce excessive fatigue.",
+            "Train two to three reps shy of failure for most exercises. For compound movements it may be possible to train further from failure, while isolation exercises may benefit from training to failure on the final set.",
+            "It is important to know that movements that allow you to handle a lot more load are going to be more taxing than movements that require you to stay lighter. However, this hypothesis may not hold true for compound lifts, where a higher recruitment of muscle fibers occurs, allowing for training further from failure."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hypertrophy-frequency",
+      "title": "Hypertrophy: Frequency and Split",
+      "sections": [
+        {
+          "heading": "How many times a week should I train a muscle?",
+          "body": [
+            "In studies comparing how often people train their muscles each week, those who train twice a week tend to see better muscle growth than those who train once a week, even when the total amount of work is the same. So to get the most muscle growth it is best to train each major muscle group at least twice a week. It is still uncertain whether training a muscle group three times a week is even better than twice a week."
+          ]
+        },
+        {
+          "heading": "What split is the best?",
+          "body": [
+            "Any split that ticks the following boxes: it reaches your weekly working set goal and your daily working set goal, it fits in your daily schedule, it makes working out feel easy and fun, and it allows you to recover properly. If a split covers these factors, it is the best split for you."
+          ]
+        },
+        {
+          "heading": "How many days apart should I hit the same muscle group?",
+          "body": ["The optimal anabolic window to hit the same muscle group again is 48-72 hours."]
+        }
+      ]
+    },
+    {
+      "id": "hypertrophy-overload",
+      "title": "Hypertrophy: Load and Progressive Overload",
+      "sections": [
+        {
+          "heading": "How much weight should I put on the bar?",
+          "body": [
+            "In summary, muscle hypertrophy appears to be independent of the amount of weight lifted in resistance training, with no significant difference observed between high, moderate and low weights. Untrained individuals experience greater muscle growth, while those with previous training experience benefit more from increased training frequency.",
+            "Studies suggest that a wide range of loads, from 30% to 90% of one's maximum lifting capacity, can be effective for muscle growth in healthy adult males. Multiple studies found no significant differences in muscle hypertrophy between low-load and high-load resistance training, indicating that both heavy and light loads induce similar muscle growth at different physiological levels.",
+            "In conclusion, the amount of weight you put on the bar depends on your strength level for reaching 5-15 repetitions."
+          ]
+        },
+        {
+          "heading": "What is progressive overload?",
+          "body": [
+            "Progressive overloading is the act of increasing the stimulus for muscle growth. This can include different exercises, more sets, more reps, more weight, or a different training style. In simpler words, it is a way to increase muscle growth by increasing the stimulus to a sensitized muscle for a certain factor of progressive overload."
+          ]
+        },
+        {
+          "heading": "How do you progressively overload, and when?",
+          "body": [
+            "Progressive overloading with exercises has already been covered.",
+            "Progressive overloading with weight works best when increasing weight by 2.5 lbs with the goal of reaching the same rep count as before you increased the weight.",
+            "Progressive overloading with volume is done by increasing the sets for an exercise and increasing weekly working set volume. Increasing the working sets of an exercise means going from 3 sets of squats to 4 and then 5; you can do this over 4 weeks, adding one set of squats each week. Progressing weekly set volume goes like this: from 8 sets to 10 sets to 12, and you should change this every 4-6 weeks if you plan on doing it.",
+            "One important principle is that you must not do it all at once, as this generates a lot of fatigue. A general rule is: if one thing goes up, something has to go down. When you increase weight, the weight goes up but the reps go down.",
+            "Progressive overloading with reps is also possible, for example increasing reps by 2 every 4 weeks, but reps have been shown to generate more fatigue than increasing volume, so use it every 4-6 weeks."
+          ]
+        },
+        {
+          "heading": "Another easy progressive overload tactic: dynamic double progression",
+          "body": [
+            "This is the simplest progression. You chase a certain rep goal at a consistent weight, and once you hit the rep goal in the first set you can add weight the next session. If in the second set you fail to hit the rep goal, you lower the weight to reach the same rep goal.",
+            "This is called passive strength progression: you expose your body to stress that only increases if you have gotten stronger."
+          ]
+        },
+        {
+          "heading": "Progressive overload on a deeper level",
+          "body": [
+            "To understand progressive overload you need to know the difference between sarcoplasmic hypertrophy and myofibrillar hypertrophy.",
+            "Myofibrillar hypertrophy is the increase in the size and number of myofibrils (contractile proteins) in muscle fibers. It is achieved through heavy strength training and low to moderate repetitions.",
+            "Sarcoplasmic hypertrophy is the increase in volume of the sarcoplasm (the fluid and energy-rich component of muscle fibers). It is achieved through high reps with short rest periods.",
+            "Progressive overload for myofibrillar and sarcoplasmic hypertrophy: for myofibrillar, increase the weight and volume of your training gradually. For sarcoplasmic, increase reps and decrease rest periods. For sarcoplasmic hypertrophy, use 60-80% of your 1RM for your desired reps; ideally, a lower percentage means you can do more reps.",
+            "There are different ways to progressively overload, creating progression schemes: linear progression, wave loading and step loading."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hypertrophy-programming",
+      "title": "Hypertrophy: Programming and Periodization",
+      "sections": [
+        {
+          "heading": "Does periodization have any effect on muscle growth?",
+          "body": [
+            "High-quality studies find no big differences between linear and undulating periodization methods when it comes to muscle growth. Likewise, a less reliable review suggested that whether you use a structured plan or not, the results for muscle growth might end up similar. This could be different for advanced individuals, who need a lot more stimulus to initiate growth because of the many plateaus they have reached."
+          ]
+        },
+        {
+          "heading": "Periodization and programming explained",
+          "body": [
+            "The following programming techniques will only be of superior benefit to advanced lifters. If you are a beginner they will not really benefit you, but they will not set you back either.",
+            "A mesocycle is a training period that specifies a certain goal in your fitness. A mesocycle usually lasts about 4-12 weeks, but we will use 4 weeks as one mesocycle. Accumulation-phase mesocycles followed by a deload phase are usually called a block.",
+            "In the accumulation phase you want to ramp up fatigue and stress. You do this by adding more sessions, adding higher rep ranges and using different exercises (the best exercises that match those new rep ranges).",
+            "In each week of the mesocycle you ramp up intensity using the RIR scheme, for example Week 1: 3 RIR, Week 2: 2 RIR, and so on, and at the end of the mesocycle you reset. To ramp up the intensity and reach the RIR goals you can add sets, add reps or increase weight.",
+            "Going from high RIR to low and resetting gives you a \"mini deload\", so you can keep going without a proper deload. Remember that every time intensity (weight) goes up, volume (sets or reps) has to go down.",
+            "Staying near the 8 rep range with the compounds will allow you to build strength and muscle, and combined with the accessory lifts being higher rep it will prove beneficial for hypertrophy.",
+            "If you prefer a high frequency split, it is important to spread the exercises around so you do not get too much fatigue in one day."
+          ]
+        },
+        {
+          "heading": "Progression schemes: linear, wave and step loading",
+          "body": [
+            "Linear progression: sets or reps stay the same, with small weight increments each session. You can also increase sets each session and keep reps the same, and after 3 weeks deload and repeat with 5% more weight. For example Week 1: 65% 1RM for 6 sets of 3, Week 2: the same weight for 8 sets of 3, Week 3: 10 sets of 3, then Week 1 again at 70%. The downside is that fatigue accumulates very quickly, but this seems best for beginners, since they are not easily fatigued.",
+            "Wave loading: the stress increases for 3-4 weeks but then resets, so the sessions go from easy to medium to hard. Example: Mesocycle 1: 5x5, 4x5, 3x5 with weight increasing each session, and then in Mesocycle 2 it resets to 5x4, 4x4, 3x4 and the weight goes down by 5-10 lbs depending on fatigue. So if you ended Meso 1 at 75% 1RM, you start Meso 2 at 70%. Instead of decreasing reps each meso you could decrease sets; this works best if you want to build up to a singles PR.",
+            "Step loading: the weight stays the same for the mesocycle but the volume increases by adding more sets or reps (preferably sets). This is called volumizing and is the best progression scheme for hypertrophy, and surprisingly for strength as well. The sessions also go from easy to medium to hard, and in the new meso the weight increases but reps decrease, so it goes back to the easy level."
+          ]
+        },
+        {
+          "heading": "Managing fatigue and deloads",
+          "body": [
+            "Generally, adding reps each week creates too much fatigue too quickly, so save the reps for new mesocycles. Volumizing is best, since you create more stimulus and increase work capacity.",
+            "The RIR scheme must go from high to low. It is okay if in one week you keep the same RIR, but it must go down to 0.",
+            "After 3-4 mesos (depending on fatigue) you can go for a deload (3-4 weeks). In the first half of the deload, halve your sets/reps from the peak of the mesocycle, and in the second half halve the weight. After that, slowly build your volume back up until you reach your MEV (minimum effective volume).",
+            "When you want to bring fatigue down, you must bring it down hard. The more advanced you are, the faster you will get fatigued: in 3-6 weeks you will reach your MRV (maximal recoverable volume). Things get more complicated in terms of programming, but you can extend the time it takes to reach your MRV by slowly increasing intensity.",
+            "Another option after your accumulation mesocycles is to take a complete break from training for 2-3 weeks. In this period you prioritize rest and do almost no lifting. Interestingly, these phases of no lifting could enhance gains by re-sensitizing anabolic pathways that stimulate growth."
+          ]
+        },
+        {
+          "heading": "Strength versus hypertrophy blocks",
+          "body": [
+            "For strength, it is best to pair step loading with linear progression, with step loading being the longest block and the linear block the shortest.",
+            "For hypertrophy it works a little differently. At the beginning of the mesocycle, start with high RIR (3-4 RIR, easy) and mostly sets of 5-10 and some 10-20, with low frequency: basically enough to maintain. With each successive mesocycle, add one session per muscle group, add higher rep ranges and add different exercises, preferably ones best suited to higher rep ranges, so cables and machines.",
+            "Each week in your mesocycle your RIR must go from high to low (easy, medium, hard) and then reset. To reach your RIR goals you can add reps or more weight; preferably add weight, and leave the addition of reps for each successive mesocycle.",
+            "The best way to progressively overload for strength and size is to volumize (add sets each week). Adding reps increases fatigue much more than adding sets."
+          ]
+        },
+        {
+          "heading": "Power-building with any split",
+          "body": [
+            "To incorporate power-building into any split, add the isolation exercise you find most effective for giving you a pump first, then the main compound lift you want to progress, and then the rest of your accessories.",
+            "Keep in mind the frequency of the main lifts, because they can be very fatiguing over time. One solution is to make only some of those main-lift sessions technique-focused days, or to make them accessory-only days."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "training-techniques",
+      "title": "Training Techniques and Form",
+      "sections": [
+        {
+          "heading": "Is full ROM necessary?",
+          "body": [
+            "Full range of motion seems to be necessary for optimal muscle growth, injury prevention and mobility enhancement, but long-length partial reps seem to elicit equal muscle growth to full ROM."
+          ]
+        },
+        {
+          "heading": "What is the point of training techniques?",
+          "body": ["Training techniques serve to intensify a given set, to squeeze out some more stimulus."]
+        },
+        {
+          "heading": "Which training techniques are the best?",
+          "body": ["Current literature suggests that rest-pause and long-length partials (LLP) seem to elicit more muscle growth than straight sets."]
+        },
+        {
+          "heading": "How do you use rest-pause and LLP?",
+          "body": [
+            "To use rest-pause: when you fail a set, say at 12 reps, wait 10-15 seconds and try to hit a couple more reps with full ROM.",
+            "To use LLP: after failing a set with full ROM, pump out some more reps with long-length partials. This can be combined with rest-pause."
+          ]
+        },
+        {
+          "heading": "What about drop sets and supersets?",
+          "body": [
+            "When total working set volume is equal, drop sets elicit equal muscle growth compared with traditional sets. Supersets do not elicit equal growth, but they reduce the time needed to train."
+          ]
+        },
+        {
+          "heading": "What is the best way to use supersets?",
+          "body": [
+            "The best way to use supersets is to superset antagonistic muscles. This also improves cardiovascular capability."
+          ]
+        },
+        {
+          "heading": "Should you use cheat reps?",
+          "body": [
+            "No. Cheat reps generate more fatigue than the stimulus you get from the extra rep. You are better off doing rest-pause and LLP."
+          ]
+        },
+        {
+          "heading": "How should you distribute training techniques?",
+          "body": [
+            "Barbell exercises are best paired with constant tension and just heavy load for that peak mechanical tension (paused reps, slow eccentrics, rest-pause, occasionally partials). Machines work best with myo-reps, partials or longer rest breaks. But everything works with everything."
+          ]
+        },
+        {
+          "heading": "Are time under load and time under tension viable?",
+          "body": [
+            "Reps should last 2-8 seconds, so time under tension can be used to intensify training and to give a new stimulus or desensitization. Time under tension and traditional sets with good form elicit equal growth."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "calisthenics",
+      "title": "Aesthetics with Calisthenics",
+      "sections": [
+        {
+          "heading": "Programming calisthenics",
+          "body": [
+            "For calisthenics workouts I recommend high frequency, high volume and high reps, since you cannot count on progressive overload with poundage. My preferred split is the Upper/Lower split.",
+            "Perform calisthenics exercises as straight sets, with each set going close to failure and allowing full recovery in between, to reach your assorted rep and set range.",
+            "Mechanical drop sets are drop sets in which you go instantly, from failure, from an advanced form of an exercise to a less advanced one. For example, going from a push-up to a kneeling push-up and then to half-repping kneeling push-ups."
+          ]
+        },
+        {
+          "heading": "Legs with calisthenics",
+          "body": [
+            "Incorporate high intensity exercises like pistol squats at the beginning of the workout. If you are not at this level, start with 3 sets of 50 squats and gradually increase to a total of 500 squat reps. For example, 4 sets of 50, then 5 sets of 50.",
+            "Incorporating lunges after these excruciating squat sessions can develop the legs further. Adding some form of lower body endurance on non-lower-body days can also improve leg development, like the horse stance."
+          ]
+        },
+        {
+          "heading": "Back with calisthenics",
+          "body": [
+            "Using a pronated grip for pulling movements will engage the back muscles more effectively. Prioritize technique and form: slow eccentrics, pausing, fast concentrics and all of that.",
+            "Prioritize pull-up variations first and rowing as part of your accessories, or if you want to pre-exhaust a certain area of the back before a pull-up you can do so. Make use of all training techniques to get more reps out."
+          ]
+        },
+        {
+          "heading": "Chest, triceps and shoulders with calisthenics",
+          "body": [
+            "Prioritize push-up variations and put the most intense variation at the beginning. Make use of all training techniques to get more reps out."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "strength-qa",
+      "title": "Strength Q&A",
+      "sections": [
+        {
+          "heading": "How many working sets per week should I do?",
+          "body": ["The same as for hypertrophy, but you must be more wary of fatigue and RIR."]
+        },
+        {
+          "heading": "How many sets per exercise?",
+          "body": ["2-3 sets are better than 1 set, but 4-6 sets is not superior to 1 set."]
+        },
+        {
+          "heading": "How many sets per session?",
+          "body": ["6-8 working sets."]
+        },
+        {
+          "heading": "What rep count is optimal?",
+          "body": ["Fewer than 5 reps."]
+        },
+        {
+          "heading": "How long should I rest between sets?",
+          "body": ["Longer than 2 minutes."]
+        },
+        {
+          "heading": "How long should reps last?",
+          "body": ["2-8 seconds."]
+        },
+        {
+          "heading": "Does exercise order matter?",
+          "body": ["The first exercise you do in your session will experience the most strength gain."]
+        },
+        {
+          "heading": "Should you incorporate single joint movements?",
+          "body": ["Single joint and multi joint movements combined show more strength gain than multi joint or single joint movements separately."]
+        },
+        {
+          "heading": "Should you change exercises?",
+          "body": [
+            "Changing exercises too often, such as every session, can diminish strength gain, but systematically changing exercises can elicit more strength gain than keeping the same exercise. Changing as often as every mesocycle (4-6 weeks) is recommended."
+          ]
+        },
+        {
+          "heading": "What load should you use for strength gain?",
+          "body": [
+            "High load (8RM or fewer, above 60% 1RM) seems to elicit more strength gain than low or moderate load.",
+            "Several reviews of different quality levels provided evidence on the impact of resistance training load on muscular strength gains. A high-quality review and several moderate-quality reviews suggested that higher loads (80% or more of one-repetition maximum, or 8 repetitions maximum or fewer) or moderate loads (60-79% of one-repetition maximum, or 9-15 repetitions maximum) resulted in greater improvements in muscular strength than lower loads (under 60% of one-repetition maximum, or more than 15 repetitions maximum)."
+          ]
+        },
+        {
+          "heading": "What is the minimum effective dose to increase 1RM strength?",
+          "body": [
+            "For untrained and relatively new trainees, doing a single set of 6-12 repetitions with weights around 70-85% of their one-repetition maximum (1RM), two to three times a week, and pushing hard (until they cannot do any more reps) can lead to some improvement in squat and bench press strength over 8-12 weeks. However, there is not enough research to say whether this approach works as well for deadlift strength."
+          ]
+        },
+        {
+          "heading": "Train to failure or not?",
+          "body": [
+            "Overall, the results suggest that although statistically significant effects on muscular strength were found for non-failure compared with failure training, it seems unnecessary to perform failure training to maximise muscular strength. If it is incorporated into a programme, training to failure should be performed sparingly to limit the risks of injuries and overtraining."
+          ]
+        },
+        {
+          "heading": "How do you manage fatigue when lifting heavy?",
+          "body": [
+            "Fatigue management is crucial for progressing on strength, due to the sheer amount of stress heavy loads put on your CNS. To manage fatigue, lift at RPE 6-7, progress at this level, and increase frequency."
+          ]
+        },
+        {
+          "heading": "How often should I train the big lifts?",
+          "body": [
+            "In a moderate-quality meta-analysis, Grgic and colleagues found that training more often each week (like 4 days compared with 1 day) led to bigger increases in muscle strength. Another study of lower quality also supported this, showing that more frequent training sessions were linked to greater strength gains.",
+            "However, a high-quality meta-analysis by Ralston and colleagues found no significant difference in muscle strength gains based on weekly training frequency, whether the total volume of training was the same or not. Two other moderate-quality reviews could not draw clear conclusions about the effect of training frequency on muscle strength gains in older adults.",
+            "For strength, ideally it is better to go with higher frequency, since you can practice technique more and get away with fewer working sets, IF you can recover properly."
+          ]
+        },
+        {
+          "heading": "What is the proper split?",
+          "body": ["The proper split depends on your goal: which lifts you want to improve, or whether you want to improve all your lifts."]
+        },
+        {
+          "heading": "Is periodizing necessary for strength gain?",
+          "body": [
+            "Resistance training programs with periodization lead to better improvements in muscle strength than programs without periodization.",
+            "The same periodization principles apply as for hypertrophy; it just differs in the strength split, but the mesocycle rules stay the same."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "power-building",
+      "title": "Power-building and Strength & Aesthetics",
+      "sections": [
+        {
+          "heading": "Power-building",
+          "body": [
+            "If you are still a beginner (1-2 years of training), one top set of a heavy compound movement will be enough. That means one set of 1-5 reps, and you keep increasing that top set by 5-10 lbs each week.",
+            "If you are more powerlifting focused, you should start with your compounds in a different manner. You can use powerlifting principles to progress your strength.",
+            "First, determine the frequency of your heavy lifts. Bench press, squat and other presses are good for 1-2x a week, while deadlifts should be done once every 2 weeks (heavy work).",
+            "Add accessory movements that the compounds do not hit, and this should develop your physique. Going with a bro split will let you recover better in the long run and therefore scale up quicker. Prioritize isolations first, since you want muscle growth: pick the best isolation for you for that compound exercise and make it burn.",
+            "Adding more sets per week as you increase weight slowly will allow you to inflict maximal muscle damage, combined with the pre-exhaustion technique."
+          ]
+        },
+        {
+          "heading": "Structuring the blocks",
+          "body": [
+            "In week 3, if the weight jump is too high you can use the weights of week 2, and then in week 4 apply the new weight.",
+            "Since I am more bodybuilding focused in power-building, I use a longer hypertrophy block to emphasize muscle gain (12 weeks) and a short, intense strength block of 4 weeks.",
+            "Alternate squats and deadlifts: for example, one leg day is quad dominant, so squats, and the next leg day is posterior-chain dominant, so deadlifts. Since deadlifts come every two weeks, the intensity will be higher. Each 3-4 week block is a mesocycle, so after 3 mesocycles you can hit a one-rep max. After your new 1RM, go into the deload phase, as you have accumulated a lot of fatigue over the previous 16 weeks, and then start again at the beginning of your hypertrophy block with your new %RM.",
+            "When you change the volume of the accessory lifts, compensate by increasing the intensity (weight) of those lifts."
+          ]
+        },
+        {
+          "heading": "Fitting main lifts into other sessions",
+          "body": [
+            "You can incorporate your main lifts into other similar workout days. For example, on a push day that is delt-dominant, you could add the bench press with the same volume/rep scheme as part of your chest volume on that push day.",
+            "Since some lifts will be scheduled later in the blocks due to recovery dynamics, it will not affect the duration of deload blocks and others of that sort. If the bench press deload has started and the deadlift deload has not, you will be bench pressing normally again while the deadlift deload is still going (for the bro split)."
+          ]
+        },
+        {
+          "heading": "Strength & aesthetics: prioritizing powerlifting",
+          "body": [
+            "Prioritizing powerlifting more means you prioritize the compounds first, and most accessories should focus on weaknesses that impair your maximal effort in a compound.",
+            "If you are prioritizing powerlifting and want to progress your accessory lifts, use the Russian bodybuilding progression: set the number of sets and reps as static and adjust the weight to maintain the rep ranges within the planned progression.",
+            "Prioritize volumizing first, then go into a linear progression phase (where you increase poundage in small increments each week). Remember that fatigue build-up will impair your maximal strength, and each phase should last about 8-12 weeks.",
+            "Treat time spent in the gym as an opportunity to refine skills. Set appropriate weight thresholds and assign work that promotes adaptive stress (volumizing: more sets or reps). To do this, spend one mesocycle (4 weeks) at one weight category and increase volume by one set each week."
+          ]
+        },
+        {
+          "heading": "From volumizing into linear progression",
+          "body": [
+            "After the volumizing phase, where you reach 80% 1RM, you can switch to a phase where you increase weight linearly: each session you increase weight and reduce reps and sets. Start reducing reps at the point where your volumizing phase ended; for example, if it ended at 4 reps, start reducing reps at 4.",
+            "Decrease the volume of your accessory lifts by the same number of reps. The closer you get to high intensity (more weight), the more the volume decreases."
+          ]
+        },
+        {
+          "heading": "Before and after a PR",
+          "body": [
+            "Before a PR, hit 90% 1RM 2-4 days prior, and have a full rest day before your PR. Also increase your carbohydrate intake by 50 grams.",
+            "After a PR, follow the same deload principles and halve everything (weights and reps), and barely train."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "bracing",
+      "title": "Bracing",
+      "sections": [
+        {
+          "heading": "How to brace properly",
+          "body": [
+            "Bracing is fundamentally the most important lifting technique for avoiding injuries and increasing strength on all lifts. It is mainly misunderstood as exhaling strongly while tightening your core. The proper way to brace is more complex, but it will improve your performance drastically and keep you safe.",
+            "Contract your abdominals by sucking them in, lock in your obliques, squeeze your glutes and press your shoulder blades down. The point is to have a fully neutral spine. Check yourself in the mirror or with pictures to see whether you truly have a neutral spine.",
+            "After you do those steps, inhale while fully expanding your ribcage, while still keeping your abdominals contracted and sucked in and your obliques locked in. Brace before breathing in. While executing the lift, exhale on the concentric motion (going up) and reset."
+          ]
+        },
+        {
+          "heading": "Practicing bracing: the 90/90 technique",
+          "body": [
+            "Start with 2-3 breaths and do more as your endurance for bracing your core increases.",
+            "1. Setup: sit on the floor with your legs bent at 90 degrees, forming two 90-degree angles at the hips and knees. Your shins should be parallel to the ground and your feet flat on the floor. Place your hands on the sides of your ribcage, with your fingers pointing towards your back.",
+            "2. Alignment and posture: maintain an upright posture with your spine in a neutral position. Avoid slouching or arching your lower back. Gently engage your abdominal muscles to stabilize your core.",
+            "3. Breathing technique: inhale deeply through your nose, focusing on filling your abdomen and lower ribcage with air. Your chest should rise slightly, but the main movement should come from the expansion of your abdomen and lower ribcage. As you exhale, slowly release the air through your mouth, allowing your abdomen and ribcage to naturally deflate. Avoid forcefully pushing the air out.",
+            "4. Diaphragmatic engagement: as you inhale, focus on feeling your diaphragm (a dome-shaped muscle beneath your lungs) expand and push down, allowing your lungs to expand fully. While exhaling, maintain gentle engagement of the core muscles, particularly the deep abdominal muscles, as if you are lightly bracing or hugging your waistline."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cardio",
+      "title": "Cardio",
+      "sections": [
+        {
+          "heading": "Steps",
+          "body": [
+            "Simply getting steps in can be the most effective cardio and fat loss tool, and it is the least fatiguing way of moving. Aim for 8000-10000 steps a day as a baseline, and if you are in a deficit you can scale up to 20000. Gradually increase steps by 500-1000 to get to your goal."
+          ]
+        },
+        {
+          "heading": "Guidelines",
+          "body": [
+            "Moderate intensity: 150 to 300 minutes per week at 3.0 to 5.9 METs (metabolic equivalent of task). OR vigorous intensity: 75 to 150 minutes per week at 6.0 METs or higher.",
+            "Examples of MET levels. Moderate: walking at 2.5 mph (3 METs), raking leaves (3.8 METs), general kitchen activities (3.3 METs). Vigorous: walking at 4.5 mph (7 METs), running at 4 mph (6 METs), bodyweight circuit training (8 METs)."
+          ]
+        },
+        {
+          "heading": "Best practices to minimize interference",
+          "body": [
+            "Limit exercise volume: avoid excessive total exercise volume.",
+            "Separate sessions: if possible, do cardio on non-lifting days or in separate sessions (at least six hours apart).",
+            "Order of exercise: if combined in one session, do resistance training first, followed by cardio.",
+            "High-intensity cardio: limit high-intensity interval training (HIIT) to three sessions per week and schedule leg resistance training 24-48 hours after lower body HIIT.",
+            "The interference effect is often overestimated: the magnitude is very small on strength and hypertrophy, and largest on power. Pick one of the following forms of cardio; all are equally effective, but keep your resistance training fatigue accumulation in mind. From a bodybuilding standpoint always choose the least fatiguing forms of cardio, such as LISS."
+          ],
+          "tables": [
+            {
+              "title": "Forms of cardio",
+              "headers": ["Type", "Duration", "Intensity"],
+              "rows": [
+                ["Low intensity steady state (LISS)", "30-60 minutes", "50-69% of MHR"],
+                ["Moderate intensity steady state (MISS)", "20-45 minutes", "70-80% of MHR"],
+                ["High intensity interval training (HIIT)", "15-25 minutes including rest", "Above 80% of MHR, work to rest ratio usually 1:3"],
+                ["Sprint interval training (SIT)", "15-25 minutes including rest", "Work to rest ratio 1:3 to 1:8"]
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "stretching",
+      "title": "Stretching and Mobility",
+      "sections": [
+        {
+          "heading": "Why stretch?",
+          "body": [
+            "Stretching does not equal more gains, but I find it beneficial for recovery and overall mobility.",
+            "Implementing stretching before sleep can influence the switch from the sympathetic nervous system after intense resistance training to the relaxed parasympathetic nervous system. Ideally do it 30 minutes before bed.",
+            "Going through the full range of motion on any exercise will automatically increase mobility in that area.",
+            "Stretching also allows more blood to circulate to the stretched muscle. This helps decongest the area, promoting circulation and fluid mechanics to clear waste products and enhance recovery.",
+            "Intra-set stretching can greatly enhance mobility and flexibility in the targeted muscle, and it only increased isometric muscle strength; it does not increase overall strength or muscle hypertrophy."
+          ]
+        },
+        {
+          "heading": "Stretch routine",
+          "body": [
+            "Hold each stretch for 30 seconds. It will bring you incredible results (about 5 minutes 30 seconds in total).",
+            "Quad and hip-flexor stretch: kneeling quad stretch. Contract your glutes to push your hip flexors and quads harder.",
+            "Glute and hip stretch: 90/90 stretch. Move your chest closer to your knee while keeping your chest up, with no rounding of the back.",
+            "Hamstring stretch: standing hamstring stretch.",
+            "Lat stretch: child's pose. Extend your hands as far as possible and push your body in the opposite direction while keeping your hands in place.",
+            "Upper back stretch: standing upper back stretch.",
+            "Chest and biceps stretch: seated biceps stretch.",
+            "Shoulders and triceps stretch."
+          ]
+        },
+        {
+          "heading": "Extra mobility stretches",
+          "body": [
+            "Shoulder dislocates: 10 reps, bringing your hands closer each time.",
+            "Front splits: 30 seconds each leg.",
+            "Middle split: 30 seconds."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "foam-rolling",
+      "title": "Foam Rolling",
+      "sections": [
+        {
+          "heading": "Foam rolling routine",
+          "body": [
+            "Foam rolling can be beneficial for soft tissue work, by targeting stiffness and tightness in muscles and fascia. Here are foam rolling exercises that helped with knee pain and other common pains. If the pain is very hard on you, think about incorporating some of the exercises in the injury section into the foam rolling routine to enhance recovery."
+          ]
+        },
+        {
+          "heading": "Knee pain",
+          "body": ["Roll the hamstrings, the calves and the hips."]
+        },
+        {
+          "heading": "Lower back pain",
+          "body": ["Roll the lower back with the foam roller under it."]
+        },
+        {
+          "heading": "Upper back pain (trapezius sting)",
+          "body": ["Roll the upper back with the foam roller under it."]
+        }
+      ]
+    },
+    {
+      "id": "avoiding-injuries",
+      "title": "Avoiding Injuries",
+      "sections": [
+        {
+          "heading": "How to use this chapter",
+          "body": [
+            "If you are feeling nagging pain in some joints, tendons or ligaments from training, these exercises are prescribed for the corresponding area of discomfort.",
+            "These exercises can also enhance weightlifting performance and recovery, so you could do one of them in your deload week (with the deload exercise principles) or add it to your accessory lift arsenal."
+          ]
+        },
+        {
+          "heading": "Elbow tendon",
+          "body": [
+            "Heavy isometric hold on the bench with the bar.",
+            "Banded high-rep (near 100s) pushdowns."
+          ]
+        },
+        {
+          "heading": "Knee joint",
+          "body": [
+            "ATG split squat (2 sets of 15-20 reps): bulletproofs your knees for harsh training sessions.",
+            "Tibialis raise (2 sets of 15-20 reps): raise your toes up and down; the further your heels are from the wall, the easier it is. Brings stability to your knee and more strength in your ankles.",
+            "VMO squat (2 sets of 15-20 reps): knee stability and strengthening.",
+            "Nordic curl: the most powerful hamstring exercise for strengthening the knee for athletic, explosive exercises."
+          ]
+        },
+        {
+          "heading": "Lower back and QL",
+          "body": [
+            "Back extensions (2 sets of 15-20): useful for bulletproofing your lower back.",
+            "Alternate side back extensions (2 sets of 15-20): target the QL muscles better.",
+            "Reverse hypers (2 sets of 15-20): bulletproof your lower back and aid in improving deadlift strength. One of my favorites to add after a deadlift workout.",
+            "Reverse plank (2 sets of 15-20): improves spine health by improving mobility and flexibility."
+          ]
+        },
+        {
+          "heading": "Wrists",
+          "body": [
+            "Don't forget to warm up properly.",
+            "Wrist push-ups (2 sets of 15-20): start with your knees down, and after the push-ups hold an isometric position for 30 seconds. This is a good exercise to improve the quality of calisthenics exercises; I used to do these as a warm-up for my calisthenics workouts."
+          ]
+        },
+        {
+          "heading": "Shoulders",
+          "body": [
+            "Shoulder dislocates: my favorite for overall mobility of the shoulder. Banded shoulder dislocates are better for beginners.",
+            "Rotator cuff strengthening: Lu raise. Also effective at targeting the lateral delt, so you could put it in your accessory arsenal if you want big and bulletproof shoulders.",
+            "Lying external rotation (2 sets of 15-20 reps): improves shoulder stability and strength, by strengthening the rotator cuffs, to improve performance."
+          ]
+        },
+        {
+          "heading": "Hips (hip flexors, adductors, abductors)",
+          "body": [
+            "Adductor machine (improves squat): could be supersetted with abductors for 2 sets after a leg day.",
+            "Abductor machine (improves squat): could be supersetted with adductors for 2 sets after a leg day.",
+            "ATG split squat (2 sets of 15-20 reps): an ATG squat with the back leg elevated.",
+            "Cossack squat: personally my favorite for the hips, but I perform it as a stretching exercise (30 second hold each side). The more advanced you are, the deeper you go. Improves strength, mobility and flexibility in the hips and ankles.",
+            "Horse stance: do it once every day and hold it until failure. Improves strength and stability in the hips, and also improves aerobic endurance in the legs."
+          ]
+        },
+        {
+          "heading": "Ankles",
+          "body": [
+            "Soleus and calf raise.",
+            "Tibialis raise (2 sets of 15-20 reps): the further your heels are from the wall, the easier it is; raise your toes up and down.",
+            "Sit on PVC (2-3 sets of 1 minute, or until you feel the blood stop flowing to your feet): good for recovery of an Achilles tear.",
+            "Bodyweight version (2-3 sets, until you feel the blood stop flowing to your feet): move from right to left like the person in the photo."
+          ]
+        },
+        {
+          "heading": "Neck",
+          "body": [
+            "Training the neck can provide stability and enhanced spine alignment and improve posture, therefore possibly making your brace stronger and improving your lifts. Also, a big neck makes you look better.",
+            "Do 4 sets of 12 spread across 3 training days, with a rest day after each day you trained your neck. After the 3 neck training days, take 2 days of rest and reset.",
+            "Neck raises, and lateral neck raises."
+          ]
+        }
+      ]
+    }
+  ]
+}

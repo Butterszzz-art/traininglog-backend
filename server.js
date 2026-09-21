@@ -8,7 +8,7 @@ const bcrypt = require('bcryptjs');
 const rateLimit = require('express-rate-limit');
 const leaderboardRoute = require('./leaderboard');
 const { router: aiRouter } = require('./src/routes/ai');
-const { upload, extractKnowledgeWithClaude, saveToAirtable, getActiveModules } = require('./knowledgeBase');
+const { createPremiumRouter } = require('./src/routes/premium');
 const { auth: fbAuth, db, FieldValue, firebaseEnabled, projectId: firebaseProjectId, initError: firebaseInitError } = require('./firebase');
 const { berekenClient } = require('./src/intakeCalculations');
 
@@ -395,37 +395,42 @@ app.get('/health', async (_req, res) => {
 });
 
 // ── User plan endpoint ───────────────────────────────────────────────────────
+// Shared by GET /api/user/plan and the premium-content routes so both read the
+// plan from the same place: Firestore first, Airtable for not-yet-migrated accounts.
+async function getUserPlanInfo(username) {
+  if (!username) return { plan: 'free', status: 'none' };
+
+  const uid = await resolveFirestoreUid(username);
+  if (uid) {
+    const snap = await db.collection('users').doc(uid).get();
+    const u = snap.exists ? snap.data() : {};
+    return {
+      plan: u.userPlan || 'free',
+      status: u.subStatus || 'none',
+      periodEnd: u.subCurrentPeriodEnd || '',
+      billingCycle: u.billingCycle || '',
+      referralCode: u.referralCode || '',
+      referralCredits: Number(u.referralCredits) || 0,
+    };
+  }
+
+  const user = await getUserByUsername(username);
+  if (!user) return { plan: 'free', status: 'none' };
+
+  const f = user.fields;
+  return {
+    plan: f.UserPlan || 'free',
+    status: f.SubStatus || 'none',
+    periodEnd: f.SubCurrentPeriodEnd || '',
+    billingCycle: f.BillingCycle || '',
+    referralCode: f.ReferralCode || '',
+    referralCredits: Number(f.ReferralCredits) || 0,
+  };
+}
+
 app.get('/api/user/plan', authenticateToken, async (req, res) => {
   try {
-    const username = req.user?.username;
-    if (!username) return res.json({ plan: 'free', status: 'none' });
-
-    const uid = await resolveFirestoreUid(username);
-    if (uid) {
-      const snap = await db.collection('users').doc(uid).get();
-      const u = snap.exists ? snap.data() : {};
-      return res.json({
-        plan: u.userPlan || 'free',
-        status: u.subStatus || 'none',
-        periodEnd: u.subCurrentPeriodEnd || '',
-        billingCycle: u.billingCycle || '',
-        referralCode: u.referralCode || '',
-        referralCredits: Number(u.referralCredits) || 0,
-      });
-    }
-
-    const user = await getUserByUsername(username);
-    if (!user) return res.json({ plan: 'free', status: 'none' });
-
-    const f = user.fields;
-    return res.json({
-      plan: f.UserPlan || 'free',
-      status: f.SubStatus || 'none',
-      periodEnd: f.SubCurrentPeriodEnd || '',
-      billingCycle: f.BillingCycle || '',
-      referralCode: f.ReferralCode || '',
-      referralCredits: Number(f.ReferralCredits) || 0,
-    });
+    return res.json(await getUserPlanInfo(req.user?.username));
   } catch (err) {
     console.error('[GET /api/user/plan]', err.message);
     return res.json({ plan: 'free', status: 'none' });
@@ -3997,153 +4002,18 @@ const aiLimiter = rateLimit({
 });
 
 app.use('/api/ai', authenticateToken, aiLimiter, aiRouter);
+
+// Ebooks and the ready-made program library. Full content is only returned to
+// Pro/Coach accounts (checked per request); free accounts get teasers.
+const premiumLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: { code: 'premium.rate_limited', message: 'Too many requests. Try again shortly.' } }
+});
+app.use('/api/premium', authenticateToken, premiumLimiter, createPremiumRouter({ getPlanInfo: getUserPlanInfo, sendError }));
 app.use('/', leaderboardRoute);
-
-// ── Knowledge Base routes ────────────────────────────────────────────────────
-// KnowledgeBase is global/shared AI-coaching content, not per-user data — it
-// doesn't get copied at signup like the tables in legacyMigration.js. Instead,
-// POST /admin/knowledgebase/migrate does a one-time copy from Airtable, and
-// these routes treat Firestore as authoritative once it actually has modules
-// in it (a real migration marker, not a per-user resolveFirestoreUid check).
-
-async function knowledgeBaseUsesFirestore() {
-  if (!firebaseEnabled) return false;
-  try {
-    const snap = await db.collection('knowledgeBase').limit(1).get();
-    return !snap.empty;
-  } catch {
-    return false;
-  }
-}
-
-async function getActiveModulesFirestore(topic = null) {
-  let query = db.collection('knowledgeBase').where('isActive', '==', true);
-  if (topic) query = query.where('topic', '==', topic);
-  const snap = await query.get();
-  return snap.docs.map(d => ({ id: d.id, moduleName: d.get('moduleName'), topic: d.get('topic'), extractedJSON: d.get('extractedJSON') || {} }));
-}
-
-// One-time migration: copies every Airtable KnowledgeBase record into
-// Firestore's knowledgeBase collection (additive — doesn't touch Airtable).
-// Idempotent: uses the Airtable record id as the Firestore doc id, so
-// re-running just re-writes the same docs rather than duplicating them.
-app.post('/admin/knowledgebase/migrate', authenticateToken, async (req, res) => {
-  if (!firebaseEnabled) return sendError(res, 503, 'kb.firebase_disabled', 'Firebase is not configured.');
-  if (!AIRTABLE_API_TOKEN || !AIRTABLE_BASE_ID) return sendError(res, 503, 'kb.airtable_disabled', 'Airtable is not configured.');
-  try {
-    const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/KnowledgeBase`;
-    const response = await airtableFetch(url, { headers: airtableHeaders() });
-    const data = await response.json();
-    if (!response.ok) return sendError(res, 502, 'kb.airtable_rejected', 'Airtable rejected the request.', JSON.stringify(data));
-
-    const records = data.records || [];
-    let migrated = 0, skipped = 0;
-    for (const r of records) {
-      const f = r.fields || {};
-      if (!f.ModuleName) { skipped++; continue; }
-      await db.collection('knowledgeBase').doc(r.id).set({
-        moduleName: f.ModuleName,
-        topic: f.Topic || null,
-        version: f.Version ?? 1,
-        sourceFileName: f.SourceFile || null,
-        extractedJSON: safeJsonParse(f.ExtractedJSON, f.ExtractedJSON || null),
-        isActive: f.IsActive !== false,
-        ingestedAt: f.ProcessedAt || null,
-        migratedFrom: r.id
-      });
-      migrated++;
-    }
-    return sendSuccess(res, 200, { total: records.length, migrated, skipped });
-  } catch (err) {
-    console.error('[KnowledgeBase] Migration failed:', err);
-    return sendError(res, 500, 'kb.migration_failed', String(err));
-  }
-});
-
-app.post('/admin/ingest-pdf', authenticateToken, upload.single('pdf'), async (req, res) => {
-  try {
-    const { moduleName, topic } = req.body;
-    if (!req.file) return res.status(400).json({ error: 'No PDF file received' });
-    if (!moduleName) return res.status(400).json({ error: 'moduleName is required' });
-    if (!topic) return res.status(400).json({ error: 'topic is required' });
-
-    const pdfParse = require('pdf-parse');
-    const pdfData = await pdfParse(req.file.buffer);
-    const text = pdfData.text;
-    if (!text || text.trim().length < 100) return res.status(422).json({ error: 'PDF appears empty or unreadable' });
-
-    const extracted = await extractKnowledgeWithClaude(text, moduleName, topic);
-
-    if (await knowledgeBaseUsesFirestore()) {
-      const docRef = db.collection('knowledgeBase').doc();
-      await docRef.set({
-        moduleName, topic, sourceFileName: req.file.originalname,
-        extractedJSON: extracted, version: 1,
-        isActive: true, ingestedAt: new Date().toISOString().slice(0, 10)
-      });
-      return res.json({
-        success: true, recordId: docRef.id, moduleName, topic,
-        fieldsExtracted: Object.keys(extracted).filter(k => Array.isArray(extracted[k]) ? extracted[k].length > 0 : !!extracted[k])
-      });
-    }
-
-    if (!AIRTABLE_API_TOKEN || !AIRTABLE_BASE_ID) return res.status(500).json({ error: 'Airtable not configured' });
-    const record = await saveToAirtable(AIRTABLE_API_TOKEN, AIRTABLE_BASE_ID, {
-      ModuleName: moduleName, Topic: topic, SourceFile: req.file.originalname,
-      ExtractedJSON: JSON.stringify(extracted), Version: 1,
-      ProcessedAt: new Date().toISOString().slice(0, 10), IsActive: true
-    });
-
-    res.json({
-      success: true, recordId: record.id, moduleName, topic,
-      fieldsExtracted: Object.keys(extracted).filter(k => Array.isArray(extracted[k]) ? extracted[k].length > 0 : !!extracted[k])
-    });
-  } catch (err) {
-    console.error('[KnowledgeBase] Ingest error:', err);
-    res.status(500).json({ error: 'Ingestion failed', details: err.message });
-  }
-});
-
-app.get('/admin/knowledge-modules', authenticateToken, async (req, res) => {
-  try {
-    if (await knowledgeBaseUsesFirestore()) {
-      const modules = await getActiveModulesFirestore();
-      return res.json({ modules });
-    }
-    if (!AIRTABLE_API_TOKEN || !AIRTABLE_BASE_ID) return res.status(500).json({ error: 'Airtable not configured' });
-    const modules = await getActiveModules(AIRTABLE_API_TOKEN, AIRTABLE_BASE_ID);
-    res.json({ modules });
-  } catch (err) {
-    console.error('[KnowledgeBase] Fetch error:', err);
-    res.status(500).json({ error: 'Failed to fetch modules' });
-  }
-});
-
-app.get('/knowledge-context', authenticateToken, async (req, res) => {
-  try {
-    const topicsParam = req.query.topics;
-    const topics = topicsParam ? topicsParam.split(',').map(t => t.trim()) : null;
-    const usesFirestore = await knowledgeBaseUsesFirestore();
-
-    let allModules = [];
-    if (usesFirestore) {
-      allModules = topics && topics.length > 0
-        ? (await Promise.all(topics.map(t => getActiveModulesFirestore(t)))).flat()
-        : await getActiveModulesFirestore();
-    } else {
-      if (!AIRTABLE_API_TOKEN || !AIRTABLE_BASE_ID) return res.status(500).json({ error: 'Airtable not configured' });
-      allModules = topics && topics.length > 0
-        ? (await Promise.all(topics.map(t => getActiveModules(AIRTABLE_API_TOKEN, AIRTABLE_BASE_ID, t)))).flat()
-        : await getActiveModules(AIRTABLE_API_TOKEN, AIRTABLE_BASE_ID);
-    }
-
-    const context = allModules.reduce((acc, mod) => { acc[mod.moduleName] = mod.extractedJSON; return acc; }, {});
-    res.json({ context, modulesLoaded: allModules.map(m => m.moduleName) });
-  } catch (err) {
-    console.error('[KnowledgeBase] Context error:', err);
-    res.status(500).json({ error: 'Failed to build knowledge context' });
-  }
-});
 
 // ── Exercise library ─────────────────────────────────────────────────────────
 // Greenfield collection (no Airtable equivalent) — exercises/{id}, top-level

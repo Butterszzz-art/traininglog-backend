@@ -1,0 +1,90 @@
+{
+  "id": "powerbuilding-guide",
+  "kind": "ebook",
+  "title": "Power-Building Guide",
+  "subtitle": "Strength-focused exercise choices and how the blocks fit together",
+  "topic": "training",
+  "order": 4,
+  "summary": "Notes to go with the two Power-Building programs: how the hypertrophy and strength blocks fit together, and the powerlifting accessory exercises that support the bench press, squat and deadlift.",
+  "chapters": [
+    {
+      "id": "how-it-fits",
+      "title": "How the Blocks Fit Together",
+      "sections": [
+        {
+          "heading": "The structure",
+          "body": [
+            "The power-building plan has a mainly-hypertrophy block of 12 weeks (8, then 12, then 15 working sets, with the main lifts at 80%, 75% and 70% of your 1RM), followed by a mainly-strength block of 4 weeks (6-8 working sets in total) and a deload.",
+            "You must stick to the RIR and the percentages, otherwise you will get fatigued very quickly."
+          ]
+        },
+        {
+          "heading": "Between the blocks",
+          "body": [
+            "For the accessory work in the strength block, repeat one of your favorite workouts from the 8 working set mesocycle.",
+            "Take a deload week after the strength block, or 2-3 weeks of almost no lifting. Then start again at the beginning of the hypertrophy block with your new %RM."
+          ]
+        },
+        {
+          "heading": "Volume management",
+          "body": [
+            "If you do not think 5 sets of incline bench press is worth it when your maximum volume for that day on chest is 5, you can opt to do a lower version, for example 3 sets. Just stay with the given weight and RIR."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "powerlifting-accessories",
+      "title": "Powerlifting Accessory Exercises",
+      "sections": [
+        {
+          "heading": "Bench press",
+          "body": [
+            "Pin or board press: for lockout work.",
+            "Spoto press: for lockout work and starting power.",
+            "Tempo reps: more control of the eccentric and more starting power.",
+            "Wide grip: more chest-emphasized starting power.",
+            "Close grip: more triceps-emphasized starting power.",
+            "Overhead press: stability during the lift.",
+            "Incline dumbbell press: more chest starting power."
+          ]
+        },
+        {
+          "heading": "Squat",
+          "body": [
+            "Adductor/abductor machines: stability during the lift, and they prevent the knees from collapsing.",
+            "Front squats: more stabilization and improvement in quadriceps power.",
+            "Box squats: more quadriceps starting power.",
+            "RDL: more hip extension and posterior chain strength.",
+            "Hip thrusts: increase hip extension strength."
+          ]
+        },
+        {
+          "heading": "Deadlift",
+          "body": [
+            "RDL: more hip extension and posterior chain strength.",
+            "Hip thrusts: increase hip extension strength.",
+            "Back extensions: more posterior chain strength and stability.",
+            "Reverse hypers: more posterior chain strength and stability.",
+            "Rowing: increases posterior chain strength and grip strength."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "extra-exercises",
+      "title": "More Exercise Options",
+      "sections": [
+        {
+          "heading": "Bodybuilding options that pair with the programs",
+          "body": [
+            "Choose your own favorite isolations, or use the muscle-by-muscle lists in the Aesthetics Program Guide. The power-building plan also lists these additional options.",
+            "Mid chest: machine-supported press, hand-elevated push-up. Lower chest: cable flyes, lower-chest focused.",
+            "Rowing (thickness): lever bent-over row.",
+            "Front delt: lying incline-bench front raise. Rear delt: overhead press behind the back."
+          ]
+        }
+      ]
+    }
+  ]
+}

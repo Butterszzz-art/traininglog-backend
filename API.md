@@ -132,6 +132,25 @@ Example success:
 Frontend usage note:
 - The frontend should call this backend route instead of calling Airtable directly, so Airtable PAT credentials remain server-side.
 
+## Premium content (ebooks and program library)
+
+The content lives in `content/premium/ebooks/*.json` and `content/premium/programs/*.json` and ships with the function. All routes require `Authorization: Bearer <token>` and check the account's plan on every request (same source as `GET /api/user/plan`). Only `pro` and `coach` accounts receive full content; `free` accounts get metadata and a short preview. If the plan lookup fails the route returns `503 premium.plan_lookup_failed` rather than guessing.
+
+Responses are sent with `Cache-Control: private, no-store`. Each item carries a `rev` (content hash) so the app can cache it and refetch only when it changes.
+
+### `GET /api/premium/library`
+Everything on the shelf as metadata: `{ success, access: "full" | "preview", plan, ebooks: [...], programs: [...] }`.
+
+### `GET /api/premium/ebooks/:id`
+- Paid: `{ success, locked: false, ebook }` with every chapter, section and table.
+- Free: `{ success, locked: true, ebook }` where `ebook` is metadata plus `preview` (the first section of the first chapter). No other chapter text is sent.
+
+### `GET /api/premium/programs/:id`
+- Paid: `{ success, locked: false, program }`. `program.weeks` is the week-by-week plan; a week with `sameAs: n` repeats week `n`. `program.days` mirrors the first real week.
+- Free: `{ success, locked: true, program }` with metadata and `dayNames` only.
+
+Unknown ids return `404 premium.not_found`. Run `node scripts/test-premium-content.js` to validate the content files and the gating rules.
+
 ## Auth error note after JWT secret rotation
 
 If the server JWT secret changes, previously issued browser tokens become invalid and requests can fail with:
