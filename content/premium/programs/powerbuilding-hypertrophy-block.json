@@ -1,0 +1,1150 @@
+{
+  "id": "powerbuilding-hypertrophy-block",
+  "kind": "program",
+  "order": 9,
+  "title": "Power-Building: Hypertrophy Block",
+  "subtitle": "12 weeks, 7 sessions per week, main lifts at a set percentage of your 1RM",
+  "audience": "all",
+  "goal": "hypertrophy",
+  "archetype": "powerbuilding",
+  "level": "intermediate",
+  "durationWeeks": 12,
+  "summary": "The mainly-hypertrophy half of the power-building plan: Legs, Push, Pull, Legs, Push, Pull and Arms, with the squat, incline bench, rows and RDL taken at 80%, then 75%, then 70% of your 1RM. Sets step up each week while accessory work steps down, so total volume stays constant.",
+  "split": {
+    "type": "ppl",
+    "name": "Push / Pull / Legs + Arms (power-building)",
+    "daysPerWeek": 5,
+    "sessionsPerWeek": 7,
+    "label": "7 sessions per week"
+  },
+  "schedule": {
+    "startDate": "",
+    "weekdays": [
+      1,
+      2,
+      3,
+      5,
+      6
+    ]
+  },
+  "frequency": [
+    "Mon",
+    "Tue",
+    "Wed",
+    "Fri",
+    "Sat"
+  ],
+  "progressionType": "percentage",
+  "progressionNotes": "Stick to the given RIR and percentage: weeks 1-4 at 80% of your 1RM, weeks 5-8 at 75% and weeks 9-12 at 70%. Each week inside a block adds sets on the main lifts; RIR goes 3-4, 2, 1, 0.",
+  "guide": [
+    {
+      "heading": "How the block is built",
+      "body": [
+        "This is the mainly-hypertrophy block: 12 weeks. Weeks 1-4 use 8 working sets with the main lifts at 80% of your 1RM, weeks 5-8 use 12 working sets at 75%, and weeks 9-12 use 15 working sets at 70%.",
+        "Inside each 4-week block your effort ramps up: Week 1 at 3-4 RIR, Week 2 at 2 RIR, Week 3 at 1 RIR, Week 4 at 0 RIR. You must stick to the RIR and the percentages, otherwise you will get fatigued very quickly.",
+        "The last week of each block adds an AMRAP set on the main lifts."
+      ]
+    },
+    {
+      "heading": "Your split calendar",
+      "body": [
+        "The split runs on a 10-day cycle: Legs, Push, Pull, Rest, Legs, Push, Pull, Rest, Arms, Rest. That is 7 sessions per program week.",
+        "The app assigns sessions to your training days in order, so the week counter follows sessions rather than the calendar."
+      ]
+    },
+    {
+      "heading": "Main lifts: the progression",
+      "body": [
+        "Weeks 1-4 (80% 1RM): squat, incline bench, rows and RDL go 3x6, 4x5, 5x6 (squat 5x5), then 5x5 plus an AMRAP set.",
+        "Weeks 5-8 (75% 1RM): 3x8, 4x8, 5x8, then 5x8 plus an AMRAP set.",
+        "Weeks 9-12 (70% 1RM): 3x10, 4x10, 5x10, then 5x10 plus an AMRAP set."
+      ]
+    },
+    {
+      "heading": "Volume management",
+      "body": [
+        "If you do not think 5 sets of incline bench press is worth it when your maximum volume for that day on chest is 5, you can opt to do a lower version, for example 3 sets. Just stay with the given weight and RIR.",
+        "Reach each weekly set goal across the week. For example, do 10 sets of chest on the first push day and 5 on the second.",
+        "As you gain experience, auto-adjust your working sets."
+      ]
+    },
+    {
+      "heading": "Rest between sets",
+      "body": [
+        "Rest 3-4 minutes on the big compound lift, then 2 minutes for the rest."
+      ]
+    },
+    {
+      "heading": "After the block",
+      "body": [
+        "Follow it with the Strength Block (4 weeks, then a deload). For the accessory work in the Strength Block, repeat one of your favorite workouts from the 8 working set mesocycle."
+      ]
+    },
+    {
+      "heading": "Training techniques used",
+      "body": [
+        "RP = Rest-pause: after you reach technical failure, wait 10-15 seconds and squeeze out some more reps.",
+        "P = Long-length partials: partial reps with the target muscle at its lengthened position, at the end of a movement such as the bottom of a curl, the top of a pulldown or the bottom of a bench press.",
+        "S = Intra-set stretch: after you finish your set, stretch that muscle for 35 seconds.",
+        "Superset: do the two exercises back to back, then rest."
+      ]
+    },
+    {
+      "heading": "Terms",
+      "body": [
+        "RIR = reps in reserve. If a set says 3 RIR, pick a weight and stop at a rep where you feel you could still push out 3 more reps.",
+        "%1RM = percentage of your one-rep max. For 80%, take 80% of your one-rep max and use that weight."
+      ]
+    }
+  ],
+  "weeks": [
+    {
+      "week": 1,
+      "label": "Week 1",
+      "phase": "8 working sets · 80% · 3-4 RIR",
+      "days": [
+        {
+          "dayId": "w1-d1",
+          "name": "Legs (Quad Dom)",
+          "exercises": [
+            {"exerciseId":"w1-d1-1-squat","name":"Squat","notes":"At 80% of your 1RM. If you use the Smith machine version, add rest-pause and partials (RP & P).","sets":[{"reps":6,"restSec":210},{"reps":6,"restSec":210},{"reps":6,"restSec":210}]},
+            {"exerciseId":"w1-d1-2-leg-extension","name":"Leg Extension","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w1-d1-3-hamstring-curl","name":"Hamstring Curl","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w1-d1-4-hip-thrust","name":"Hip Thrust","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w1-d1-5-leg-press-calf-raise","name":"Leg Press Calf Raise","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w1-d2",
+          "name": "Push (Chest Dom)",
+          "exercises": [
+            {"exerciseId":"w1-d2-1-incline-bench-press","name":"Incline Bench Press","notes":"At 80% of your 1RM. If you use the Smith machine version, add rest-pause and partials (RP & P).","sets":[{"reps":6,"restSec":210},{"reps":6,"restSec":210},{"reps":6,"restSec":210}]},
+            {"exerciseId":"w1-d2-2-pec-dec","name":"Pec Dec","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w1-d2-3-upright-row","name":"Upright Row","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w1-d2-4-lateral-raise","name":"Lateral Raise","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w1-d2-5-seated-bent-over-rear-delt-fly","name":"Seated Bent Over Rear Delt Fly","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w1-d3",
+          "name": "Pull (Width Dom)",
+          "exercises": [
+            {"exerciseId":"w1-d3-1-barbell-row","name":"Barbell Row","notes":"At 80% of your 1RM.","sets":[{"reps":6,"restSec":210},{"reps":6,"restSec":210},{"reps":6,"restSec":210}]},
+            {"exerciseId":"w1-d3-2-neutral-grip-close-cable-row","name":"Neutral Grip Close Cable Row","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w1-d3-3-pull-ups","name":"Pull Ups","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w1-d3-4-illiac-row","name":"Illiac Row","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w1-d3-5-shrugs","name":"Shrugs","techniques":["RP","P"],"sets":[{"reps":15,"restSec":120},{"reps":15,"restSec":120},{"reps":15,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w1-d4",
+          "name": "Legs (Hams & Glute Dom)",
+          "exercises": [
+            {"exerciseId":"w1-d4-1-romanian-deadlift","name":"Romanian Deadlift","notes":"At 80% of your 1RM. If you use the Smith machine version, add rest-pause and partials (RP & P).","sets":[{"reps":6,"restSec":210},{"reps":6,"restSec":210},{"reps":6,"restSec":210}]},
+            {"exerciseId":"w1-d4-2-hamstring-curl","name":"Hamstring Curl","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w1-d4-3-hip-thrust","name":"Hip Thrust","techniques":["RP"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w1-d4-4-hack-squat","name":"Hack Squat","notes":"Close stance. Superset into partial reps.","techniques":["RP","P","S"],"sets":[{"reps":15,"restSec":120},{"reps":15,"restSec":120}]},
+            {"exerciseId":"w1-d4-5-leg-press-calf-raise","name":"Leg Press Calf Raise","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w1-d5",
+          "name": "Push (Shoulder Dom)",
+          "exercises": [
+            {"exerciseId":"w1-d5-1-upright-row","name":"Upright Row","notes":"At 80% of your 1RM. If you use the Smith machine version, add rest-pause and partials (RP & P).","techniques":["RP","P"],"sets":[{"reps":6,"restSec":120},{"reps":6,"restSec":120},{"reps":6,"restSec":120}]},
+            {"exerciseId":"w1-d5-2-lateral-raise","name":"Lateral Raise","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w1-d5-3-rear-delt-fly","name":"Rear Delt Fly","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w1-d5-4-chest-fly","name":"Chest Fly","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w1-d6",
+          "name": "Pull (Thickness Dom)",
+          "exercises": [
+            {"exerciseId":"w1-d6-1-barbell-row","name":"Barbell Row","notes":"At 80% of your 1RM.","sets":[{"reps":6,"restSec":210},{"reps":6,"restSec":210},{"reps":6,"restSec":210}]},
+            {"exerciseId":"w1-d6-2-illiac-row","name":"Illiac Row","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w1-d6-3-pull-ups","name":"Pull Ups","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w1-d6-4-wide-grip-neutral-row","name":"Wide Grip Neutral Row","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w1-d6-5-shrugs","name":"Shrugs","sets":[{"reps":20,"restSec":120},{"reps":20,"restSec":120},{"reps":20,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w1-d7",
+          "name": "Arms",
+          "exercises": [
+            {"exerciseId":"w1-d7-1-ez-bar-curl","name":"EZ Bar Curl","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w1-d7-2-standing-behind-the-back-cable-curl","name":"Standing Behind-the-Back Cable Curl","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w1-d7-3-chest-supported-tricep-dip","name":"Chest Supported Tricep Dip","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w1-d7-4-cross-body-tricep-extension","name":"Cross Body Tricep Extension","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        }
+      ]
+    },
+    {
+      "week": 2,
+      "label": "Week 2",
+      "phase": "8 working sets · 80% · 2 RIR",
+      "days": [
+        {
+          "dayId": "w2-d1",
+          "name": "Legs (Quad Dom)",
+          "exercises": [
+            {"exerciseId":"w2-d1-1-squat","name":"Squat","notes":"At 80% of your 1RM. If you use the Smith machine version, add rest-pause and partials (RP & P).","sets":[{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210}]},
+            {"exerciseId":"w2-d1-2-leg-extension","name":"Leg Extension","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w2-d1-3-hamstring-curl","name":"Hamstring Curl","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w2-d1-4-hip-thrust","name":"Hip Thrust","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w2-d1-5-leg-press-calf-raise","name":"Leg Press Calf Raise","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w2-d2",
+          "name": "Push (Chest Dom)",
+          "exercises": [
+            {"exerciseId":"w2-d2-1-incline-bench-press","name":"Incline Bench Press","notes":"At 80% of your 1RM. If you use the Smith machine version, add rest-pause and partials (RP & P).","sets":[{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210}]},
+            {"exerciseId":"w2-d2-2-pec-dec","name":"Pec Dec","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w2-d2-3-upright-row","name":"Upright Row","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120}]},
+            {"exerciseId":"w2-d2-4-lateral-raise","name":"Lateral Raise","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w2-d2-5-seated-bent-over-rear-delt-fly","name":"Seated Bent Over Rear Delt Fly","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w2-d3",
+          "name": "Pull (Width Dom)",
+          "exercises": [
+            {"exerciseId":"w2-d3-1-barbell-row","name":"Barbell Row","notes":"At 80% of your 1RM.","sets":[{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210}]},
+            {"exerciseId":"w2-d3-2-neutral-grip-close-cable-row","name":"Neutral Grip Close Cable Row","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w2-d3-3-pull-ups","name":"Pull Ups","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w2-d3-4-illiac-row","name":"Illiac Row","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w2-d3-5-shrugs","name":"Shrugs","techniques":["RP","P"],"sets":[{"reps":15,"restSec":120},{"reps":15,"restSec":120},{"reps":15,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w2-d4",
+          "name": "Legs (Hams & Glute Dom)",
+          "exercises": [
+            {"exerciseId":"w2-d4-1-romanian-deadlift","name":"Romanian Deadlift","notes":"At 80% of your 1RM. If you use the Smith machine version, add rest-pause and partials (RP & P).","sets":[{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210}]},
+            {"exerciseId":"w2-d4-2-hamstring-curl","name":"Hamstring Curl","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w2-d4-3-hip-thrust","name":"Hip Thrust","techniques":["RP"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w2-d4-4-hack-squat","name":"Hack Squat","notes":"Close stance. Superset into partial reps.","techniques":["RP","P","S"],"sets":[{"reps":15,"restSec":120},{"reps":15,"restSec":120}]},
+            {"exerciseId":"w2-d4-5-leg-press-calf-raise","name":"Leg Press Calf Raise","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w2-d5",
+          "name": "Push (Shoulder Dom)",
+          "exercises": [
+            {"exerciseId":"w2-d5-1-upright-row","name":"Upright Row","techniques":["RP","P"],"sets":[{"reps":8,"restSec":120},{"reps":8,"restSec":120},{"reps":8,"restSec":120},{"reps":8,"restSec":120}]},
+            {"exerciseId":"w2-d5-2-lateral-raise","name":"Lateral Raise","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w2-d5-3-rear-delt-fly","name":"Rear Delt Fly","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w2-d5-4-chest-fly","name":"Chest Fly","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w2-d6",
+          "name": "Pull (Thickness Dom)",
+          "exercises": [
+            {"exerciseId":"w2-d6-1-barbell-row","name":"Barbell Row","notes":"At 80% of your 1RM.","sets":[{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210}]},
+            {"exerciseId":"w2-d6-2-illiac-row","name":"Illiac Row","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w2-d6-3-pull-ups","name":"Pull Ups","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w2-d6-4-wide-grip-neutral-row","name":"Wide Grip Neutral Row","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w2-d6-5-shrugs","name":"Shrugs","sets":[{"reps":20,"restSec":120},{"reps":20,"restSec":120},{"reps":20,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w2-d7",
+          "name": "Arms",
+          "exercises": [
+            {"exerciseId":"w2-d7-1-incline-bicep-curl","name":"Incline Bicep Curl","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w2-d7-2-barbell-curl","name":"Barbell Curl","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w2-d7-3-skull-crusher","name":"Skull Crusher","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w2-d7-4-tricep-rope-extension","name":"Tricep Rope Extension","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        }
+      ]
+    },
+    {
+      "week": 3,
+      "label": "Week 3",
+      "phase": "8 working sets · 80% · 1 RIR",
+      "days": [
+        {
+          "dayId": "w3-d1",
+          "name": "Legs (Quad Dom)",
+          "exercises": [
+            {"exerciseId":"w3-d1-1-squat","name":"Squat","notes":"At 80% of your 1RM. If you use the Smith machine version, add rest-pause and partials (RP & P).","sets":[{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210}]},
+            {"exerciseId":"w3-d1-2-leg-extension","name":"Leg Extension","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w3-d1-3-hamstring-curl","name":"Hamstring Curl","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w3-d1-4-hip-thrust","name":"Hip Thrust","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w3-d1-5-leg-press-calf-raise","name":"Leg Press Calf Raise","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w3-d2",
+          "name": "Push (Chest Dom)",
+          "exercises": [
+            {"exerciseId":"w3-d2-1-incline-bench-press","name":"Incline Bench Press","notes":"At 80% of your 1RM. If you use the Smith machine version, add rest-pause and partials (RP & P).","sets":[{"reps":6,"restSec":210},{"reps":6,"restSec":210},{"reps":6,"restSec":210},{"reps":6,"restSec":210},{"reps":6,"restSec":210}]},
+            {"exerciseId":"w3-d2-2-pec-dec","name":"Pec Dec","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w3-d2-3-upright-row","name":"Upright Row","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120}]},
+            {"exerciseId":"w3-d2-4-lateral-raise","name":"Lateral Raise","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w3-d2-5-seated-bent-over-rear-delt-fly","name":"Seated Bent Over Rear Delt Fly","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w3-d2-6-cross-body-tricep-extension","name":"Cross Body Tricep Extension","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w3-d3",
+          "name": "Pull (Width Dom)",
+          "exercises": [
+            {"exerciseId":"w3-d3-1-barbell-row","name":"Barbell Row","notes":"At 80% of your 1RM.","sets":[{"reps":6,"restSec":210},{"reps":6,"restSec":210},{"reps":6,"restSec":210},{"reps":6,"restSec":210},{"reps":6,"restSec":210}]},
+            {"exerciseId":"w3-d3-2-neutral-grip-close-cable-row","name":"Neutral Grip Close Cable Row","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w3-d3-3-pull-ups","name":"Pull Ups","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w3-d3-4-illiac-row","name":"Illiac Row","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w3-d3-5-shrugs","name":"Shrugs","techniques":["RP","P"],"sets":[{"reps":15,"restSec":120},{"reps":15,"restSec":120},{"reps":15,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w3-d4",
+          "name": "Legs (Hams & Glute Dom)",
+          "exercises": [
+            {"exerciseId":"w3-d4-1-romanian-deadlift","name":"Romanian Deadlift","notes":"At 80% of your 1RM. If you use the Smith machine version, add rest-pause and partials (RP & P).","sets":[{"reps":6,"restSec":210},{"reps":6,"restSec":210},{"reps":6,"restSec":210},{"reps":6,"restSec":210},{"reps":6,"restSec":210}]},
+            {"exerciseId":"w3-d4-2-hamstring-curl","name":"Hamstring Curl","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w3-d4-3-hip-thrust","name":"Hip Thrust","techniques":["RP"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w3-d4-4-hack-squat","name":"Hack Squat","notes":"Close stance. Superset into partial reps.","techniques":["RP","P","S"],"sets":[{"reps":15,"restSec":120},{"reps":15,"restSec":120}]},
+            {"exerciseId":"w3-d4-5-leg-press-calf-raise","name":"Leg Press Calf Raise","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w3-d5",
+          "name": "Push (Shoulder Dom)",
+          "exercises": [
+            {"exerciseId":"w3-d5-1-upright-row","name":"Upright Row","notes":"At 80% of your 1RM. If you use the Smith machine version, add rest-pause and partials (RP & P).","techniques":["RP","P"],"sets":[{"reps":6,"restSec":120},{"reps":6,"restSec":120},{"reps":6,"restSec":120},{"reps":6,"restSec":120},{"reps":6,"restSec":120}]},
+            {"exerciseId":"w3-d5-2-lateral-raise","name":"Lateral Raise","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w3-d5-3-rear-delt-fly","name":"Rear Delt Fly","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w3-d5-4-chest-fly","name":"Chest Fly","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w3-d5-5-cross-body-tricep-extension","name":"Cross Body Tricep Extension","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w3-d6",
+          "name": "Pull (Thickness Dom)",
+          "exercises": [
+            {"exerciseId":"w3-d6-1-barbell-row","name":"Barbell Row","notes":"At 80% of your 1RM.","sets":[{"reps":6,"restSec":210},{"reps":6,"restSec":210},{"reps":6,"restSec":210},{"reps":6,"restSec":210},{"reps":6,"restSec":210}]},
+            {"exerciseId":"w3-d6-2-illiac-row","name":"Illiac Row","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w3-d6-3-pull-ups","name":"Pull Ups","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w3-d6-4-wide-grip-neutral-row","name":"Wide Grip Neutral Row","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w3-d6-5-shrugs","name":"Shrugs","sets":[{"reps":20,"restSec":120},{"reps":20,"restSec":120},{"reps":20,"restSec":120}]},
+            {"exerciseId":"w3-d6-6-alternating-hammer-curl","name":"Alternating Hammer Curl","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w3-d7",
+          "name": "Arms",
+          "exercises": [
+            {"exerciseId":"w3-d7-1-incline-bicep-curl","name":"Incline Bicep Curl","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w3-d7-2-barbell-curl","name":"Barbell Curl","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w3-d7-3-skull-crusher","name":"Skull Crusher","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w3-d7-4-tricep-rope-extension","name":"Tricep Rope Extension","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        }
+      ]
+    },
+    {
+      "week": 4,
+      "label": "Week 4",
+      "phase": "8 working sets · 80% · 0 RIR",
+      "days": [
+        {
+          "dayId": "w4-d1",
+          "name": "Legs (Quad Dom)",
+          "exercises": [
+            {"exerciseId":"w4-d1-1-squat","name":"Squat","notes":"At 80% of your 1RM. Plus an AMRAP set. If you use the Smith machine version, add rest-pause and partials (RP & P).","sets":[{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210}]},
+            {"exerciseId":"w4-d1-2-leg-extension","name":"Leg Extension","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120}]},
+            {"exerciseId":"w4-d1-3-hamstring-curl","name":"Hamstring Curl","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w4-d1-4-hip-thrust","name":"Hip Thrust","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w4-d1-5-leg-press-calf-raise","name":"Leg Press Calf Raise","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w4-d2",
+          "name": "Push (Chest Dom)",
+          "exercises": [
+            {"exerciseId":"w4-d2-1-incline-bench-press","name":"Incline Bench Press","notes":"At 80% of your 1RM. Plus an AMRAP set. If you use the Smith machine version, add rest-pause and partials (RP & P).","sets":[{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210}]},
+            {"exerciseId":"w4-d2-2-pec-dec","name":"Pec Dec","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w4-d2-3-upright-row","name":"Upright Row","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120}]},
+            {"exerciseId":"w4-d2-4-lateral-raise","name":"Lateral Raise","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w4-d2-5-seated-bent-over-rear-delt-fly","name":"Seated Bent Over Rear Delt Fly","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w4-d2-6-cross-body-tricep-extension","name":"Cross Body Tricep Extension","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w4-d3",
+          "name": "Pull (Width Dom)",
+          "exercises": [
+            {"exerciseId":"w4-d3-1-barbell-row","name":"Barbell Row","notes":"At 80% of your 1RM. Plus an AMRAP set.","sets":[{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210}]},
+            {"exerciseId":"w4-d3-2-neutral-grip-close-cable-row","name":"Neutral Grip Close Cable Row","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w4-d3-3-pull-ups","name":"Pull Ups","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w4-d3-4-illiac-row","name":"Illiac Row","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w4-d3-5-shrugs","name":"Shrugs","techniques":["RP","P"],"sets":[{"reps":15,"restSec":120},{"reps":15,"restSec":120},{"reps":15,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w4-d4",
+          "name": "Legs (Hams & Glute Dom)",
+          "exercises": [
+            {"exerciseId":"w4-d4-1-romanian-deadlift","name":"Romanian Deadlift","notes":"At 80% of your 1RM. Plus an AMRAP set. If you use the Smith machine version, add rest-pause and partials (RP & P).","sets":[{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210}]},
+            {"exerciseId":"w4-d4-2-hamstring-curl","name":"Hamstring Curl","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120}]},
+            {"exerciseId":"w4-d4-3-hip-thrust","name":"Hip Thrust","techniques":["RP"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w4-d4-4-hack-squat","name":"Hack Squat","notes":"Close stance. Superset into partial reps.","techniques":["RP","P","S"],"sets":[{"reps":15,"restSec":120},{"reps":15,"restSec":120}]},
+            {"exerciseId":"w4-d4-5-leg-press-calf-raise","name":"Leg Press Calf Raise","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w4-d5",
+          "name": "Push (Shoulder Dom)",
+          "exercises": [
+            {"exerciseId":"w4-d5-1-upright-row","name":"Upright Row","techniques":["RP","P"],"sets":[{"reps":8,"restSec":120},{"reps":8,"restSec":120},{"reps":8,"restSec":120},{"reps":8,"restSec":120},{"reps":8,"restSec":120}]},
+            {"exerciseId":"w4-d5-2-lateral-raise","name":"Lateral Raise","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w4-d5-3-rear-delt-fly","name":"Rear Delt Fly","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w4-d5-4-chest-fly","name":"Chest Fly","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w4-d5-5-cross-body-tricep-extension","name":"Cross Body Tricep Extension","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w4-d6",
+          "name": "Pull (Thickness Dom)",
+          "exercises": [
+            {"exerciseId":"w4-d6-1-barbell-row","name":"Barbell Row","notes":"At 80% of your 1RM. Plus an AMRAP set.","sets":[{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210}]},
+            {"exerciseId":"w4-d6-2-illiac-row","name":"Illiac Row","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w4-d6-3-pull-ups","name":"Pull Ups","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w4-d6-4-wide-grip-neutral-row","name":"Wide Grip Neutral Row","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w4-d6-5-shrugs","name":"Shrugs","sets":[{"reps":20,"restSec":120},{"reps":20,"restSec":120},{"reps":20,"restSec":120}]},
+            {"exerciseId":"w4-d6-6-alternating-hammer-curl","name":"Alternating Hammer Curl","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w4-d7",
+          "name": "Arms",
+          "exercises": [
+            {"exerciseId":"w4-d7-1-incline-bicep-curl","name":"Incline Bicep Curl","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w4-d7-2-barbell-curl","name":"Barbell Curl","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w4-d7-3-skull-crusher","name":"Skull Crusher","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w4-d7-4-tricep-rope-extension","name":"Tricep Rope Extension","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        }
+      ]
+    },
+    {
+      "week": 5,
+      "label": "Week 5",
+      "phase": "12 working sets · 75% · 3-4 RIR",
+      "days": [
+        {
+          "dayId": "w5-d1",
+          "name": "Legs (Quad Dom)",
+          "exercises": [
+            {"exerciseId":"w5-d1-1-squat","name":"Squat","notes":"At 75% of your 1RM. If you use the Smith machine version, add rest-pause and partials (RP & P).","sets":[{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210}]},
+            {"exerciseId":"w5-d1-2-leg-extension","name":"Leg Extension","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w5-d1-3-hack-squat","name":"Hack Squat","notes":"Close stance. Superset into partial reps.","sets":[{"reps":15,"restSec":120},{"reps":15,"restSec":120}]},
+            {"exerciseId":"w5-d1-4-hamstring-curl","name":"Hamstring Curl","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w5-d1-5-hip-thrust","name":"Hip Thrust","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w5-d1-6-seated-calf-raise","name":"Seated Calf Raise","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w5-d2",
+          "name": "Push (Chest Dom)",
+          "exercises": [
+            {"exerciseId":"w5-d2-1-incline-bench-press","name":"Incline Bench Press","notes":"At 75% of your 1RM. If you use the Smith machine version, add rest-pause and partials (RP & P).","sets":[{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210}]},
+            {"exerciseId":"w5-d2-2-pec-dec","name":"Pec Dec","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w5-d2-3-upright-row","name":"Upright Row","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w5-d2-4-lateral-raise","name":"Lateral Raise","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w5-d2-5-standing-cable-rear-delt-extension","name":"Standing Cable Rear Delt Extension","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w5-d2-6-tricep-straight-bar-pushdown","name":"Tricep Straight Bar Pushdown","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w5-d3",
+          "name": "Pull (Width Dom)",
+          "exercises": [
+            {"exerciseId":"w5-d3-1-barbell-row","name":"Barbell Row","notes":"At 75% of your 1RM.","sets":[{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210}]},
+            {"exerciseId":"w5-d3-2-illiac-row","name":"Illiac Row","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w5-d3-3-pull-ups","name":"Pull Ups","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w5-d3-4-pullover","name":"Pullover","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w5-d3-5-shrugs","name":"Shrugs","techniques":["RP","P"],"sets":[{"reps":15,"restSec":120},{"reps":15,"restSec":120},{"reps":15,"restSec":120}]},
+            {"exerciseId":"w5-d3-6-alternating-dumbbell-curl","name":"Alternating Dumbbell Curl","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w5-d4",
+          "name": "Legs (Hams & Glute Dom)",
+          "exercises": [
+            {"exerciseId":"w5-d4-1-romanian-deadlift","name":"Romanian Deadlift","notes":"At 75% of your 1RM. If you use the Smith machine version, add rest-pause and partials (RP & P).","sets":[{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210}]},
+            {"exerciseId":"w5-d4-2-hamstring-curl","name":"Hamstring Curl","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w5-d4-3-hip-thrust","name":"Hip Thrust","techniques":["RP"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w5-d4-4-leg-extension","name":"Leg Extension","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w5-d4-5-seated-calf-raise","name":"Seated Calf Raise","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w5-d5",
+          "name": "Push (Shoulder Dom)",
+          "exercises": [
+            {"exerciseId":"w5-d5-1-upright-row","name":"Upright Row","techniques":["RP","P"],"sets":[{"reps":10,"restSec":120},{"reps":10,"restSec":120},{"reps":10,"restSec":120},{"reps":10,"restSec":120}]},
+            {"exerciseId":"w5-d5-2-lateral-raise","name":"Lateral Raise","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w5-d5-3-rear-delt-fly","name":"Rear Delt Fly","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w5-d5-4-incline-bench-press","name":"Incline Bench Press","notes":"Optional. At 80% of your 1RM. Do this with the chest fly below, or the alternative.","techniques":["RP","P"],"sets":[{"reps":8,"restSec":120},{"reps":8,"restSec":120},{"reps":8,"restSec":120}]},
+            {"exerciseId":"w5-d5-5-chest-fly","name":"Chest Fly","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w5-d5-6-chest-fly-alternative","name":"Chest Fly (alternative)","notes":"Alternative to the incline bench and chest fly pairing.","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w5-d5-7-tricep-straight-bar-pushdown","name":"Tricep Straight Bar Pushdown","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w5-d6",
+          "name": "Pull (Thickness Dom)",
+          "exercises": [
+            {"exerciseId":"w5-d6-1-barbell-row","name":"Barbell Row","notes":"At 75% of your 1RM.","sets":[{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210}]},
+            {"exerciseId":"w5-d6-2-illiac-row","name":"Illiac Row","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w5-d6-3-pull-ups","name":"Pull Ups","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w5-d6-4-wide-grip-neutral-row","name":"Wide Grip Neutral Row","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w5-d6-5-shrugs","name":"Shrugs","sets":[{"reps":20,"restSec":120},{"reps":20,"restSec":120},{"reps":20,"restSec":120}]},
+            {"exerciseId":"w5-d6-6-alternating-dumbbell-curl","name":"Alternating Dumbbell Curl","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w5-d7",
+          "name": "Arms",
+          "exercises": [
+            {"exerciseId":"w5-d7-1-preacher-curl","name":"Preacher Curl","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w5-d7-2-alternating-dumbbell-curl","name":"Alternating Dumbbell Curl","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w5-d7-3-tricep-leaning-overhead-rope-extension","name":"Tricep Leaning Overhead Rope Extension","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w5-d7-4-tricep-straight-bar-pushdown","name":"Tricep Straight Bar Pushdown","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        }
+      ]
+    },
+    {
+      "week": 6,
+      "label": "Week 6",
+      "phase": "12 working sets · 75% · 2 RIR",
+      "days": [
+        {
+          "dayId": "w6-d1",
+          "name": "Legs (Quad Dom)",
+          "exercises": [
+            {"exerciseId":"w6-d1-1-squat","name":"Squat","notes":"At 75% of your 1RM. If you use the Smith machine version, add rest-pause and partials (RP & P).","sets":[{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210}]},
+            {"exerciseId":"w6-d1-2-leg-extension","name":"Leg Extension","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w6-d1-3-hack-squat","name":"Hack Squat","notes":"Close stance. Superset into partial reps.","sets":[{"reps":15,"restSec":120},{"reps":15,"restSec":120}]},
+            {"exerciseId":"w6-d1-4-hamstring-curl","name":"Hamstring Curl","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w6-d1-5-hip-thrust","name":"Hip Thrust","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w6-d1-6-seated-calf-raise","name":"Seated Calf Raise","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w6-d2",
+          "name": "Push (Chest Dom)",
+          "exercises": [
+            {"exerciseId":"w6-d2-1-incline-bench-press","name":"Incline Bench Press","notes":"At 75% of your 1RM. If you use the Smith machine version, add rest-pause and partials (RP & P).","sets":[{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210}]},
+            {"exerciseId":"w6-d2-2-pec-dec","name":"Pec Dec","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w6-d2-3-upright-row","name":"Upright Row","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w6-d2-4-lateral-raise","name":"Lateral Raise","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w6-d2-5-standing-cable-rear-delt-extension","name":"Standing Cable Rear Delt Extension","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w6-d2-6-tricep-straight-bar-pushdown","name":"Tricep Straight Bar Pushdown","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w6-d3",
+          "name": "Pull (Width Dom)",
+          "exercises": [
+            {"exerciseId":"w6-d3-1-barbell-row","name":"Barbell Row","notes":"At 75% of your 1RM.","sets":[{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210}]},
+            {"exerciseId":"w6-d3-2-illiac-row","name":"Illiac Row","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w6-d3-3-pull-ups","name":"Pull Ups","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w6-d3-4-pullover","name":"Pullover","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w6-d3-5-shrugs","name":"Shrugs","techniques":["RP","P"],"sets":[{"reps":15,"restSec":120},{"reps":15,"restSec":120},{"reps":15,"restSec":120}]},
+            {"exerciseId":"w6-d3-6-alternating-dumbbell-curl","name":"Alternating Dumbbell Curl","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w6-d4",
+          "name": "Legs (Hams & Glute Dom)",
+          "exercises": [
+            {"exerciseId":"w6-d4-1-romanian-deadlift","name":"Romanian Deadlift","notes":"At 75% of your 1RM. If you use the Smith machine version, add rest-pause and partials (RP & P).","sets":[{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210}]},
+            {"exerciseId":"w6-d4-2-hamstring-curl","name":"Hamstring Curl","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w6-d4-3-hip-thrust","name":"Hip Thrust","techniques":["RP"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w6-d4-4-leg-extension","name":"Leg Extension","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w6-d4-5-seated-calf-raise","name":"Seated Calf Raise","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w6-d5",
+          "name": "Push (Shoulder Dom)",
+          "exercises": [
+            {"exerciseId":"w6-d5-1-upright-row","name":"Upright Row","techniques":["RP","P"],"sets":[{"reps":10,"restSec":120},{"reps":10,"restSec":120},{"reps":10,"restSec":120},{"reps":10,"restSec":120}]},
+            {"exerciseId":"w6-d5-2-lateral-raise","name":"Lateral Raise","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w6-d5-3-rear-delt-fly","name":"Rear Delt Fly","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w6-d5-4-incline-bench-press","name":"Incline Bench Press","notes":"Optional. At 80% of your 1RM. Do this with the chest fly below, or the alternative.","techniques":["RP","P"],"sets":[{"reps":8,"restSec":120},{"reps":8,"restSec":120},{"reps":8,"restSec":120}]},
+            {"exerciseId":"w6-d5-5-chest-fly","name":"Chest Fly","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w6-d5-6-chest-fly-alternative","name":"Chest Fly (alternative)","notes":"Alternative to the incline bench and chest fly pairing.","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w6-d5-7-tricep-straight-bar-pushdown","name":"Tricep Straight Bar Pushdown","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w6-d6",
+          "name": "Pull (Thickness Dom)",
+          "exercises": [
+            {"exerciseId":"w6-d6-1-barbell-row","name":"Barbell Row","notes":"At 75% of your 1RM.","sets":[{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210}]},
+            {"exerciseId":"w6-d6-2-illiac-row","name":"Illiac Row","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w6-d6-3-pull-ups","name":"Pull Ups","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w6-d6-4-wide-grip-neutral-row","name":"Wide Grip Neutral Row","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w6-d6-5-shrugs","name":"Shrugs","sets":[{"reps":20,"restSec":120},{"reps":20,"restSec":120},{"reps":20,"restSec":120}]},
+            {"exerciseId":"w6-d6-6-alternating-dumbbell-curl","name":"Alternating Dumbbell Curl","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w6-d7",
+          "name": "Arms",
+          "exercises": [
+            {"exerciseId":"w6-d7-1-preacher-curl","name":"Preacher Curl","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w6-d7-2-alternating-dumbbell-curl","name":"Alternating Dumbbell Curl","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w6-d7-3-tricep-leaning-overhead-rope-extension","name":"Tricep Leaning Overhead Rope Extension","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w6-d7-4-tricep-straight-bar-pushdown","name":"Tricep Straight Bar Pushdown","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        }
+      ]
+    },
+    {
+      "week": 7,
+      "label": "Week 7",
+      "phase": "12 working sets · 75% · 1 RIR",
+      "days": [
+        {
+          "dayId": "w7-d1",
+          "name": "Legs (Quad Dom)",
+          "exercises": [
+            {"exerciseId":"w7-d1-1-squat","name":"Squat","notes":"At 75% of your 1RM. If you use the Smith machine version, add rest-pause and partials (RP & P).","sets":[{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210}]},
+            {"exerciseId":"w7-d1-2-leg-extension","name":"Leg Extension","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w7-d1-3-hack-squat","name":"Hack Squat","notes":"Close stance. Superset into partial reps.","sets":[{"reps":15,"restSec":120},{"reps":15,"restSec":120}]},
+            {"exerciseId":"w7-d1-4-hamstring-curl","name":"Hamstring Curl","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w7-d1-5-hip-thrust","name":"Hip Thrust","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w7-d1-6-seated-calf-raise","name":"Seated Calf Raise","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w7-d2",
+          "name": "Push (Chest Dom)",
+          "exercises": [
+            {"exerciseId":"w7-d2-1-incline-bench-press","name":"Incline Bench Press","notes":"At 75% of your 1RM. If you use the Smith machine version, add rest-pause and partials (RP & P).","sets":[{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210}]},
+            {"exerciseId":"w7-d2-2-pec-dec","name":"Pec Dec","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w7-d2-3-upright-row","name":"Upright Row","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w7-d2-4-lateral-raise","name":"Lateral Raise","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w7-d2-5-standing-cable-rear-delt-extension","name":"Standing Cable Rear Delt Extension","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w7-d2-6-tricep-straight-bar-pushdown","name":"Tricep Straight Bar Pushdown","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w7-d3",
+          "name": "Pull (Width Dom)",
+          "exercises": [
+            {"exerciseId":"w7-d3-1-barbell-row","name":"Barbell Row","notes":"At 75% of your 1RM.","sets":[{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210}]},
+            {"exerciseId":"w7-d3-2-illiac-row","name":"Illiac Row","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w7-d3-3-pull-ups","name":"Pull Ups","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w7-d3-4-pullover","name":"Pullover","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w7-d3-5-shrugs","name":"Shrugs","techniques":["RP","P"],"sets":[{"reps":15,"restSec":120},{"reps":15,"restSec":120},{"reps":15,"restSec":120}]},
+            {"exerciseId":"w7-d3-6-alternating-dumbbell-curl","name":"Alternating Dumbbell Curl","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w7-d4",
+          "name": "Legs (Hams & Glute Dom)",
+          "exercises": [
+            {"exerciseId":"w7-d4-1-romanian-deadlift","name":"Romanian Deadlift","notes":"At 75% of your 1RM. If you use the Smith machine version, add rest-pause and partials (RP & P).","sets":[{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210}]},
+            {"exerciseId":"w7-d4-2-hamstring-curl","name":"Hamstring Curl","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w7-d4-3-hip-thrust","name":"Hip Thrust","techniques":["RP"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w7-d4-4-leg-extension","name":"Leg Extension","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w7-d4-5-seated-calf-raise","name":"Seated Calf Raise","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w7-d5",
+          "name": "Push (Shoulder Dom)",
+          "exercises": [
+            {"exerciseId":"w7-d5-1-upright-row","name":"Upright Row","notes":"At 75% of your 1RM. ","techniques":["RP","P"],"sets":[{"reps":8,"restSec":120},{"reps":8,"restSec":120},{"reps":8,"restSec":120},{"reps":8,"restSec":120},{"reps":8,"restSec":120}]},
+            {"exerciseId":"w7-d5-2-lateral-raise","name":"Lateral Raise","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w7-d5-3-rear-delt-fly","name":"Rear Delt Fly","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w7-d5-4-incline-bench-press","name":"Incline Bench Press","notes":"Optional. At 80% of your 1RM. Do this with the chest fly below, or the alternative.","techniques":["RP","P"],"sets":[{"reps":8,"restSec":120},{"reps":8,"restSec":120},{"reps":8,"restSec":120}]},
+            {"exerciseId":"w7-d5-5-chest-fly","name":"Chest Fly","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w7-d5-6-chest-fly-alternative","name":"Chest Fly (alternative)","notes":"Alternative to the incline bench and chest fly pairing.","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w7-d6",
+          "name": "Pull (Thickness Dom)",
+          "exercises": [
+            {"exerciseId":"w7-d6-1-barbell-row","name":"Barbell Row","notes":"At 75% of your 1RM.","sets":[{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210}]},
+            {"exerciseId":"w7-d6-2-illiac-row","name":"Illiac Row","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w7-d6-3-pull-ups","name":"Pull Ups","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w7-d6-4-wide-grip-neutral-row","name":"Wide Grip Neutral Row","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w7-d6-5-shrugs","name":"Shrugs","sets":[{"reps":20,"restSec":120},{"reps":20,"restSec":120},{"reps":20,"restSec":120}]},
+            {"exerciseId":"w7-d6-6-alternating-dumbbell-curl","name":"Alternating Dumbbell Curl","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w7-d7",
+          "name": "Arms",
+          "exercises": [
+            {"exerciseId":"w7-d7-1-preacher-curl","name":"Preacher Curl","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w7-d7-2-alternating-dumbbell-curl","name":"Alternating Dumbbell Curl","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w7-d7-3-tricep-leaning-overhead-rope-extension","name":"Tricep Leaning Overhead Rope Extension","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w7-d7-4-tricep-straight-bar-pushdown","name":"Tricep Straight Bar Pushdown","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        }
+      ]
+    },
+    {
+      "week": 8,
+      "label": "Week 8",
+      "phase": "12 working sets · 75% · 0 RIR",
+      "days": [
+        {
+          "dayId": "w8-d1",
+          "name": "Legs (Quad Dom)",
+          "exercises": [
+            {"exerciseId":"w8-d1-1-squat","name":"Squat","notes":"At 75% of your 1RM. Plus an AMRAP set. If you use the Smith machine version, add rest-pause and partials (RP & P).","sets":[{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210}]},
+            {"exerciseId":"w8-d1-2-leg-extension","name":"Leg Extension","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w8-d1-3-hack-squat","name":"Hack Squat","notes":"Close stance. Superset into partial reps.","sets":[{"reps":15,"restSec":120},{"reps":15,"restSec":120}]},
+            {"exerciseId":"w8-d1-4-hamstring-curl","name":"Hamstring Curl","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w8-d1-5-hip-thrust","name":"Hip Thrust","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w8-d1-6-seated-calf-raise","name":"Seated Calf Raise","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w8-d2",
+          "name": "Push (Chest Dom)",
+          "exercises": [
+            {"exerciseId":"w8-d2-1-incline-bench-press","name":"Incline Bench Press","notes":"At 75% of your 1RM. Plus an AMRAP set. If you use the Smith machine version, add rest-pause and partials (RP & P).","sets":[{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210}]},
+            {"exerciseId":"w8-d2-2-pec-dec","name":"Pec Dec","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w8-d2-3-upright-row","name":"Upright Row","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w8-d2-4-lateral-raise","name":"Lateral Raise","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w8-d2-5-standing-cable-rear-delt-extension","name":"Standing Cable Rear Delt Extension","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w8-d2-6-tricep-straight-bar-pushdown","name":"Tricep Straight Bar Pushdown","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w8-d3",
+          "name": "Pull (Width Dom)",
+          "exercises": [
+            {"exerciseId":"w8-d3-1-barbell-row","name":"Barbell Row","notes":"At 75% of your 1RM. Plus an AMRAP set.","sets":[{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210}]},
+            {"exerciseId":"w8-d3-2-illiac-row","name":"Illiac Row","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w8-d3-3-pull-ups","name":"Pull Ups","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w8-d3-4-pullover","name":"Pullover","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w8-d3-5-shrugs","name":"Shrugs","techniques":["RP","P"],"sets":[{"reps":15,"restSec":120},{"reps":15,"restSec":120},{"reps":15,"restSec":120}]},
+            {"exerciseId":"w8-d3-6-alternating-dumbbell-curl","name":"Alternating Dumbbell Curl","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w8-d4",
+          "name": "Legs (Hams & Glute Dom)",
+          "exercises": [
+            {"exerciseId":"w8-d4-1-romanian-deadlift","name":"Romanian Deadlift","notes":"At 75% of your 1RM. Plus an AMRAP set. If you use the Smith machine version, add rest-pause and partials (RP & P).","sets":[{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210}]},
+            {"exerciseId":"w8-d4-2-hamstring-curl","name":"Hamstring Curl","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w8-d4-3-hip-thrust","name":"Hip Thrust","techniques":["RP"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w8-d4-4-leg-extension","name":"Leg Extension","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w8-d4-5-seated-calf-raise","name":"Seated Calf Raise","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w8-d5",
+          "name": "Push (Shoulder Dom)",
+          "exercises": [
+            {"exerciseId":"w8-d5-1-upright-row","name":"Upright Row","techniques":["RP","P"],"sets":[{"reps":10,"restSec":120},{"reps":10,"restSec":120},{"reps":10,"restSec":120},{"reps":10,"restSec":120},{"reps":10,"restSec":120}]},
+            {"exerciseId":"w8-d5-2-lateral-raise","name":"Lateral Raise","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w8-d5-3-rear-delt-fly","name":"Rear Delt Fly","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w8-d5-4-incline-bench-press","name":"Incline Bench Press","notes":"Optional. At 80% of your 1RM. Do this with the chest fly below, or the alternative.","techniques":["RP","P"],"sets":[{"reps":8,"restSec":120},{"reps":8,"restSec":120},{"reps":8,"restSec":120}]},
+            {"exerciseId":"w8-d5-5-chest-fly","name":"Chest Fly","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w8-d5-6-chest-fly-alternative","name":"Chest Fly (alternative)","notes":"Alternative to the incline bench and chest fly pairing.","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w8-d5-7-tricep-straight-bar-pushdown","name":"Tricep Straight Bar Pushdown","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w8-d6",
+          "name": "Pull (Thickness Dom)",
+          "exercises": [
+            {"exerciseId":"w8-d6-1-barbell-row","name":"Barbell Row","notes":"At 75% of your 1RM. Plus an AMRAP set.","sets":[{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210},{"reps":8,"restSec":210}]},
+            {"exerciseId":"w8-d6-2-illiac-row","name":"Illiac Row","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w8-d6-3-pull-ups","name":"Pull Ups","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w8-d6-4-wide-grip-neutral-row","name":"Wide Grip Neutral Row","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w8-d6-5-shrugs","name":"Shrugs","sets":[{"reps":20,"restSec":120},{"reps":20,"restSec":120},{"reps":20,"restSec":120}]},
+            {"exerciseId":"w8-d6-6-alternating-dumbbell-curl","name":"Alternating Dumbbell Curl","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w8-d7",
+          "name": "Arms",
+          "exercises": [
+            {"exerciseId":"w8-d7-1-preacher-curl","name":"Preacher Curl","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w8-d7-2-alternating-dumbbell-curl","name":"Alternating Dumbbell Curl","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w8-d7-3-tricep-leaning-overhead-rope-extension","name":"Tricep Leaning Overhead Rope Extension","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w8-d7-4-tricep-straight-bar-pushdown","name":"Tricep Straight Bar Pushdown","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        }
+      ]
+    },
+    {
+      "week": 9,
+      "label": "Week 9",
+      "phase": "15 working sets · 70% · 3-4 RIR",
+      "days": [
+        {
+          "dayId": "w9-d1",
+          "name": "Legs (Quad Dom)",
+          "exercises": [
+            {"exerciseId":"w9-d1-1-squat","name":"Squat","notes":"At 70% of your 1RM. If you use the Smith machine version, add rest-pause and partials (RP & P).","sets":[{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210}]},
+            {"exerciseId":"w9-d1-2-leg-extension","name":"Leg Extension","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w9-d1-3-hack-squat","name":"Hack Squat","notes":"Close stance. Superset into partial reps.","sets":[{"reps":15,"restSec":120},{"reps":15,"restSec":120},{"reps":15,"restSec":120},{"reps":15,"restSec":120}]},
+            {"exerciseId":"w9-d1-4-hamstring-curl","name":"Hamstring Curl","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w9-d1-5-hip-thrust","name":"Hip Thrust","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w9-d1-6-standing-calf-raise","name":"Standing Calf Raise","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w9-d2",
+          "name": "Push (Chest Dom)",
+          "exercises": [
+            {"exerciseId":"w9-d2-1-incline-bench-press","name":"Incline Bench Press","notes":"At 70% of your 1RM. If you use the Smith machine version, add rest-pause and partials (RP & P).","sets":[{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210}]},
+            {"exerciseId":"w9-d2-2-pec-dec","name":"Pec Dec","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w9-d2-3-upright-row","name":"Upright Row","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w9-d2-4-lateral-raise","name":"Lateral Raise","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w9-d2-5-tricep-rope-extension","name":"Tricep Rope Extension","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w9-d2-6-rear-delt-fly","name":"Rear Delt Fly","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w9-d3",
+          "name": "Pull (Width Dom)",
+          "exercises": [
+            {"exerciseId":"w9-d3-1-barbell-row","name":"Barbell Row","notes":"At 70% of your 1RM.","sets":[{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210}]},
+            {"exerciseId":"w9-d3-2-illiac-row","name":"Illiac Row","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w9-d3-3-pull-ups","name":"Pull Ups","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w9-d3-4-pullover","name":"Pullover","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w9-d3-5-shrugs","name":"Shrugs","techniques":["RP","P"],"sets":[{"reps":15,"restSec":120},{"reps":15,"restSec":120},{"reps":15,"restSec":120}]},
+            {"exerciseId":"w9-d3-6-incline-dumbbell-curl","name":"Incline Dumbbell Curl","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w9-d4",
+          "name": "Legs (Hams & Glute Dom)",
+          "exercises": [
+            {"exerciseId":"w9-d4-1-romanian-deadlift","name":"Romanian Deadlift","notes":"At 70% of your 1RM. If you use the Smith machine version, add rest-pause and partials (RP & P).","sets":[{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210}]},
+            {"exerciseId":"w9-d4-2-hamstring-curl","name":"Hamstring Curl","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w9-d4-3-hip-thrust","name":"Hip Thrust","techniques":["RP"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w9-d4-4-leg-extension","name":"Leg Extension","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w9-d4-5-standing-calf-raise","name":"Standing Calf Raise","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w9-d5",
+          "name": "Push (Shoulder Dom)",
+          "exercises": [
+            {"exerciseId":"w9-d5-1-upright-row","name":"Upright Row","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w9-d5-2-lateral-raise","name":"Lateral Raise","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w9-d5-3-rear-delt-fly","name":"Rear Delt Fly","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w9-d5-4-incline-bench-press","name":"Incline Bench Press","notes":"Optional. At 80% of your 1RM. Do this with the chest fly below, or the alternative.","techniques":["RP","P"],"sets":[{"reps":8,"restSec":120},{"reps":8,"restSec":120},{"reps":8,"restSec":120}]},
+            {"exerciseId":"w9-d5-5-chest-fly","name":"Chest Fly","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w9-d5-6-machine-chest-press-alternative","name":"Machine Chest Press (alternative)","notes":"Alternative to the incline bench and chest fly pairing.","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w9-d5-7-chest-fly-alternative","name":"Chest Fly (alternative)","notes":"Alternative to the incline bench and chest fly pairing.","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w9-d5-8-tricep-rope-extension","name":"Tricep Rope Extension","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w9-d6",
+          "name": "Pull (Thickness Dom)",
+          "exercises": [
+            {"exerciseId":"w9-d6-1-barbell-row","name":"Barbell Row","notes":"At 70% of your 1RM.","sets":[{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210}]},
+            {"exerciseId":"w9-d6-2-illiac-row","name":"Illiac Row","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w9-d6-3-pull-ups","name":"Pull Ups","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w9-d6-4-wide-grip-neutral-row","name":"Wide Grip Neutral Row","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w9-d6-5-shrugs","name":"Shrugs","sets":[{"reps":20,"restSec":120},{"reps":20,"restSec":120},{"reps":20,"restSec":120}]},
+            {"exerciseId":"w9-d6-6-incline-dumbbell-curl","name":"Incline Dumbbell Curl","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w9-d7",
+          "name": "Arms",
+          "exercises": [
+            {"exerciseId":"w9-d7-1-incline-bicep-curl","name":"Incline Bicep Curl","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w9-d7-2-barbell-curl","name":"Barbell Curl","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w9-d7-3-skull-crusher","name":"Skull Crusher","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w9-d7-4-tricep-rope-extension","name":"Tricep Rope Extension","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        }
+      ]
+    },
+    {
+      "week": 10,
+      "label": "Week 10",
+      "phase": "15 working sets · 70% · 2 RIR",
+      "days": [
+        {
+          "dayId": "w10-d1",
+          "name": "Legs (Quad Dom)",
+          "exercises": [
+            {"exerciseId":"w10-d1-1-squat","name":"Squat","notes":"At 70% of your 1RM. If you use the Smith machine version, add rest-pause and partials (RP & P).","sets":[{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210}]},
+            {"exerciseId":"w10-d1-2-leg-extension","name":"Leg Extension","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w10-d1-3-hack-squat","name":"Hack Squat","notes":"Close stance. Superset into partial reps.","sets":[{"reps":15,"restSec":120},{"reps":15,"restSec":120},{"reps":15,"restSec":120},{"reps":15,"restSec":120}]},
+            {"exerciseId":"w10-d1-4-hamstring-curl","name":"Hamstring Curl","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w10-d1-5-hip-thrust","name":"Hip Thrust","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w10-d1-6-standing-calf-raise","name":"Standing Calf Raise","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w10-d2",
+          "name": "Push (Chest Dom)",
+          "exercises": [
+            {"exerciseId":"w10-d2-1-incline-bench-press","name":"Incline Bench Press","notes":"At 70% of your 1RM. If you use the Smith machine version, add rest-pause and partials (RP & P).","sets":[{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210}]},
+            {"exerciseId":"w10-d2-2-pec-dec","name":"Pec Dec","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w10-d2-3-upright-row","name":"Upright Row","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w10-d2-4-lateral-raise","name":"Lateral Raise","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w10-d2-5-tricep-rope-extension","name":"Tricep Rope Extension","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w10-d2-6-rear-delt-fly","name":"Rear Delt Fly","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w10-d3",
+          "name": "Pull (Width Dom)",
+          "exercises": [
+            {"exerciseId":"w10-d3-1-barbell-row","name":"Barbell Row","notes":"At 70% of your 1RM.","sets":[{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210}]},
+            {"exerciseId":"w10-d3-2-illiac-row","name":"Illiac Row","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w10-d3-3-pull-ups","name":"Pull Ups","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w10-d3-4-pullover","name":"Pullover","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w10-d3-5-shrugs","name":"Shrugs","techniques":["RP","P"],"sets":[{"reps":15,"restSec":120},{"reps":15,"restSec":120},{"reps":15,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w10-d4",
+          "name": "Legs (Hams & Glute Dom)",
+          "exercises": [
+            {"exerciseId":"w10-d4-1-romanian-deadlift","name":"Romanian Deadlift","notes":"At 70% of your 1RM. If you use the Smith machine version, add rest-pause and partials (RP & P).","sets":[{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210}]},
+            {"exerciseId":"w10-d4-2-hamstring-curl","name":"Hamstring Curl","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w10-d4-3-hip-thrust","name":"Hip Thrust","techniques":["RP"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w10-d4-4-leg-extension","name":"Leg Extension","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w10-d4-5-standing-calf-raise","name":"Standing Calf Raise","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w10-d5",
+          "name": "Push (Shoulder Dom)",
+          "exercises": [
+            {"exerciseId":"w10-d5-1-upright-row","name":"Upright Row","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w10-d5-2-lateral-raise","name":"Lateral Raise","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w10-d5-3-rear-delt-fly","name":"Rear Delt Fly","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w10-d5-4-incline-bench-press","name":"Incline Bench Press","notes":"Optional. At 80% of your 1RM. Do this with the chest fly below, or the alternative.","techniques":["RP","P"],"sets":[{"reps":8,"restSec":120},{"reps":8,"restSec":120},{"reps":8,"restSec":120}]},
+            {"exerciseId":"w10-d5-5-chest-fly","name":"Chest Fly","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w10-d5-6-machine-chest-press-alternative","name":"Machine Chest Press (alternative)","notes":"Alternative to the incline bench and chest fly pairing.","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w10-d5-7-chest-fly-alternative","name":"Chest Fly (alternative)","notes":"Alternative to the incline bench and chest fly pairing.","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w10-d5-8-tricep-rope-extension","name":"Tricep Rope Extension","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w10-d6",
+          "name": "Pull (Thickness Dom)",
+          "exercises": [
+            {"exerciseId":"w10-d6-1-barbell-row","name":"Barbell Row","notes":"At 70% of your 1RM.","sets":[{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210}]},
+            {"exerciseId":"w10-d6-2-illiac-row","name":"Illiac Row","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w10-d6-3-pull-ups","name":"Pull Ups","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w10-d6-4-wide-grip-neutral-row","name":"Wide Grip Neutral Row","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w10-d6-5-shrugs","name":"Shrugs","sets":[{"reps":20,"restSec":120},{"reps":20,"restSec":120},{"reps":20,"restSec":120}]},
+            {"exerciseId":"w10-d6-6-incline-dumbbell-curl","name":"Incline Dumbbell Curl","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w10-d7",
+          "name": "Arms",
+          "exercises": [
+            {"exerciseId":"w10-d7-1-incline-bicep-curl","name":"Incline Bicep Curl","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w10-d7-2-barbell-curl","name":"Barbell Curl","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w10-d7-3-skull-crusher","name":"Skull Crusher","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w10-d7-4-tricep-rope-extension","name":"Tricep Rope Extension","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        }
+      ]
+    },
+    {
+      "week": 11,
+      "label": "Week 11",
+      "phase": "15 working sets · 70% · 1 RIR",
+      "days": [
+        {
+          "dayId": "w11-d1",
+          "name": "Legs (Quad Dom)",
+          "exercises": [
+            {"exerciseId":"w11-d1-1-squat","name":"Squat","notes":"At 70% of your 1RM. If you use the Smith machine version, add rest-pause and partials (RP & P).","sets":[{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210}]},
+            {"exerciseId":"w11-d1-2-leg-extension","name":"Leg Extension","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w11-d1-3-hack-squat","name":"Hack Squat","notes":"Close stance. Superset into partial reps.","sets":[{"reps":15,"restSec":120},{"reps":15,"restSec":120},{"reps":15,"restSec":120}]},
+            {"exerciseId":"w11-d1-4-hamstring-curl","name":"Hamstring Curl","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w11-d1-5-hip-thrust","name":"Hip Thrust","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w11-d1-6-standing-calf-raise","name":"Standing Calf Raise","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w11-d2",
+          "name": "Push (Chest Dom)",
+          "exercises": [
+            {"exerciseId":"w11-d2-1-incline-bench-press","name":"Incline Bench Press","notes":"At 70% of your 1RM. If you use the Smith machine version, add rest-pause and partials (RP & P).","sets":[{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210}]},
+            {"exerciseId":"w11-d2-2-pec-dec","name":"Pec Dec","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w11-d2-3-upright-row","name":"Upright Row","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w11-d2-4-lateral-raise","name":"Lateral Raise","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w11-d2-5-tricep-rope-extension","name":"Tricep Rope Extension","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w11-d2-6-rear-delt-fly","name":"Rear Delt Fly","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w11-d3",
+          "name": "Pull (Width Dom)",
+          "exercises": [
+            {"exerciseId":"w11-d3-1-barbell-row","name":"Barbell Row","notes":"At 70% of your 1RM.","sets":[{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210}]},
+            {"exerciseId":"w11-d3-2-illiac-row","name":"Illiac Row","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w11-d3-3-pull-ups","name":"Pull Ups","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w11-d3-4-pullover","name":"Pullover","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w11-d3-5-shrugs","name":"Shrugs","techniques":["RP","P"],"sets":[{"reps":15,"restSec":120},{"reps":15,"restSec":120},{"reps":15,"restSec":120}]},
+            {"exerciseId":"w11-d3-6-incline-dumbbell-curl","name":"Incline Dumbbell Curl","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w11-d4",
+          "name": "Legs (Hams & Glute Dom)",
+          "exercises": [
+            {"exerciseId":"w11-d4-1-romanian-deadlift","name":"Romanian Deadlift","notes":"At 70% of your 1RM. If you use the Smith machine version, add rest-pause and partials (RP & P).","sets":[{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210}]},
+            {"exerciseId":"w11-d4-2-hamstring-curl","name":"Hamstring Curl","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w11-d4-3-hip-thrust","name":"Hip Thrust","techniques":["RP"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w11-d4-4-leg-extension","name":"Leg Extension","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w11-d4-5-standing-calf-raise","name":"Standing Calf Raise","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w11-d5",
+          "name": "Push (Shoulder Dom)",
+          "exercises": [
+            {"exerciseId":"w11-d5-1-upright-row","name":"Upright Row","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w11-d5-2-lateral-raise","name":"Lateral Raise","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w11-d5-3-rear-delt-fly","name":"Rear Delt Fly","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w11-d5-4-incline-bench-press","name":"Incline Bench Press","notes":"Optional. At 80% of your 1RM. Do this with the chest fly below, or the alternative.","techniques":["RP","P"],"sets":[{"reps":8,"restSec":120},{"reps":8,"restSec":120},{"reps":8,"restSec":120}]},
+            {"exerciseId":"w11-d5-5-chest-fly","name":"Chest Fly","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w11-d5-6-machine-chest-press-alternative","name":"Machine Chest Press (alternative)","notes":"Alternative to the incline bench and chest fly pairing.","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w11-d5-7-chest-fly-alternative","name":"Chest Fly (alternative)","notes":"Alternative to the incline bench and chest fly pairing.","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w11-d5-8-tricep-rope-extension","name":"Tricep Rope Extension","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w11-d6",
+          "name": "Pull (Thickness Dom)",
+          "exercises": [
+            {"exerciseId":"w11-d6-1-barbell-row","name":"Barbell Row","notes":"At 70% of your 1RM.","sets":[{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210}]},
+            {"exerciseId":"w11-d6-2-illiac-row","name":"Illiac Row","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w11-d6-3-pull-ups","name":"Pull Ups","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w11-d6-4-wide-grip-neutral-row","name":"Wide Grip Neutral Row","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w11-d6-5-shrugs","name":"Shrugs","sets":[{"reps":20,"restSec":120},{"reps":20,"restSec":120},{"reps":20,"restSec":120}]},
+            {"exerciseId":"w11-d6-6-incline-dumbbell-curl","name":"Incline Dumbbell Curl","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w11-d7",
+          "name": "Arms",
+          "exercises": [
+            {"exerciseId":"w11-d7-1-incline-bicep-curl","name":"Incline Bicep Curl","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w11-d7-2-barbell-curl","name":"Barbell Curl","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w11-d7-3-skull-crusher","name":"Skull Crusher","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w11-d7-4-tricep-rope-extension","name":"Tricep Rope Extension","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        }
+      ]
+    },
+    {
+      "week": 12,
+      "label": "Week 12",
+      "phase": "15 working sets · 70% · 0 RIR",
+      "days": [
+        {
+          "dayId": "w12-d1",
+          "name": "Legs (Quad Dom)",
+          "exercises": [
+            {"exerciseId":"w12-d1-1-squat","name":"Squat","notes":"At 70% of your 1RM. Plus an AMRAP set. If you use the Smith machine version, add rest-pause and partials (RP & P).","sets":[{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210}]},
+            {"exerciseId":"w12-d1-2-leg-extension","name":"Leg Extension","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w12-d1-3-hack-squat","name":"Hack Squat","notes":"Close stance. Superset into partial reps.","sets":[{"reps":15,"restSec":120},{"reps":15,"restSec":120}]},
+            {"exerciseId":"w12-d1-4-hamstring-curl","name":"Hamstring Curl","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w12-d1-5-hip-thrust","name":"Hip Thrust","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w12-d1-6-standing-calf-raise","name":"Standing Calf Raise","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w12-d2",
+          "name": "Push (Chest Dom)",
+          "exercises": [
+            {"exerciseId":"w12-d2-1-incline-bench-press","name":"Incline Bench Press","notes":"At 70% of your 1RM. Plus an AMRAP set. If you use the Smith machine version, add rest-pause and partials (RP & P).","sets":[{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210}]},
+            {"exerciseId":"w12-d2-2-pec-dec","name":"Pec Dec","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w12-d2-3-upright-row","name":"Upright Row","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w12-d2-4-lateral-raise","name":"Lateral Raise","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120},{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w12-d2-5-tricep-rope-extension","name":"Tricep Rope Extension","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w12-d2-6-rear-delt-fly","name":"Rear Delt Fly","sets":[{"reps":20,"restSec":120},{"reps":20,"restSec":120},{"reps":20,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w12-d3",
+          "name": "Pull (Width Dom)",
+          "exercises": [
+            {"exerciseId":"w12-d3-1-barbell-row","name":"Barbell Row","notes":"At 70% of your 1RM. Plus an AMRAP set.","sets":[{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210}]},
+            {"exerciseId":"w12-d3-2-illiac-row","name":"Illiac Row","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w12-d3-3-pull-ups","name":"Pull Ups","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w12-d3-4-pullover","name":"Pullover","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w12-d3-5-shrugs","name":"Shrugs","techniques":["RP","P"],"sets":[{"reps":15,"restSec":120},{"reps":15,"restSec":120},{"reps":15,"restSec":120}]},
+            {"exerciseId":"w12-d3-6-incline-dumbbell-curl","name":"Incline Dumbbell Curl","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w12-d4",
+          "name": "Legs (Hams & Glute Dom)",
+          "exercises": [
+            {"exerciseId":"w12-d4-1-romanian-deadlift","name":"Romanian Deadlift","notes":"At 70% of your 1RM. Plus an AMRAP set. If you use the Smith machine version, add rest-pause and partials (RP & P).","sets":[{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210}]},
+            {"exerciseId":"w12-d4-2-hamstring-curl","name":"Hamstring Curl","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w12-d4-3-hip-thrust","name":"Hip Thrust","techniques":["RP"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w12-d4-4-leg-extension","name":"Leg Extension","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w12-d4-5-standing-calf-raise","name":"Standing Calf Raise","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w12-d5",
+          "name": "Push (Shoulder Dom)",
+          "exercises": [
+            {"exerciseId":"w12-d5-1-upright-row","name":"Upright Row","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w12-d5-2-lateral-raise","name":"Lateral Raise","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w12-d5-3-rear-delt-fly","name":"Rear Delt Fly","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w12-d5-4-incline-bench-press","name":"Incline Bench Press","notes":"Optional. At 80% of your 1RM. Do this with the chest fly below, or the alternative.","techniques":["RP","P"],"sets":[{"reps":8,"restSec":120},{"reps":8,"restSec":120},{"reps":8,"restSec":120}]},
+            {"exerciseId":"w12-d5-5-chest-fly","name":"Chest Fly","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w12-d5-6-machine-chest-press-alternative","name":"Machine Chest Press (alternative)","notes":"Alternative to the incline bench and chest fly pairing.","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w12-d5-7-chest-fly-alternative","name":"Chest Fly (alternative)","notes":"Alternative to the incline bench and chest fly pairing.","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w12-d5-8-tricep-rope-extension","name":"Tricep Rope Extension","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w12-d6",
+          "name": "Pull (Thickness Dom)",
+          "exercises": [
+            {"exerciseId":"w12-d6-1-barbell-row","name":"Barbell Row","notes":"At 70% of your 1RM. Plus an AMRAP set.","sets":[{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210},{"reps":10,"restSec":210}]},
+            {"exerciseId":"w12-d6-2-illiac-row","name":"Illiac Row","techniques":["RP","P"],"sets":[{"reps":12,"repsMax":15,"restSec":120}]},
+            {"exerciseId":"w12-d6-3-pull-ups","name":"Pull Ups","techniques":["RP","P","S"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w12-d6-4-wide-grip-neutral-row","name":"Wide Grip Neutral Row","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w12-d6-5-shrugs","name":"Shrugs","sets":[{"reps":20,"restSec":120},{"reps":20,"restSec":120},{"reps":20,"restSec":120}]},
+            {"exerciseId":"w12-d6-6-incline-dumbbell-curl","name":"Incline Dumbbell Curl","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w12-d7",
+          "name": "Arms",
+          "exercises": [
+            {"exerciseId":"w12-d7-1-incline-bicep-curl","name":"Incline Bicep Curl","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w12-d7-2-barbell-curl","name":"Barbell Curl","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w12-d7-3-skull-crusher","name":"Skull Crusher","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w12-d7-4-tricep-rope-extension","name":"Tricep Rope Extension","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        }
+      ]
+    }
+  ]
+}

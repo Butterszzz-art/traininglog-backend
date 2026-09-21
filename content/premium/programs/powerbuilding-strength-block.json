@@ -1,0 +1,271 @@
+{
+  "id": "powerbuilding-strength-block",
+  "kind": "program",
+  "order": 10,
+  "title": "Power-Building: Strength Block",
+  "subtitle": "4 weeks of Juggernaut-style main lifts, then a deload",
+  "audience": "all",
+  "goal": "strength",
+  "archetype": "powerbuilding",
+  "level": "intermediate",
+  "durationWeeks": 5,
+  "summary": "The mainly-strength half of the power-building plan: bench, rows, squat, overhead press and deadlift in 5x5, 3x3 and single-rep waves at 85-100% of your 1RM, ending in a deload. Run it after the 12-week Hypertrophy Block.",
+  "split": {
+    "type": "ppl",
+    "name": "Push / Pull / Legs (strength)",
+    "daysPerWeek": 5,
+    "sessionsPerWeek": 6,
+    "label": "6 sessions per week"
+  },
+  "schedule": {
+    "startDate": "",
+    "weekdays": [
+      1,
+      2,
+      3,
+      5,
+      6
+    ]
+  },
+  "frequency": [
+    "Mon",
+    "Tue",
+    "Wed",
+    "Fri",
+    "Sat"
+  ],
+  "progressionType": "percentage",
+  "progressionNotes": "Every main lift is prescribed at a percentage of your 1RM. Keep the weight and the sets and reps as written.",
+  "guide": [
+    {
+      "heading": "How the block works",
+      "body": [
+        "This is the mainly-strength block: 4 weeks with 6-8 working sets in total, followed by a deload. Each session is one main lift with its sets and reps for the week at a percentage of your 1RM.",
+        "Rest 3-4 minutes between sets of the big compound lift.",
+        "For the accessory work, repeat one of your favorite workouts from the 8 working set mesocycle of the Hypertrophy Block.",
+        "The deadlift runs a week behind the other lifts, as heavy deadlifts should be done about once every 2 weeks."
+      ]
+    },
+    {
+      "heading": "Week by week",
+      "body": [
+        "Weeks 1-2: 5x5 at 85% on every lift.",
+        "Week 3: 3x3 at 90% on bench and rows (3x3 at 85% on overhead press), 3x2 at 90% on squats, and the deadlift stays at 5x5 at 85%.",
+        "Week 4: a single at 100% on bench, rows and squats (a single at 90% on overhead press), light work on the second rows day, and 3x3 at 90% on deadlifts.",
+        "Week 5: start your deload. The deadlift takes its single at 100%."
+      ]
+    },
+    {
+      "heading": "Deload",
+      "body": [
+        "Take a deload week, or 2-3 weeks of almost no lifting. On a lighter deload, each workout day is 5 sets of one exercise at 40% of your 1RM.",
+        "Afterwards, start again at the beginning of the Hypertrophy Block with your new %RM."
+      ]
+    },
+    {
+      "heading": "Terms",
+      "body": [
+        "RIR = reps in reserve. If a set says 3 RIR, pick a weight and stop at a rep where you feel you could still push out 3 more reps.",
+        "%1RM = percentage of your one-rep max. For 80%, take 80% of your one-rep max and use that weight."
+      ]
+    }
+  ],
+  "weeks": [
+    {
+      "week": 1,
+      "label": "Week 1",
+      "phase": "Strength · 6-8 working sets",
+      "days": [
+        {
+          "dayId": "w1-d1",
+          "name": "Push (Bench)",
+          "exercises": [
+            {"exerciseId":"w1-d1-1-bench-press","name":"Bench Press","notes":"At 85% of your 1RM. Juggernaut-style progression.","sets":[{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210}]}
+          ]
+        },
+        {
+          "dayId": "w1-d2",
+          "name": "Pull (Rows)",
+          "exercises": [
+            {"exerciseId":"w1-d2-1-barbell-row","name":"Barbell Row","notes":"At 85% of your 1RM. Juggernaut-style progression.","sets":[{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210}]}
+          ]
+        },
+        {
+          "dayId": "w1-d3",
+          "name": "Legs (Squats)",
+          "exercises": [
+            {"exerciseId":"w1-d3-1-squat","name":"Squat","notes":"At 85% of your 1RM. Juggernaut-style progression.","sets":[{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210}]}
+          ]
+        },
+        {
+          "dayId": "w1-d4",
+          "name": "Push (OVH Press)",
+          "exercises": [
+            {"exerciseId":"w1-d4-1-overhead-press","name":"Overhead Press","notes":"At 85% of your 1RM. Juggernaut-style progression.","sets":[{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210}]}
+          ]
+        },
+        {
+          "dayId": "w1-d5",
+          "name": "Pull (Rows 2)",
+          "exercises": [
+            {"exerciseId":"w1-d5-1-barbell-row","name":"Barbell Row","notes":"At 85% of your 1RM. Juggernaut-style progression.","sets":[{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210}]}
+          ]
+        },
+        {
+          "dayId": "w1-d6",
+          "name": "Legs (Deadlift)",
+          "exercises": [
+            {"exerciseId":"w1-d6-1-deadlift","name":"Deadlift","notes":"At 85% of your 1RM.","sets":[{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210}]}
+          ]
+        }
+      ]
+    },
+    {
+      "week": 2,
+      "label": "Week 2",
+      "phase": "Strength · 6-8 working sets",
+      "sameAs": 1
+    },
+    {
+      "week": 3,
+      "label": "Week 3",
+      "phase": "Strength · 6-8 working sets",
+      "days": [
+        {
+          "dayId": "w3-d1",
+          "name": "Push (Bench)",
+          "exercises": [
+            {"exerciseId":"w3-d1-1-bench-press","name":"Bench Press","notes":"At 90% of your 1RM. Juggernaut-style progression.","sets":[{"reps":3,"restSec":210},{"reps":3,"restSec":210},{"reps":3,"restSec":210}]}
+          ]
+        },
+        {
+          "dayId": "w3-d2",
+          "name": "Pull (Rows)",
+          "exercises": [
+            {"exerciseId":"w3-d2-1-barbell-row","name":"Barbell Row","notes":"At 90% of your 1RM. Juggernaut-style progression.","sets":[{"reps":3,"restSec":210},{"reps":3,"restSec":210},{"reps":3,"restSec":210}]}
+          ]
+        },
+        {
+          "dayId": "w3-d3",
+          "name": "Legs (Squats)",
+          "exercises": [
+            {"exerciseId":"w3-d3-1-squat","name":"Squat","notes":"At 90% of your 1RM. Juggernaut-style progression.","sets":[{"reps":2,"restSec":210},{"reps":2,"restSec":210},{"reps":2,"restSec":210}]}
+          ]
+        },
+        {
+          "dayId": "w3-d4",
+          "name": "Push (OVH Press)",
+          "exercises": [
+            {"exerciseId":"w3-d4-1-overhead-press","name":"Overhead Press","notes":"At 85% of your 1RM. Juggernaut-style progression.","sets":[{"reps":3,"restSec":210},{"reps":3,"restSec":210},{"reps":3,"restSec":210}]}
+          ]
+        },
+        {
+          "dayId": "w3-d5",
+          "name": "Pull (Rows 2)",
+          "exercises": [
+            {"exerciseId":"w3-d5-1-barbell-row","name":"Barbell Row","notes":"At 90% of your 1RM. Juggernaut-style progression.","sets":[{"reps":3,"restSec":210},{"reps":3,"restSec":210},{"reps":3,"restSec":210}]}
+          ]
+        },
+        {
+          "dayId": "w3-d6",
+          "name": "Legs (Deadlift)",
+          "exercises": [
+            {"exerciseId":"w3-d6-1-deadlift","name":"Deadlift","notes":"At 85% of your 1RM.","sets":[{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210},{"reps":5,"restSec":210}]}
+          ]
+        }
+      ]
+    },
+    {
+      "week": 4,
+      "label": "Week 4",
+      "phase": "Strength · 6-8 working sets",
+      "days": [
+        {
+          "dayId": "w4-d1",
+          "name": "Push (Bench)",
+          "exercises": [
+            {"exerciseId":"w4-d1-1-bench-press","name":"Bench Press","notes":"At 100% of your 1RM. Juggernaut-style progression.","sets":[{"reps":1,"restSec":210}]}
+          ]
+        },
+        {
+          "dayId": "w4-d2",
+          "name": "Pull (Rows)",
+          "exercises": [
+            {"exerciseId":"w4-d2-1-barbell-row","name":"Barbell Row","notes":"At 100% of your 1RM. Juggernaut-style progression.","sets":[{"reps":1,"restSec":210}]}
+          ]
+        },
+        {
+          "dayId": "w4-d3",
+          "name": "Legs (Squats)",
+          "exercises": [
+            {"exerciseId":"w4-d3-1-squat","name":"Squat","notes":"At 100% of your 1RM. Juggernaut-style progression.","sets":[{"reps":1,"restSec":210}]}
+          ]
+        },
+        {
+          "dayId": "w4-d4",
+          "name": "Push (OVH Press)",
+          "exercises": [
+            {"exerciseId":"w4-d4-1-overhead-press","name":"Overhead Press","notes":"At 90% of your 1RM. Juggernaut-style progression.","sets":[{"reps":1,"restSec":210}]}
+          ]
+        },
+        {
+          "dayId": "w4-d5",
+          "name": "Pull (Rows 2)",
+          "exercises": [],
+          "notes": "Light work."
+        },
+        {
+          "dayId": "w4-d6",
+          "name": "Legs (Deadlift)",
+          "exercises": [
+            {"exerciseId":"w4-d6-1-deadlift","name":"Deadlift","notes":"At 90% of your 1RM.","sets":[{"reps":3,"restSec":210},{"reps":3,"restSec":210},{"reps":3,"restSec":210}]}
+          ]
+        }
+      ]
+    },
+    {
+      "week": 5,
+      "label": "Week 5",
+      "phase": "Deload",
+      "days": [
+        {
+          "dayId": "w5-d1",
+          "name": "Push (Bench)",
+          "exercises": [],
+          "notes": "Start deload."
+        },
+        {
+          "dayId": "w5-d2",
+          "name": "Pull (Rows)",
+          "exercises": [],
+          "notes": "Start deload."
+        },
+        {
+          "dayId": "w5-d3",
+          "name": "Legs (Squats)",
+          "exercises": [],
+          "notes": "Start deload."
+        },
+        {
+          "dayId": "w5-d4",
+          "name": "Push (OVH Press)",
+          "exercises": [],
+          "notes": "Start deload."
+        },
+        {
+          "dayId": "w5-d5",
+          "name": "Pull (Rows 2)",
+          "exercises": [],
+          "notes": "Light work."
+        },
+        {
+          "dayId": "w5-d6",
+          "name": "Legs (Deadlift)",
+          "exercises": [
+            {"exerciseId":"w5-d6-1-deadlift","name":"Deadlift","notes":"At 100% of your 1RM.","sets":[{"reps":1,"restSec":210}]}
+          ]
+        }
+      ]
+    }
+  ]
+}
