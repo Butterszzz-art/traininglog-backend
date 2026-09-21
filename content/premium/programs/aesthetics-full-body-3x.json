@@ -1,0 +1,307 @@
+{
+  "id": "aesthetics-full-body-3x",
+  "kind": "program",
+  "order": 1,
+  "title": "Aesthetics Full Body 3x",
+  "subtitle": "12 weeks, 3 full-body days per week",
+  "audience": "all",
+  "goal": "hypertrophy",
+  "archetype": "hypertrophy",
+  "level": "all",
+  "durationWeeks": 12,
+  "summary": "The minimal-work, maximum-results option: three full-body sessions a week with a rest day between each. Volume steps up every 4 weeks (8, then 10, then 12 sets). Great for beginners who struggle with consistency.",
+  "split": {
+    "type": "fullbody",
+    "name": "Full Body (3x)",
+    "daysPerWeek": 3
+  },
+  "schedule": {
+    "startDate": "",
+    "weekdays": [
+      1,
+      3,
+      5
+    ]
+  },
+  "frequency": [
+    "Mon",
+    "Wed",
+    "Fri"
+  ],
+  "progressionType": "double-progression",
+  "progressionNotes": "Progressive overload inside the given rep range. About 2.5 lbs per week on the compound movements; for isolation work, chase a rep goal (for example 8, 10, 12, then 15) before you add weight.",
+  "guide": [
+    {
+      "heading": "Who it is for",
+      "body": [
+        "This program is meant for people who want to do the minimal amount of work for the most results, and for beginners who struggle with consistency.",
+        "Your week: Full Body, Rest, Full Body, Rest, Full Body, Rest, Rest."
+      ]
+    },
+    {
+      "heading": "Rest breaks",
+      "body": [
+        "Rest is set per exercise column: 3 minutes on the first exercise and 2 minutes on the rest in weeks 1-4, 2 minutes on everything in weeks 5-8, and 2 minutes with 1 minute on the final superset in weeks 9-12."
+      ]
+    },
+    {
+      "heading": "Time modification",
+      "body": [
+        "If you are low on time but still want to train, apply the antagonist superset technique: superset antagonistic muscles with each other. The exercises are ordered so the next one is an antagonist. Superset the first 2 exercises with 30 seconds to 1 minute of rest in between, and when you finish the required sets rest 2 minutes and move on to the next two. The arms are already a superset group of their own.",
+        "Research has shown that supersetting antagonistic muscle groups increases muscular endurance and cardiovascular capability. It is also worth knowing that 30-60 minutes of exercise every week gives you all the health-related benefits, and 1-4 working sets per muscle group gives you about 64% of the gains compared with someone doing everything they need (although it can be individual, since not everyone responds the same).",
+        "If you still want less time, use drop sets on all the exercises for the full minimalist version: superset exercises 1 and 2, 2 and 3, and 5 and 6, with 30 seconds to 1 minute of rest. If necessary, drop set exercises 5 and 6. Use rest-pause and partials, keep your reps in reserve low (train to failure or 1-2 reps shy)."
+      ]
+    },
+    {
+      "heading": "How hard to train",
+      "body": [
+        "General principle: more sets means do not train to failure (2-3 reps in reserve). Fewer sets means train to failure, or 1 rep in reserve.",
+        "Always try to progressively overload within the given rep range. A general guideline is 2.5 lbs per week, better applied to the compound movements.",
+        "An easy, simple way to progressively overload is to set a rep goal you must hit at a given weight before you increase it. For example, if you currently fail at 8 reps with a 50 lb barbell curl, next week aim for 10, then 12, then 15. When you hit 15, you can increase the weight. For isolation exercises that do not follow the progression scheme, I recommend this approach; the rep goal I recommend is 12-15."
+      ]
+    },
+    {
+      "heading": "Adjusting your volume",
+      "body": [
+        "As you gain experience, auto-adjust your working sets, for example 10, then 12, then 15 instead of 8, 10, 12.",
+        "Decrease sets if you are getting weaker in every movement for a muscle. Increase sets if you have plateaued: after several weeks there is no strength improvement (you did not get weaker), or you see no muscle growth.",
+        "If a body part is lagging behind, increase the working sets for that muscle only. Start with 2 extra working sets for 4 weeks and see if you notice a strength gain.",
+        "If you find that a body part is lagging, do that muscle first in the session. For example, if your shoulders lag, on the shoulder-dominant push day do your shoulder volume first and finish with chest. This works for any lagging muscle group."
+      ]
+    },
+    {
+      "heading": "Warm-up sets",
+      "body": [
+        "Do 3 warm-up sets: one with the bar, one with 50%, and the last with 75% of the weight you plan on hitting on your first working set."
+      ]
+    },
+    {
+      "heading": "Rest between sets",
+      "body": [
+        "Research suggests you may only need 1-2 minutes of rest between sets to maximize muscle growth, but the best rest depends on the exercise.",
+        "Heavy compound exercises (squats, deadlifts, presses, lunges): rest 3-5 minutes.",
+        "Lighter compound exercises (lat pulldowns, rows, leg presses, dumbbell presses): rest 2-3 minutes.",
+        "Isolation exercises (curls, lateral raises, pushdowns, leg curls, leg extensions, calf raises): rest 1-2 minutes, once the muscle feels recovered and you are no longer out of breath.",
+        "Your rest time depends on how you feel after a set and when you feel ready, so try different rest breaks and track your results to see what works for you."
+      ]
+    },
+    {
+      "heading": "Swapping exercises",
+      "body": [
+        "You can change exercises for ones you like more, but I generally do not recommend swapping an exercise you are progressing on (no rep or strength increase means it is time to look at it). Make sure the new exercise targets the same muscles and checks the boxes in the exercise selection criteria.",
+        "Once you have found your go-to exercises, I do not recommend changing them often: it impedes progressive overload and makes progress tracking harder. If training gets boring you can absolutely swap, but only when you have to.",
+        "For 100% bodybuilding, do the Smith machine variation of all barbell movements. For rows, a chest-supported horizontal row is better than the Smith variation."
+      ]
+    },
+    {
+      "heading": "Training techniques used",
+      "body": [
+        "RP = Rest-pause: after you reach technical failure, wait 10-15 seconds and squeeze out some more reps.",
+        "P = Long-length partials: partial reps with the target muscle at its lengthened position, at the end of a movement such as the bottom of a curl, the top of a pulldown or the bottom of a bench press.",
+        "S = Intra-set stretch: after you finish your set, stretch that muscle for 35 seconds.",
+        "Superset: do the two exercises back to back, then rest."
+      ]
+    },
+    {
+      "heading": "Terms",
+      "body": [
+        "RIR = reps in reserve. If a set says 3 RIR, pick a weight and stop at a rep where you feel you could still push out 3 more reps.",
+        "%1RM = percentage of your one-rep max. For 80%, take 80% of your one-rep max and use that weight."
+      ]
+    }
+  ],
+  "weeks": [
+    {
+      "week": 1,
+      "label": "Week 1",
+      "phase": "8 sets",
+      "days": [
+        {
+          "dayId": "w1-d1",
+          "name": "Full Body 1",
+          "exercises": [
+            {"exerciseId":"w1-d1-1-squat","name":"Squat","sets":[{"reps":6,"restSec":180},{"reps":6,"restSec":180},{"reps":6,"restSec":180}]},
+            {"exerciseId":"w1-d1-2-lat-pulldown","name":"Lat Pulldown","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w1-d1-3-hack-squat","name":"Hack Squat","techniques":["RP"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w1-d1-4-dips","name":"Dips","techniques":["RP","P"],"sets":[{"reps":10,"restSec":120},{"reps":10,"restSec":120},{"reps":10,"restSec":120}]},
+            {"exerciseId":"w1-d1-5-upright-row","name":"Upright Row","techniques":["RP","P"],"sets":[{"reps":8,"restSec":120},{"reps":8,"restSec":120},{"reps":8,"restSec":120}]},
+            {"exerciseId":"w1-d1-6-barbell-curl","name":"Barbell Curl","techniques":["RP","P"],"supersetGroup":"A","sets":[{"reps":10,"restSec":120},{"reps":10,"restSec":120},{"reps":10,"restSec":120}]},
+            {"exerciseId":"w1-d1-7-skull-crusher","name":"Skull Crusher","techniques":["RP","P"],"supersetGroup":"A","sets":[{"reps":10,"restSec":120},{"reps":10,"restSec":120},{"reps":10,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w1-d2",
+          "name": "Full Body 2",
+          "exercises": [
+            {"exerciseId":"w1-d2-1-incline-bench-press","name":"Incline Bench Press","techniques":["RP"],"sets":[{"reps":8,"restSec":180},{"reps":8,"restSec":180},{"reps":8,"restSec":180}]},
+            {"exerciseId":"w1-d2-2-pull-ups","name":"Pull Ups","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w1-d2-3-leg-press","name":"Leg Press","techniques":["RP"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w1-d2-4-overhead-press","name":"Overhead Press","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w1-d2-5-wide-grip-cable-row","name":"Wide Grip Cable Row","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w1-d2-6-hamstring-curl","name":"Hamstring Curl","supersetGroup":"A","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w1-d2-7-calf-raise","name":"Calf Raise","supersetGroup":"A","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w1-d3",
+          "name": "Full Body 3",
+          "exercises": [
+            {"exerciseId":"w1-d3-1-barbell-row","name":"Barbell Row","techniques":["RP"],"sets":[{"reps":8,"restSec":180},{"reps":8,"restSec":180},{"reps":8,"restSec":180}]},
+            {"exerciseId":"w1-d3-2-romanian-deadlift","name":"Romanian Deadlift","sets":[{"reps":8,"restSec":120},{"reps":8,"restSec":120},{"reps":8,"restSec":120}]},
+            {"exerciseId":"w1-d3-3-seated-hamstring-curl","name":"Seated Hamstring Curl","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w1-d3-4-cable-chest-fly","name":"Cable Chest Fly","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w1-d3-5-upright-row","name":"Upright Row","techniques":["RP","P"],"sets":[{"reps":8,"restSec":120},{"reps":8,"restSec":120},{"reps":8,"restSec":120}]},
+            {"exerciseId":"w1-d3-6-skull-crusher","name":"Skull Crusher","techniques":["RP","P"],"supersetGroup":"A","sets":[{"reps":10,"restSec":120},{"reps":10,"restSec":120},{"reps":10,"restSec":120}]},
+            {"exerciseId":"w1-d3-7-barbell-curl","name":"Barbell Curl","techniques":["RP","P"],"supersetGroup":"A","sets":[{"reps":10,"restSec":120},{"reps":10,"restSec":120},{"reps":10,"restSec":120}]}
+          ]
+        }
+      ]
+    },
+    {
+      "week": 2,
+      "label": "Week 2",
+      "phase": "8 sets",
+      "sameAs": 1
+    },
+    {
+      "week": 3,
+      "label": "Week 3",
+      "phase": "8 sets",
+      "sameAs": 1
+    },
+    {
+      "week": 4,
+      "label": "Week 4",
+      "phase": "8 sets",
+      "sameAs": 1
+    },
+    {
+      "week": 5,
+      "label": "Week 5",
+      "phase": "10 sets",
+      "days": [
+        {
+          "dayId": "w5-d1",
+          "name": "Full Body 1",
+          "exercises": [
+            {"exerciseId":"w5-d1-1-squat","name":"Squat","sets":[{"reps":8,"restSec":120},{"reps":8,"restSec":120},{"reps":8,"restSec":120},{"reps":8,"restSec":120}]},
+            {"exerciseId":"w5-d1-2-lat-pulldown","name":"Lat Pulldown","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w5-d1-3-seated-hamstring-curl","name":"Seated Hamstring Curl","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w5-d1-4-dips","name":"Dips","techniques":["RP","P"],"sets":[{"reps":10,"restSec":120},{"reps":10,"restSec":120},{"reps":10,"restSec":120}]},
+            {"exerciseId":"w5-d1-5-upright-row","name":"Upright Row","techniques":["RP","P"],"sets":[{"reps":10,"restSec":120},{"reps":10,"restSec":120},{"reps":10,"restSec":120},{"reps":10,"restSec":120}]},
+            {"exerciseId":"w5-d1-6-incline-dumbbell-curl","name":"Incline Dumbbell Curl","techniques":["RP","P"],"supersetGroup":"A","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w5-d1-7-chest-supported-dip","name":"Chest Supported Dip","techniques":["RP","P"],"supersetGroup":"A","sets":[{"reps":10,"restSec":120},{"reps":10,"restSec":120},{"reps":10,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w5-d2",
+          "name": "Full Body 2",
+          "exercises": [
+            {"exerciseId":"w5-d2-1-incline-bench-press","name":"Incline Bench Press","techniques":["RP"],"sets":[{"reps":10,"restSec":120},{"reps":10,"restSec":120},{"reps":10,"restSec":120},{"reps":10,"restSec":120}]},
+            {"exerciseId":"w5-d2-2-pull-ups","name":"Pull Ups","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w5-d2-3-leg-press","name":"Leg Press","techniques":["RP"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w5-d2-4-overhead-press","name":"Overhead Press","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w5-d2-5-wide-grip-cable-row","name":"Wide Grip Cable Row","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w5-d2-6-hamstring-curl","name":"Hamstring Curl","supersetGroup":"A","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w5-d2-7-calf-raise","name":"Calf Raise","supersetGroup":"A","sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]}
+          ]
+        },
+        {
+          "dayId": "w5-d3",
+          "name": "Full Body 3",
+          "exercises": [
+            {"exerciseId":"w5-d3-1-barbell-row","name":"Barbell Row","techniques":["RP"],"sets":[{"reps":10,"restSec":120},{"reps":10,"restSec":120},{"reps":10,"restSec":120}]},
+            {"exerciseId":"w5-d3-2-romanian-deadlift","name":"Romanian Deadlift","sets":[{"reps":8,"restSec":120},{"reps":8,"restSec":120},{"reps":8,"restSec":120},{"reps":8,"restSec":120}]},
+            {"exerciseId":"w5-d3-3-hack-squat","name":"Hack Squat","techniques":["RP"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w5-d3-4-cable-chest-fly","name":"Cable Chest Fly","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w5-d3-5-upright-row","name":"Upright Row","techniques":["RP","P"],"sets":[{"reps":8,"restSec":120},{"reps":8,"restSec":120},{"reps":8,"restSec":120}]},
+            {"exerciseId":"w5-d3-6-chest-supported-dip","name":"Chest Supported Dip","techniques":["RP","P"],"supersetGroup":"A","sets":[{"reps":10,"restSec":120},{"reps":10,"restSec":120},{"reps":10,"restSec":120}]},
+            {"exerciseId":"w5-d3-7-incline-dumbbell-curl","name":"Incline Dumbbell Curl","techniques":["RP","P"],"supersetGroup":"A","sets":[{"reps":10,"restSec":120},{"reps":10,"restSec":120},{"reps":10,"restSec":120}]}
+          ]
+        }
+      ]
+    },
+    {
+      "week": 6,
+      "label": "Week 6",
+      "phase": "10 sets",
+      "sameAs": 5
+    },
+    {
+      "week": 7,
+      "label": "Week 7",
+      "phase": "10 sets",
+      "sameAs": 5
+    },
+    {
+      "week": 8,
+      "label": "Week 8",
+      "phase": "10 sets",
+      "sameAs": 5
+    },
+    {
+      "week": 9,
+      "label": "Week 9",
+      "phase": "12 sets",
+      "days": [
+        {
+          "dayId": "w9-d1",
+          "name": "Full Body 1",
+          "exercises": [
+            {"exerciseId":"w9-d1-1-squat","name":"Squat","sets":[{"reps":8,"restSec":120},{"reps":8,"restSec":120},{"reps":8,"restSec":120},{"reps":8,"restSec":120}]},
+            {"exerciseId":"w9-d1-2-lat-pulldown","name":"Lat Pulldown","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w9-d1-3-seated-hamstring-curl","name":"Seated Hamstring Curl","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w9-d1-4-dips","name":"Dips","techniques":["RP","P"],"sets":[{"reps":10,"restSec":120},{"reps":10,"restSec":120},{"reps":10,"restSec":120},{"reps":10,"restSec":120}]},
+            {"exerciseId":"w9-d1-5-upright-row","name":"Upright Row","techniques":["RP","P"],"sets":[{"reps":10,"restSec":120},{"reps":10,"restSec":120},{"reps":10,"restSec":120},{"reps":10,"restSec":120}]},
+            {"exerciseId":"w9-d1-6-alternating-dumbbell-curl","name":"Alternating Dumbbell Curl","techniques":["RP","P"],"supersetGroup":"A","sets":[{"reps":12,"restSec":60},{"reps":12,"restSec":60},{"reps":12,"restSec":60},{"reps":12,"restSec":60}]},
+            {"exerciseId":"w9-d1-7-tricep-overhead-cable-bar-extension","name":"Tricep Overhead Cable Bar Extension","techniques":["RP","P"],"supersetGroup":"A","sets":[{"reps":12,"restSec":60},{"reps":12,"restSec":60},{"reps":12,"restSec":60},{"reps":12,"restSec":60}]}
+          ]
+        },
+        {
+          "dayId": "w9-d2",
+          "name": "Full Body 2",
+          "exercises": [
+            {"exerciseId":"w9-d2-1-incline-bench-press","name":"Incline Bench Press","techniques":["RP"],"sets":[{"reps":10,"restSec":120},{"reps":10,"restSec":120},{"reps":10,"restSec":120},{"reps":10,"restSec":120}]},
+            {"exerciseId":"w9-d2-2-pull-ups","name":"Pull Ups","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w9-d2-3-leg-press","name":"Leg Press","techniques":["RP"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w9-d2-4-overhead-press","name":"Overhead Press","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w9-d2-5-wide-grip-cable-row","name":"Wide Grip Cable Row","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w9-d2-6-hamstring-curl","name":"Hamstring Curl","supersetGroup":"A","sets":[{"reps":12,"restSec":60},{"reps":12,"restSec":60},{"reps":12,"restSec":60},{"reps":12,"restSec":60}]},
+            {"exerciseId":"w9-d2-7-calf-raise","name":"Calf Raise","supersetGroup":"A","sets":[{"reps":12,"restSec":60},{"reps":12,"restSec":60},{"reps":12,"restSec":60},{"reps":12,"restSec":60}]}
+          ]
+        },
+        {
+          "dayId": "w9-d3",
+          "name": "Full Body 3",
+          "exercises": [
+            {"exerciseId":"w9-d3-1-barbell-row","name":"Barbell Row","techniques":["RP"],"sets":[{"reps":10,"restSec":120},{"reps":10,"restSec":120},{"reps":10,"restSec":120},{"reps":10,"restSec":120}]},
+            {"exerciseId":"w9-d3-2-romanian-deadlift","name":"Romanian Deadlift","sets":[{"reps":8,"restSec":120},{"reps":8,"restSec":120},{"reps":8,"restSec":120},{"reps":8,"restSec":120}]},
+            {"exerciseId":"w9-d3-3-hack-squat","name":"Hack Squat","techniques":["RP"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w9-d3-4-cable-chest-fly","name":"Cable Chest Fly","techniques":["RP","P"],"sets":[{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120},{"reps":12,"restSec":120}]},
+            {"exerciseId":"w9-d3-5-upright-row","name":"Upright Row","techniques":["RP","P"],"sets":[{"reps":8,"restSec":120},{"reps":8,"restSec":120},{"reps":8,"restSec":120},{"reps":8,"restSec":120}]},
+            {"exerciseId":"w9-d3-6-tricep-overhead-cable-bar-extension","name":"Tricep Overhead Cable Bar Extension","techniques":["RP","P"],"supersetGroup":"A","sets":[{"reps":12,"restSec":60},{"reps":12,"restSec":60},{"reps":12,"restSec":60},{"reps":12,"restSec":60}]},
+            {"exerciseId":"w9-d3-7-alternating-dumbbell-curl","name":"Alternating Dumbbell Curl","techniques":["RP","P"],"supersetGroup":"A","sets":[{"reps":12,"restSec":60},{"reps":12,"restSec":60},{"reps":12,"restSec":60},{"reps":12,"restSec":60}]}
+          ]
+        }
+      ]
+    },
+    {
+      "week": 10,
+      "label": "Week 10",
+      "phase": "12 sets",
+      "sameAs": 9
+    },
+    {
+      "week": 11,
+      "label": "Week 11",
+      "phase": "12 sets",
+      "sameAs": 9
+    },
+    {
+      "week": 12,
+      "label": "Week 12",
+      "phase": "12 sets",
+      "sameAs": 9
+    }
+  ]
+}

@@ -1,0 +1,259 @@
+{
+  "id": "aesthetics-hit-block",
+  "kind": "program",
+  "order": 7,
+  "title": "Aesthetics HIT Block",
+  "subtitle": "4 weeks, 7 sessions per week, every set to absolute failure",
+  "audience": "all",
+  "goal": "hypertrophy",
+  "archetype": "hypertrophy",
+  "level": "intermediate",
+  "durationWeeks": 4,
+  "summary": "A short, intense block for after a volume-building split. Only 2 sets per exercise, all taken to absolute failure with rest-pause and partials. Not for beginners.",
+  "split": {
+    "type": "ppl",
+    "name": "Legs / Push / Pull + Arms (HIT)",
+    "daysPerWeek": 5,
+    "sessionsPerWeek": 7,
+    "label": "7 sessions per week"
+  },
+  "schedule": {
+    "startDate": "",
+    "weekdays": [
+      1,
+      2,
+      3,
+      5,
+      6
+    ]
+  },
+  "frequency": [
+    "Mon",
+    "Tue",
+    "Wed",
+    "Fri",
+    "Sat"
+  ],
+  "progressionType": "none",
+  "progressionNotes": "Take every set to absolute failure and use rest-pause and partials on all exercises.",
+  "guide": [
+    {
+      "heading": "What the HIT block is for",
+      "body": [
+        "The HIT block is a desensitizing period after the volume progression that built up through your split, and a great way to stimulate your muscles in a different manner. It is not for beginners.",
+        "The working sets of the block should be half of your MAV (the working sets in week 5 of the split you just ran)."
+      ]
+    },
+    {
+      "heading": "How to run it",
+      "body": [
+        "Take every set to absolute failure. To choose the right weight for the few sets you have, do 3 warm-up sets first.",
+        "Rest-pause and partials are better than assisted reps, so use them on all exercises.",
+        "Your week runs Legs, Push, Pull, Legs, Push, Pull. Arms is only programmed in week 4.",
+        "The app assigns sessions to your training days in order, so the week counter follows sessions rather than the calendar."
+      ]
+    },
+    {
+      "heading": "Warm-up sets",
+      "body": [
+        "Do 3 warm-up sets: one with the bar, one with 50%, and the last with 75% of the weight you plan on hitting on your first working set."
+      ]
+    },
+    {
+      "heading": "Training techniques used",
+      "body": [
+        "RP = Rest-pause: after you reach technical failure, wait 10-15 seconds and squeeze out some more reps.",
+        "P = Long-length partials: partial reps with the target muscle at its lengthened position, at the end of a movement such as the bottom of a curl, the top of a pulldown or the bottom of a bench press.",
+        "S = Intra-set stretch: after you finish your set, stretch that muscle for 35 seconds.",
+        "Superset: do the two exercises back to back, then rest."
+      ]
+    },
+    {
+      "heading": "Terms",
+      "body": [
+        "RIR = reps in reserve. If a set says 3 RIR, pick a weight and stop at a rep where you feel you could still push out 3 more reps.",
+        "%1RM = percentage of your one-rep max. For 80%, take 80% of your one-rep max and use that weight."
+      ]
+    }
+  ],
+  "weeks": [
+    {
+      "week": 1,
+      "label": "Week 1",
+      "phase": "HIT · 6 sets",
+      "days": [
+        {
+          "dayId": "w1-d1",
+          "name": "Legs 1",
+          "exercises": [
+            {"exerciseId":"w1-d1-1-leg-press","name":"Leg Press","techniques":["RP","P"],"sets":[{"reps":12,"restSec":150},{"reps":12,"restSec":150}]},
+            {"exerciseId":"w1-d1-2-hack-squat","name":"Hack Squat","techniques":["RP","P"],"sets":[{"reps":12,"restSec":240},{"reps":12,"restSec":240}]},
+            {"exerciseId":"w1-d1-3-seated-hamstring-curl","name":"Seated Hamstring Curl","sets":[{"reps":12,"restSec":90},{"reps":12,"restSec":90}]},
+            {"exerciseId":"w1-d1-4-hip-thrust","name":"Hip Thrust","techniques":["RP","P"],"sets":[{"reps":12,"restSec":150},{"reps":12,"restSec":150}]},
+            {"exerciseId":"w1-d1-5-calf-raise","name":"Calf Raise","techniques":["RP","P"],"sets":[{"reps":12,"restSec":90},{"reps":12,"restSec":90}]},
+            {"exerciseId":"w1-d1-6-cable-crunch","name":"Cable Crunch","techniques":["RP","P"],"sets":[{"reps":12,"restSec":90},{"reps":12,"restSec":90}]}
+          ]
+        },
+        {
+          "dayId": "w1-d2",
+          "name": "Push 1",
+          "exercises": [
+            {"exerciseId":"w1-d2-1-incline-machine-press","name":"Incline Machine Press","techniques":["RP","P"],"sets":[{"reps":10,"restSec":90},{"reps":10,"restSec":90}]},
+            {"exerciseId":"w1-d2-2-incline-cable-fly","name":"Incline Cable Fly","techniques":["RP","P"],"sets":[{"reps":10,"restSec":90},{"reps":10,"restSec":90}]},
+            {"exerciseId":"w1-d2-3-machine-lateral-raise","name":"Machine Lateral Raise","techniques":["RP","P"],"sets":[{"reps":10,"restSec":90},{"reps":10,"restSec":90}]},
+            {"exerciseId":"w1-d2-4-machine-overhead-press","name":"Machine Overhead Press","techniques":["RP","P"],"sets":[{"reps":10,"restSec":90},{"reps":10,"restSec":90}]},
+            {"exerciseId":"w1-d2-5-tricep-overhead-cable-bar-extension","name":"Tricep Overhead Cable Bar Extension","techniques":["RP","P"],"sets":[{"reps":12,"restSec":90},{"reps":12,"restSec":90}]}
+          ]
+        },
+        {
+          "dayId": "w1-d3",
+          "name": "Pull 1",
+          "exercises": [
+            {"exerciseId":"w1-d3-1-machine-pullover","name":"Machine Pullover","techniques":["RP","P"],"sets":[{"reps":10,"restSec":90},{"reps":10,"restSec":90}]},
+            {"exerciseId":"w1-d3-2-wide-grip-pronated-row","name":"Wide Grip Pronated Row","techniques":["RP","P"],"sets":[{"reps":10,"restSec":150},{"reps":10,"restSec":150}]},
+            {"exerciseId":"w1-d3-3-seated-neutral-close-grip-row","name":"Seated Neutral Close Grip Row","techniques":["RP","P"],"sets":[{"reps":10,"restSec":150},{"reps":10,"restSec":150}]},
+            {"exerciseId":"w1-d3-4-rear-delt-fly","name":"Rear Delt Fly","techniques":["RP","P"],"sets":[{"reps":12,"restSec":90},{"reps":12,"restSec":90}]},
+            {"exerciseId":"w1-d3-5-alternating-dumbbell-curl","name":"Alternating Dumbbell Curl","techniques":["RP","P"],"sets":[{"reps":12,"restSec":90},{"reps":12,"restSec":90}]}
+          ]
+        },
+        {
+          "dayId": "w1-d4",
+          "name": "Legs 2",
+          "exercises": [
+            {"exerciseId":"w1-d4-1-smith-rdl-ham-curl","name":"Smith RDL Ham Curl","sets":[{"reps":12,"restSec":90},{"reps":12,"restSec":90}]},
+            {"exerciseId":"w1-d4-2-pendulum-squat","name":"Pendulum Squat","techniques":["RP","P"],"sets":[{"reps":10,"restSec":150},{"reps":10,"restSec":150}]},
+            {"exerciseId":"w1-d4-3-seated-hamstring-curl","name":"Seated Hamstring Curl","sets":[{"reps":12,"restSec":90},{"reps":12,"restSec":90}]},
+            {"exerciseId":"w1-d4-4-hip-thrust","name":"Hip Thrust","techniques":["RP","P"],"sets":[{"reps":12,"restSec":150},{"reps":12,"restSec":150}]},
+            {"exerciseId":"w1-d4-5-calf-raise","name":"Calf Raise","techniques":["RP","P"],"sets":[{"reps":12,"restSec":90},{"reps":12,"restSec":90}]},
+            {"exerciseId":"w1-d4-6-cable-crunch","name":"Cable Crunch","techniques":["RP","P"],"sets":[{"reps":12,"restSec":90},{"reps":12,"restSec":90}]}
+          ]
+        },
+        {
+          "dayId": "w1-d5",
+          "name": "Push 2",
+          "exercises": [
+            {"exerciseId":"w1-d5-1-incline-cable-fly","name":"Incline Cable Fly","techniques":["RP","P"],"sets":[{"reps":10,"restSec":90},{"reps":10,"restSec":90}]},
+            {"exerciseId":"w1-d5-2-machine-lateral-raise","name":"Machine Lateral Raise","techniques":["RP","P"],"sets":[{"reps":10,"restSec":90},{"reps":10,"restSec":90}]},
+            {"exerciseId":"w1-d5-3-cable-lateral-raise","name":"Cable Lateral Raise","techniques":["RP","P"],"sets":[{"reps":10,"restSec":90},{"reps":10,"restSec":90}]},
+            {"exerciseId":"w1-d5-4-machine-overhead-press","name":"Machine Overhead Press","techniques":["RP","P"],"sets":[{"reps":10,"restSec":90},{"reps":10,"restSec":90}]},
+            {"exerciseId":"w1-d5-5-tricep-overhead-cable-bar-extension","name":"Tricep Overhead Cable Bar Extension","techniques":["RP","P"],"sets":[{"reps":12,"restSec":90},{"reps":12,"restSec":90}]}
+          ]
+        },
+        {
+          "dayId": "w1-d6",
+          "name": "Pull 2",
+          "exercises": [
+            {"exerciseId":"w1-d6-1-wide-grip-pronated-row","name":"Wide Grip Pronated Row","techniques":["RP","P"],"sets":[{"reps":10,"restSec":150},{"reps":10,"restSec":150}]},
+            {"exerciseId":"w1-d6-2-machine-pullover","name":"Machine Pullover","techniques":["RP","P"],"sets":[{"reps":10,"restSec":90},{"reps":10,"restSec":90}]},
+            {"exerciseId":"w1-d6-3-wide-grip-pronated-row","name":"Wide Grip Pronated Row","techniques":["RP","P"],"sets":[{"reps":10,"restSec":150},{"reps":10,"restSec":150}]},
+            {"exerciseId":"w1-d6-4-rear-delt-fly","name":"Rear Delt Fly","techniques":["RP","P"],"sets":[{"reps":12,"restSec":90},{"reps":12,"restSec":90}]},
+            {"exerciseId":"w1-d6-5-alternating-dumbbell-curl","name":"Alternating Dumbbell Curl","techniques":["RP","P"],"sets":[{"reps":12,"restSec":90},{"reps":12,"restSec":90}]}
+          ]
+        },
+        {
+          "dayId": "w1-d7",
+          "name": "Arms",
+          "exercises": [],
+          "notes": "No arm session is programmed this week."
+        }
+      ]
+    },
+    {
+      "week": 2,
+      "label": "Week 2",
+      "phase": "HIT · 6 sets",
+      "sameAs": 1
+    },
+    {
+      "week": 3,
+      "label": "Week 3",
+      "phase": "HIT · 6 sets",
+      "sameAs": 1
+    },
+    {
+      "week": 4,
+      "label": "Week 4",
+      "phase": "HIT · 6 sets",
+      "days": [
+        {
+          "dayId": "w4-d1",
+          "name": "Legs 1",
+          "exercises": [
+            {"exerciseId":"w4-d1-1-leg-press","name":"Leg Press","techniques":["RP","P"],"sets":[{"reps":12,"restSec":150},{"reps":12,"restSec":150}]},
+            {"exerciseId":"w4-d1-2-hack-squat","name":"Hack Squat","techniques":["RP","P"],"sets":[{"reps":12,"restSec":240},{"reps":12,"restSec":240}]},
+            {"exerciseId":"w4-d1-3-seated-hamstring-curl","name":"Seated Hamstring Curl","sets":[{"reps":12,"restSec":90},{"reps":12,"restSec":90}]},
+            {"exerciseId":"w4-d1-4-hip-thrust","name":"Hip Thrust","techniques":["RP","P"],"sets":[{"reps":12,"restSec":150},{"reps":12,"restSec":150}]},
+            {"exerciseId":"w4-d1-5-calf-raise","name":"Calf Raise","techniques":["RP","P"],"sets":[{"reps":12,"restSec":90},{"reps":12,"restSec":90}]},
+            {"exerciseId":"w4-d1-6-cable-crunch","name":"Cable Crunch","techniques":["RP","P"],"sets":[{"reps":12,"restSec":90},{"reps":12,"restSec":90}]}
+          ]
+        },
+        {
+          "dayId": "w4-d2",
+          "name": "Push 1",
+          "exercises": [
+            {"exerciseId":"w4-d2-1-incline-machine-press","name":"Incline Machine Press","techniques":["RP","P"],"sets":[{"reps":10,"restSec":90},{"reps":10,"restSec":90}]},
+            {"exerciseId":"w4-d2-2-incline-cable-fly","name":"Incline Cable Fly","techniques":["RP","P"],"sets":[{"reps":10,"restSec":90},{"reps":10,"restSec":90}]},
+            {"exerciseId":"w4-d2-3-machine-lateral-raise","name":"Machine Lateral Raise","techniques":["RP","P"],"sets":[{"reps":10,"restSec":90},{"reps":10,"restSec":90}]},
+            {"exerciseId":"w4-d2-4-machine-overhead-press","name":"Machine Overhead Press","techniques":["RP","P"],"sets":[{"reps":10,"restSec":90},{"reps":10,"restSec":90}]},
+            {"exerciseId":"w4-d2-5-tricep-overhead-cable-bar-extension","name":"Tricep Overhead Cable Bar Extension","techniques":["RP","P"],"sets":[{"reps":12,"restSec":90},{"reps":12,"restSec":90}]}
+          ]
+        },
+        {
+          "dayId": "w4-d3",
+          "name": "Pull 1",
+          "exercises": [
+            {"exerciseId":"w4-d3-1-machine-pullover","name":"Machine Pullover","techniques":["RP","P"],"sets":[{"reps":10,"restSec":90},{"reps":10,"restSec":90}]},
+            {"exerciseId":"w4-d3-2-wide-grip-pronated-row","name":"Wide Grip Pronated Row","techniques":["RP","P"],"sets":[{"reps":10,"restSec":150},{"reps":10,"restSec":150}]},
+            {"exerciseId":"w4-d3-3-seated-neutral-close-grip-row","name":"Seated Neutral Close Grip Row","techniques":["RP","P"],"sets":[{"reps":10,"restSec":150},{"reps":10,"restSec":150}]},
+            {"exerciseId":"w4-d3-4-rear-delt-fly","name":"Rear Delt Fly","techniques":["RP","P"],"sets":[{"reps":12,"restSec":90},{"reps":12,"restSec":90}]},
+            {"exerciseId":"w4-d3-5-machine-preacher-curl","name":"Machine Preacher Curl","techniques":["RP","P"],"sets":[{"reps":12,"restSec":90},{"reps":12,"restSec":90}]}
+          ]
+        },
+        {
+          "dayId": "w4-d4",
+          "name": "Legs 2",
+          "exercises": [
+            {"exerciseId":"w4-d4-1-smith-rdl-ham-curl","name":"Smith RDL Ham Curl","sets":[{"reps":12,"restSec":90},{"reps":12,"restSec":90}]},
+            {"exerciseId":"w4-d4-2-pendulum-squat","name":"Pendulum Squat","techniques":["RP","P"],"sets":[{"reps":10,"restSec":150},{"reps":10,"restSec":150}]},
+            {"exerciseId":"w4-d4-3-seated-hamstring-curl","name":"Seated Hamstring Curl","techniques":["RP","P"],"sets":[{"reps":12,"restSec":90},{"reps":12,"restSec":90}]},
+            {"exerciseId":"w4-d4-4-hip-thrust","name":"Hip Thrust","techniques":["RP","P"],"sets":[{"reps":12,"restSec":150},{"reps":12,"restSec":150}]},
+            {"exerciseId":"w4-d4-5-calf-raise","name":"Calf Raise","techniques":["RP","P"],"sets":[{"reps":12,"restSec":90},{"reps":12,"restSec":90}]},
+            {"exerciseId":"w4-d4-6-cable-crunch","name":"Cable Crunch","techniques":["RP","P"],"sets":[{"reps":12,"restSec":90},{"reps":12,"restSec":90}]}
+          ]
+        },
+        {
+          "dayId": "w4-d5",
+          "name": "Push 2",
+          "exercises": [
+            {"exerciseId":"w4-d5-1-incline-cable-fly","name":"Incline Cable Fly","techniques":["RP","P"],"sets":[{"reps":10,"restSec":90},{"reps":10,"restSec":90}]},
+            {"exerciseId":"w4-d5-2-machine-lateral-raise","name":"Machine Lateral Raise","techniques":["RP","P"],"sets":[{"reps":10,"restSec":90},{"reps":10,"restSec":90}]},
+            {"exerciseId":"w4-d5-3-cable-lateral-raise","name":"Cable Lateral Raise","techniques":["RP","P"],"sets":[{"reps":10,"restSec":90},{"reps":10,"restSec":90}]},
+            {"exerciseId":"w4-d5-4-machine-overhead-press","name":"Machine Overhead Press","techniques":["RP","P"],"sets":[{"reps":10,"restSec":90},{"reps":10,"restSec":90}]},
+            {"exerciseId":"w4-d5-5-tricep-overhead-cable-bar-extension","name":"Tricep Overhead Cable Bar Extension","techniques":["RP","P"],"sets":[{"reps":12,"restSec":90},{"reps":12,"restSec":90}]}
+          ]
+        },
+        {
+          "dayId": "w4-d6",
+          "name": "Pull 2",
+          "exercises": [
+            {"exerciseId":"w4-d6-1-wide-grip-pronated-row","name":"Wide Grip Pronated Row","techniques":["RP","P"],"sets":[{"reps":10,"restSec":150},{"reps":10,"restSec":150}]},
+            {"exerciseId":"w4-d6-2-machine-pullover","name":"Machine Pullover","techniques":["RP","P"],"sets":[{"reps":10,"restSec":90},{"reps":10,"restSec":90}]},
+            {"exerciseId":"w4-d6-3-wide-grip-pronated-row","name":"Wide Grip Pronated Row","techniques":["RP","P"],"sets":[{"reps":10,"restSec":150},{"reps":10,"restSec":150}]},
+            {"exerciseId":"w4-d6-4-rear-delt-fly","name":"Rear Delt Fly","techniques":["RP","P"],"sets":[{"reps":12,"restSec":90},{"reps":12,"restSec":90}]},
+            {"exerciseId":"w4-d6-5-machine-preacher-curl","name":"Machine Preacher Curl","techniques":["RP","P"],"sets":[{"reps":12,"restSec":90},{"reps":12,"restSec":90}]}
+          ]
+        },
+        {
+          "dayId": "w4-d7",
+          "name": "Arms",
+          "exercises": [
+            {"exerciseId":"w4-d7-1-chest-supported-dip","name":"Chest Supported Dip","techniques":["RP","P"],"sets":[{"reps":12,"restSec":150},{"reps":12,"restSec":150}]},
+            {"exerciseId":"w4-d7-2-machine-preacher-curl","name":"Machine Preacher Curl","techniques":["RP","P"],"sets":[{"reps":12,"restSec":90},{"reps":12,"restSec":90}]},
+            {"exerciseId":"w4-d7-3-tricep-overhead-cable-bar-extension","name":"Tricep Overhead Cable Bar Extension","techniques":["RP","P"],"sets":[{"reps":12,"restSec":90},{"reps":12,"restSec":90}]},
+            {"exerciseId":"w4-d7-4-cable-incline-curl","name":"Cable Incline Curl","techniques":["RP","P"],"sets":[{"reps":12,"restSec":90},{"reps":12,"restSec":90}]}
+          ]
+        }
+      ]
+    }
+  ]
+}

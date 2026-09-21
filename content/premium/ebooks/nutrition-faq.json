@@ -1,0 +1,267 @@
+{
+  "id": "nutrition-faq",
+  "kind": "ebook",
+  "title": "Nutrition Q&A",
+  "subtitle": "Calories, macros, bulking, cutting and recomp, answered",
+  "topic": "nutrition",
+  "order": 2,
+  "summary": "Straight answers on calculating and tracking calories, protein, carbs and fats, how to run a bulk, cut or mini-cut, supplements, and how to recomp on a training-day calorie cycle.",
+  "chapters": [
+    {
+      "id": "calories",
+      "title": "Calories",
+      "sections": [
+        {
+          "heading": "How do I calculate my calories (maintenance calories)?",
+          "body": [
+            "Nowadays it is very simple. Download a calorie tracking app of your choice (Cronometer is a good one), or search for an online calorie calculator, and fill in your stats to get an estimate.",
+            "Take the result with a grain of salt, since it is not always 100% correct. By trying it out and experimenting with your calories you will find your true maintenance calories."
+          ]
+        },
+        {
+          "heading": "How do I track my calories?",
+          "body": [
+            "Buy a kitchen scale and leave it in the kitchen so it reminds you to weigh out all your food. After weighing the food, put the information into your calorie tracking app. Track everything that goes into your mouth."
+          ]
+        },
+        {
+          "heading": "How do I time my caloric intake throughout the day?",
+          "body": [
+            "Responses to resistance training are more favorable when most of the daily energy intake is placed immediately before and after a bout of resistance exercise.",
+            "Muscle protein synthesis (MPS) is also enhanced when eating 5-6+ small but frequent meals rather than increasing the size of each meal."
+          ]
+        },
+        {
+          "heading": "Can I eat whatever I want if I track calories?",
+          "body": [
+            "Yes, although food quality can affect gym progress, performance and day-to-day quality of life if you do not meet your micronutrients and the recommended guidelines for macronutrients."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "macronutrients",
+      "title": "Macronutrients",
+      "sections": [
+        {
+          "heading": "How much protein do I need to eat?",
+          "body": [
+            "The optimal amount of protein for muscle growth is 1.6 g/kg per day. Going all the way up to 2.2 g/kg has no additional benefit, with one exception: in a caloric deficit, eating around 1.8-2.0 g/kg can help prevent the loss of muscle tissue.",
+            "Note also that protein at 20% of total calories in a deficit has appetite-suppressing effects, which helps with weight loss."
+          ]
+        },
+        {
+          "heading": "Do I need protein powder?",
+          "body": [
+            "Protein powder only enhances resistance-training gains when your protein intake is below 1.6 g/kg. As long as you reach your total required protein from whole foods, you do not actually need it."
+          ]
+        },
+        {
+          "heading": "Does the quality of protein matter?",
+          "body": [
+            "Yes. Protein sources rich in leucine maximize the muscle protein synthesis response.",
+            "Protein consumed in its whole food matrix after exercise also maximizes resistance-training gains, for example whole eggs instead of egg whites, and whole milk instead of skimmed milk."
+          ]
+        },
+        {
+          "heading": "How much protein should I eat per meal, and how often?",
+          "body": [
+            "Aim for 0.3 g/kg of high biological value protein per meal, every 3-5 hours across your waking period. Have some high value protein before bed (around 27 grams).",
+            "Making your first meal of the day the highest-protein meal has also been shown to maximize muscle gain."
+          ]
+        },
+        {
+          "heading": "How many carbohydrates should I eat daily?",
+          "body": [
+            "Anywhere between 1.5 and 2.0 g per lb of bodyweight is the optimal range. Depending on your athletic goals the number can be higher, or your dietary pattern may change it.",
+            "Note that with no carbohydrates, or minimal carbohydrates, skeletal muscle mass gains are impaired."
+          ]
+        },
+        {
+          "heading": "Are carbohydrates during the workout effective?",
+          "body": [
+            "The evidence is not clear, but research suggests that having 1.0 g/lb of carbohydrate as a drink during a high volume resistance training session could enhance performance by increasing blood glucose and lactate levels.",
+            "Even so, it is more important to get your optimal daily carbohydrate intake in check first."
+          ]
+        },
+        {
+          "heading": "How should I time my carbohydrates?",
+          "body": [
+            "To fuel your workout, it is best to have a high-carbohydrate, slow-releasing meal before training. To replenish your glycogen stores, have the majority of your carbohydrates after your workout."
+          ]
+        },
+        {
+          "heading": "Are the quality and source of carbohydrates important?",
+          "body": [
+            "It may not matter as much as reaching your total calorie and macronutrient targets, but it will affect your daily quality of life, health and performance.",
+            "Be mindful of your carbohydrate sources: opt for whole foods containing multiple micronutrients, and be wary of the glycemic index (GI) of the foods you choose."
+          ]
+        },
+        {
+          "heading": "How much fat should I eat daily?",
+          "body": [
+            "The minimum is 0.5 g/kg and the maximum is 1.5 g/kg. Saturated fat should be no more than 10% of total calorie intake."
+          ]
+        },
+        {
+          "heading": "Is the source of fat important?",
+          "body": [
+            "Yes. Having most of your fat come from polyunsaturated fats (PUFAs) and monounsaturated fats (MUFAs) benefits several important health markers. It is still important to include some saturated fat, to keep balance and variety in the diet.",
+            "Polyunsaturated fats are also more likely to promote gains in lean mass, whereas saturated fat is more likely to result in general fat accumulation. Post-prandial fat oxidation is higher after monounsaturated fat than after saturated fat, so the greatest portion of your fats should be PUFAs and MUFAs."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "bulking",
+      "title": "Bulking",
+      "sections": [
+        {
+          "heading": "How many calories should my surplus be?",
+          "body": ["358-478 calories."]
+        },
+        {
+          "heading": "What should my weight gain look like?",
+          "body": [
+            "Aim for 1 lb per week, with a maximum of 2 lbs. Make sure the gain is not just the result of a sudden cheat meal at the last second."
+          ]
+        },
+        {
+          "heading": "What should my surplus calories be made of?",
+          "body": [
+            "There is currently insufficient data to specify a macronutrient for the surplus calories, but there is evidence that making it protein could reduce the amount of fat mass gained."
+          ]
+        },
+        {
+          "heading": "How long should my bulk last?",
+          "body": ["Around 3-6 months, during which your training is at its most intense."]
+        },
+        {
+          "heading": "How do I transition from a cut to a bulk?",
+          "body": [
+            "To start a bulk, slowly ramp up your calories each week until you reach your surplus. While you do, watch the scale to make sure you do not exceed the maximum weight gain per week."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cutting",
+      "title": "Cutting",
+      "sections": [
+        {
+          "heading": "How many calories should my deficit be?",
+          "body": ["250-500 calories."]
+        },
+        {
+          "heading": "What should my weight loss look like?",
+          "body": ["0.5% of bodyweight per week, up to 1% of bodyweight per week."]
+        },
+        {
+          "heading": "Which macronutrient should I lower?",
+          "body": [
+            "Preferably fats, but try not to go below 0.3 g/lb, to preserve hormone health. While lowering fat intake, keep MUFAs and PUFAs high because of their appetite-suppressing benefits."
+          ]
+        },
+        {
+          "heading": "How long should my cut last?",
+          "body": [
+            "Diets under 8 weeks are less likely to result in muscle loss. You can go for 8-12 weeks, but then move into a maintenance phase to reset before continuing, so you keep as much muscle as possible."
+          ]
+        },
+        {
+          "heading": "How many meals should I have during a cut?",
+          "body": [
+            "Eat at least 4 meals a day, each with the optimal protein amount. It also helps to have a big meal before bed to reduce hunger at night."
+          ]
+        },
+        {
+          "heading": "What is a mini-cut?",
+          "body": [
+            "Mini-cuts are short periods (2-6 weeks) of accelerated weight loss, faster than a normal cut (0.75 to 1.25% of bodyweight per week)."
+          ]
+        },
+        {
+          "heading": "What is the purpose of a mini-cut?",
+          "body": [
+            "To potentiate muscle gains. During a mini-cut, reduce training volume to maintenance levels; this sensitizes the body to volume for the hypertrophy phase that follows."
+          ]
+        },
+        {
+          "heading": "How do I transition from a bulk to a cut?",
+          "body": [
+            "First move into a maintenance phase by reducing your bulking calories by roughly 250. Monitor your weight closely: if you lose more than 2% of bodyweight after the initial adjustment, increase calories by 250.",
+            "After about 4 weeks at maintenance you can begin your cut. Each week, slowly reduce calories until you reach your deficit goal, keeping your desired weekly weight loss in mind and not exceeding it, to prevent muscle loss."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "faqs",
+      "title": "FAQs",
+      "sections": [
+        {
+          "heading": "Is fasting effective for weight loss?",
+          "body": [
+            "Intermittent fasting can be an effective way to spontaneously reduce calorie consumption, which can help with weight loss and fat mass reduction."
+          ]
+        },
+        {
+          "heading": "Bodybuilding and fasting",
+          "body": [
+            "Intermittent fasting is not ideal for muscle growth because it does not provide consistent protein intake through the day, which is needed for muscle maintenance and growth.",
+            "If you want to use intermittent fasting while bodybuilding, place your eating window after your lift, since the literature is clear that food, and protein in particular, is anabolic. Aligning the feeding window toward the evening also enhances sleep quality and recovery, and makes sure nutrients are available for muscle repair and growth overnight."
+          ]
+        },
+        {
+          "heading": "Plant-based diet and bodybuilding",
+          "body": [
+            "It is generally harder to meet your protein goals on a plant-based diet, because plant proteins are usually not isolated sources: they are higher in carbohydrates and fat, less bioavailable (not as well digested), and lower quality because they contain less leucine, which stimulates protein synthesis.",
+            "The only valid isolated plant protein source is soy. If it is the only protein in your diet it may cause problems with testosterone, although most of the literature shows no reduction in testosterone from consuming soy. Combining it with, for example, corn (high in leucine) and beans (high in branched-chain amino acids) will cover you."
+          ]
+        },
+        {
+          "heading": "What are the essential supplements?",
+          "body": [
+            "The most prominent and effective supplements in bodybuilding are: 3 mg/kg of caffeine, 2-3 g of fish oil, 5-10 g of creatine and a multivitamin."
+          ]
+        },
+        {
+          "heading": "What can I take as extra supplements?",
+          "body": [
+            "Further effective supplements to maximize gains: 8 g of citrulline malate 60 minutes pre-workout, nitric oxide boosters (beetroot etc.) at 400-500 mg, and ashwagandha at 600 mg/day."
+          ]
+        },
+        {
+          "heading": "How and when should I do a body recomp?",
+          "body": [
+            "If you are a beginner (under 1-2 years of training) and young, a recomp can be a viable option depending on your goal. It can also work well to get rid of being \"skinny fat\".",
+            "Recomping is maintaining roughly the same weight on average while losing fat and building muscle. Keep three things in mind: follow a high protein diet, cycle between surplus, maintenance and deficit days, and keep the surpluses and deficits at roughly 250-300 calories.",
+            "Surplus and maintenance days fall mainly on workout days, and deficit days on rest days. The tables below show how the week looks on different splits, assuming a 2000 calorie diet."
+          ],
+          "tables": [
+            {
+              "title": "3x a week split (daily calories)",
+              "headers": ["Day", "Calories"],
+              "rows": [["1", "2300"], ["2", "1700"], ["3", "2300"], ["4", "1700"], ["5", "2300"], ["6", "1700"], ["7", "2000"]]
+            },
+            {
+              "title": "4x a week split (daily calories)",
+              "headers": ["Day", "Calories"],
+              "rows": [["1", "2300"], ["2", "2300"], ["3", "1700"], ["4", "2300"], ["5", "2000"], ["6", "1700"], ["7", "1700"]]
+            },
+            {
+              "title": "5x a week split (daily calories)",
+              "headers": ["Day", "Calories"],
+              "rows": [["1", "2300"], ["2", "2300"], ["3", "1700"], ["4", "2300"], ["5", "2000"], ["6", "1700"], ["7", "1700"]]
+            },
+            {
+              "title": "6x a week split (daily calories)",
+              "headers": ["Day", "Calories"],
+              "rows": [["1", "2300"], ["2", "1700"], ["3", "2300"], ["4", "1700"], ["5", "2300"], ["6", "2000"], ["7", "1700"]]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

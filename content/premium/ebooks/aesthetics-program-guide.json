@@ -1,0 +1,216 @@
+{
+  "id": "aesthetics-program-guide",
+  "kind": "ebook",
+  "title": "Aesthetics Program Guide",
+  "subtitle": "Choose, personalize and adjust your program",
+  "topic": "training",
+  "order": 3,
+  "summary": "The toolkit behind the Aesthetics programs: which split suits you, how to personalize volume for imbalances and strong points, how to pick and swap exercises muscle by muscle, and what every training technique in the plans means.",
+  "chapters": [
+    {
+      "id": "choosing",
+      "title": "Choosing Your Program",
+      "sections": [
+        {
+          "heading": "The goal of the programs",
+          "body": [
+            "There is no one single program that will work for everyone, so a program might not work for you as written. What these programs give you is a template with the toolkit necessary to make a program that works for you."
+          ]
+        },
+        {
+          "heading": "Which program suits you?",
+          "body": [
+            "Your available workout days: 3x per week is Full Body, 4x per week is Upper/Lower, 5x per week is Upper/Lower, and 6x per week is PPL.",
+            "Your effort: if you want the maximum gains and you are willing to put the effort in, choose the PPL Arms split.",
+            "Periodized or linear? If you are a beginner (under 1-2 years of lifting) and not interested in the science of lifting, go for the linear split. If you are interested in exercise science, go for the periodized split. Periodized and linear splits have no additional benefits over each other; some people just like the look of the periodized splits more.",
+            "Struggling with consistency? Start with 3x per week and slowly work your way up in frequency and splits as you get more into training."
+          ]
+        },
+        {
+          "heading": "Terms used in the plans",
+          "body": [
+            "RIR (reps in reserve): if a set says 3 RIR, pick a weight and stop at a rep where you feel you could still push out 3 more reps.",
+            "%RM: a percentage of your one-rep max, usually 80%, 70% and so on. Take 80% of your one-rep max and that is the weight you use."
+          ]
+        },
+        {
+          "heading": "Working sets per week",
+          "body": [
+            "For the linear program, the number of working sets could be anywhere from 9-15 per week per muscle. Experiment with different working set goals and see where you make the most progress. For most people 12 sets is about right, but I recommend starting low and scaling up, for example starting at 10 sets and then going to 12.",
+            "As you gain experience, auto-adjust your working sets, for example 10, then 12, then 15 instead of 8, 10, 12."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "personalization",
+      "title": "Personalization",
+      "sections": [
+        {
+          "heading": "What this chapter covers",
+          "body": [
+            "How to personalize training for yourself: imbalances, strong points, volume progression, additional workout days, time modification and strength changes."
+          ]
+        },
+        {
+          "heading": "Imbalances",
+          "body": [
+            "Having muscle imbalances is normal, and they can be worked on with the following training strategies. I recommend this only for advanced lifters (more than 3 years). Remember to lower the working set volume of all your other muscles to maintenance volume (the minimum volume needed to maintain).",
+            "It should take quite a long time to confirm that something is an imbalance. Once you have, try the following: gradually increase the volume by 5 sets each week until you reach 30 working sets. If it feels manageable, run it for 8 weeks; if not, follow the other volume-raising protocol. It might sound insane, but recent literature has supported 52 working sets as better than lower volume for a single muscle (for example the biceps).",
+            "The next question is how to fit it all into a training session. See Additional workout days below."
+          ],
+          "tables": [
+            {
+              "title": "Protocol 1: weekly working sets for the lagging muscle",
+              "headers": ["Week", "Sets"],
+              "rows": [["1", "10"], ["2", "15"], ["3", "20"], ["4", "25"], ["5", "30"], ["6", "30"], ["7", "30"], ["8", "30"], ["9", "30"], ["10", "30"], ["11", "30"], ["12", "30"]]
+            },
+            {
+              "title": "Protocol 2 (the protocol used in the study)",
+              "headers": ["Week", "Sets"],
+              "rows": [["1", "22"], ["2", "22"], ["3", "28"], ["4", "28"], ["5", "34"], ["6", "34"], ["7", "40"], ["8", "40"], ["9", "46"], ["10", "46"], ["11", "52"], ["12", "52"]]
+            }
+          ]
+        },
+        {
+          "heading": "Before you start Protocol 2",
+          "body": [
+            "If you are not at 22 sets, do not jump into Protocol 2 unless you are in the 5 set range."
+          ]
+        },
+        {
+          "heading": "Strong points",
+          "body": [
+            "With training experience you will start to notice which of your muscles stand out the most. Once you find these muscles you can change up your workout program to allow more attention to your weak points.",
+            "Prioritize the weak-point muscle first in your workout, and use lower volume than usual for your strong points. For example, if my chest is a weak point I always do chest first on a push day, and my shoulder volume is around 2-4 sets lower than the rest."
+          ]
+        },
+        {
+          "heading": "Volume progression: volumizing",
+          "body": [
+            "You can also swap the order around, so week 12 becomes week 1 and you go in reverse. This is called volumizing, but I like to call it desensitizing periods. You cannot always do the same thing if you plan on building muscle for the long term.",
+            "How to volumize: after finding your maximal recoverable volume (\"high volume\"), your minimum effective volume (\"low volume\") and then your average volume, start cycling between them, beginning at your low volume and going up to your high volume. Your high and low set ranges do not always have to be the same, so try different set ranges over time, though not too often."
+          ]
+        },
+        {
+          "heading": "Additional workout days",
+          "body": [
+            "Additional workout days use the training split style called asynchronous splits, where a split does not fit in one week, like PPL. You usually use this to bring up weak points, as with the protocols above: you cannot fit all of that volume into one workout day, so you add a \"Volume/Density\" day.",
+            "On that day you add the additional volume to bring up the weak point. I recommend at least 1-2 days of rest for that muscle group before the Volume/Density day, and plenty of rest after."
+          ]
+        },
+        {
+          "heading": "Time modification",
+          "body": [
+            "If you are low on time but still want to work out, do the full-body routine and apply the antagonist superset technique: superset antagonistic muscles with each other. The full-body program is built so the following exercise is an antagonist muscle. Superset the first 2 exercises with 30 seconds to 1 minute of rest in between, and when you finish the required sets, rest 2 minutes and move on to the next two (except the arms, which are a superset group of their own already).",
+            "Research has shown that supersetting antagonistic muscle groups increases muscular endurance and cardiovascular capability. It is also worth adding that 30-60 minutes of exercise every week gives you all the health-related benefits, and 1-4 working sets per muscle group gives you 64% of the gains compared with someone doing everything they need (although it can be individual, since not everyone responds the same).",
+            "If you still want less time in between, use drop sets for all the exercises. The full minimalist version of Full Body: superset exercises 1 and 2, 2 and 3, and 5 and 6, with 30 seconds to 1 minute of rest. If necessary, drop set exercises 5 and 6, use rest-pause and partials, and keep your reps in reserve low: train to failure or 1-2 reps shy."
+          ]
+        },
+        {
+          "heading": "Strength changes",
+          "body": [
+            "If you wish to include a bit more strength practice, you can add top sets: the first set is a heavy set of 4-5 reps. This helps maintain strength. You can even include a strength progression in the first set of the progression scheme, like Juggernaut 5/3/1.",
+            "If you are getting above-average progress in one mesocycle, for example the 12 working set mesocycle, you can extend it a maximum of 3-4 times and then continue on, or extend it up to the point where you get more fatigue than usual and progress starts going downhill."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "exercise-selection",
+      "title": "Exercise Selection",
+      "sections": [
+        {
+          "heading": "How to pick a good exercise",
+          "body": [
+            "A way to categorize a good exercise is with this format: 1. Does it have a deep stretch in the position where the muscle is lengthened? 2. Does it have high mechanical tension? 3. Does it feel good (comfortable for the joints, and generally good feeling)?",
+            "Choose your own favorite isolations out of the lists below, or pick your own if you have more.",
+            "You must also pick exercises that cover the muscle's functions, and for more complex muscle groups there are different angles to hit the muscle from. Your exercise selection must be well balanced and not too much of one thing. For example, for chest, do not have only pressing movements and no movements that bring the elbows to your midline."
+          ]
+        },
+        {
+          "heading": "How to know when to swap exercises",
+          "body": [
+            "With the following criteria you can decide whether you need to swap to another exercise. If it meets criterion 1 you can change it (not necessary, but you could if you really wanted to). Criterion 2 is a good reason and recommended. Criterion 3 is a no-brainer.",
+            "1. The pump/burn, tension or local fatigue is lower than usual. You could feel it fatiguing other muscle groups more than the one actually being trained, and the fatigue does not compare to the pump.",
+            "2. You are experiencing a lot of post-workout or intra-workout fatigue from this exercise (for example in your lower back or joints, or you just do not want to lift because of this one exercise).",
+            "3. Your rep strength on this exercise is not increasing, especially after a mesocycle (4 weeks)."
+          ]
+        },
+        {
+          "heading": "Chest",
+          "body": [
+            "Upper chest: incline dumbbell press, upper-chest-focused cable flyes, incline cable chest flyes, incline machine press.",
+            "Mid chest: cable flyes targeted for the mid pecs, incline barbell press, Smith machine barbell press, machine chest press, barbell bench press, pec dec flyes, dumbbell flyes.",
+            "Lower chest: dips or chest-supported dips, bent over chest flyes."
+          ]
+        },
+        {
+          "heading": "Back",
+          "body": [
+            "Rowing (thickness): barbell row, horizontal row (wide grip, close grip or neutral grip), seated horizontal row (wide, close or neutral grip), T-bar row (any grip), SEAL row, dumbbell row, barbell single-arm row (grab the end of the bar), Smith bent-over row.",
+            "Pulling, diagonal or vertical (width): lat pulldown (any grip), lat prayers, pull-ups, neutral grip pull-ups (lats more stretched), pullovers, chest-supported diagonal pull, chest-supported horizontal row, iliac row, chest-supported cable iliac row, seated cable one-armed row."
+          ]
+        },
+        {
+          "heading": "Guidelines for back training",
+          "body": [
+            "Bar to the lower chest engages the upper back; bar to the hips engages the lats (width).",
+            "Elbows close to the body focus more on the lats. Elbows at 45 degrees and 90 degrees focus more on the rhomboids, traps, rear delts and other \"upper back\" muscles.",
+            "Supination or pronation does not have a significant effect: do what feels best for you. Generally, having freedom of grip movement during a lat exercise feels better.",
+            "The lats' range of motion ends when the elbow passes the waist, and then the upper back takes over."
+          ]
+        },
+        {
+          "heading": "Legs",
+          "body": [
+            "Quads: leg extensions, hack squats, leg press, lunges, high bar squats, Bulgarian split squats, elevated split squats, belt squats.",
+            "Hamstrings: leg curls, Romanian deadlifts, dumbbell RDLs, leg press (feet higher), sumo deadlift, sumo squats.",
+            "Glutes: hip thrusts, leg press, sumo squat, sumo deadlift, glute kickbacks or the glute kickback machine."
+          ]
+        },
+        {
+          "heading": "Shoulders",
+          "body": [
+            "Lateral head: cable lateral raises, dumbbell lateral raises, machine lateral raises, upright row (wide grip).",
+            "Front: overhead press (dumbbell, barbell or machine), standing front raise, incline front raise, upright row (close grip).",
+            "Rear delt: reverse pec dec flye machine, seated rear delt flyes, standing cable rear delt flyes, upright rows."
+          ]
+        },
+        {
+          "heading": "Arms",
+          "body": [
+            "Biceps: spider curls (short head), preacher curls (short head), barbell curls with a Z bar (short head), V-bar curls (short head), incline bicep curl (long head), reverse bicep curls (brachialis), cable hammer curls (brachialis), alternating dumbbell curls (no emphasis).",
+            "Triceps (medial head, lateral head, long head): skull crushers (long head), pulldowns (lateral head), pushdowns with a straight bar or V-bar (lateral head), overhead tricep extensions with cable (long head), bent over overhead triceps extension (long head), crossbody extensions (whole tricep), chest-supported machine dips (long head and medial)."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "techniques-key",
+      "title": "Training Techniques Key",
+      "sections": [
+        {
+          "heading": "Rest-pause (RP)",
+          "body": ["After you reach technical failure, wait 10-15 seconds and squeeze out some more reps."]
+        },
+        {
+          "heading": "Long-length partials (P)",
+          "body": [
+            "Partial reps where the muscle being hit is at the lengthened position: at the end of a movement, like the bottom of a curl, the top of a pulldown or the bottom of a bench press."
+          ]
+        },
+        {
+          "heading": "Intra-set stretch (S)",
+          "body": ["After you finish your set, stretch that muscle for 35 seconds."]
+        },
+        {
+          "heading": "Time under tension (TUT)",
+          "body": [
+            "This technique uses the muscle growth mechanism that revolves around metabolite buildup. It is not better than mechanical tension; they all compensate for each other. TUT means you simply prolong the set, resisting the burning temptation to give up mid-set, most preferably on the eccentric portion."
+          ]
+        }
+      ]
+    }
+  ]
+}
