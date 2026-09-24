@@ -73,6 +73,7 @@ function batch() {
   const ops = [];
   return {
     set(docRef, data, opts) { ops.push(() => docRef.set(data, opts)); return this; },
+    delete(docRef) { ops.push(() => docRef.delete()); return this; },
     async commit() { for (const op of ops) await op(); }
   };
 }
@@ -402,6 +403,88 @@ setTimeout(() => {
 
     r = await req('GET', '/exercises?limit=1000', legacyTokenMigrated);
     check('GET /exercises (limit=1000) returns the whole dataset for local caching', r.body?.items?.length === 873);
+
+    // ── Coach/client flow: plan gate, invite, accept, share, alerts,
+    // program library + assignment, log-for-client, videos, leave ──
+    store['usernames'].plaincoach = { uid: 'uidPlain1' };
+    store['users'].uidPlain1 = { username: 'plaincoach' };
+    const tokPlain = jwt.sign({ id: 'rec9', username: 'plaincoach' }, process.env.JWT_SECRET);
+    const tokCoach = legacyTokenMigrated;
+    const tokClient = jwt.sign({ id: 'rec3', username: 'clientuser' }, process.env.JWT_SECRET);
+    if (store['coaches/uidABC123/clients']) delete store['coaches/uidABC123/clients'].uidClient456;
+
+    r = await req('POST', '/api/coach/clients/invite', tokPlain, { clientUsername: 'clientuser' });
+    check('invite without Coach plan -> 403 coach.plan_required', r.status === 403 && r.body?.error?.code === 'coach.plan_required');
+
+    store['users'].uidABC123.userPlan = 'coach';
+    r = await req('POST', '/api/coach/clients/invite', tokCoach, { clientUsername: 'clientuser' });
+    check('invite with Coach plan -> 201 pending', r.status === 201 && store['coaches/uidABC123/clients']?.uidClient456?.status === 'pending');
+
+    r = await req('GET', '/api/coach/clients', tokCoach);
+    const pendingRow = r.body?.clients?.find(c => c.id === 'uidClient456');
+    check('roster shows pending client with ok status and no fake compliance', pendingRow?.status === 'pending' && pendingRow?.alertStatus === 'ok' && pendingRow?.compliancePercent === null);
+
+    r = await req('GET', '/api/client/coach-sharing', tokClient);
+    check('client sharing defaults all on', r.body?.sharing?.checkIns === true && r.body?.sharing?.bodyweight === true && r.body?.sharing?.workouts === true);
+
+    r = await req('POST', '/api/client/coach-share', tokClient, { checkIns: [{ date: '2026-09-01', energy: 6 }] });
+    check('share before accepting reaches no coach', r.status === 200 && r.body?.coaches === 0 && !store['coaches/uidABC123/clients'].uidClient456.checkIns);
+
+    r = await req('POST', '/api/coach/clients/accept', tokClient, { coachUsername: 'migrateduser' });
+    check('client accepts -> active on both sides', r.status === 200 && store['coaches/uidABC123/clients'].uidClient456.status === 'active' && store['users/uidClient456/coachInvites'].uidABC123.status === 'active');
+
+    const today = new Date().toISOString().slice(0, 10);
+    const snapshot = {
+      checkIns: [{ date: today, energy: 7, sleep: 6, stress: 4, notes: 'good week' }],
+      bodyweight: [{ date: '2026-01-01', weight: 82 }, { date: today, weight: 80.5 }],
+      workouts: { thisWeek: 3, weekStart: today, weekly: [{ weekStart: today, count: 3 }] },
+      compliancePercent: 50,
+      activeProgramName: 'Coach PPL'
+    };
+    r = await req('POST', '/api/client/coach-share', tokClient, snapshot);
+    const cdoc = store['coaches/uidABC123/clients'].uidClient456;
+    check('share -> copied onto the coach doc', r.status === 200 && r.body?.coaches === 1 && cdoc.lastCheckInAt === today && cdoc.currentBodyweight === 80.5 && cdoc.compliancePercent === 50);
+
+    r = await req('GET', '/api/coach/clients', tokCoach);
+    const activeRow = r.body?.clients?.find(c => c.id === 'uidClient456');
+    check('roster computes alerts from shared data (50% -> action)', activeRow?.alertStatus === 'action' && activeRow?.alerts?.some(a => a.id === 'low_compliance'));
+
+    r = await req('GET', '/api/coach/clients/uidClient456', tokCoach);
+    check('client detail returns check-in history + bodyweight series', r.status === 200 && r.body?.client?.checkIns?.[0]?.notes === 'good week' && r.body?.client?.bodyweight?.length === 2);
+
+    r = await req('PUT', '/api/client/coach-sharing', tokClient, { bodyweight: false });
+    check('turning bodyweight off clears it from the coach doc', r.body?.sharing?.bodyweight === false && store['coaches/uidABC123/clients'].uidClient456.bodyweight == null && store['coaches/uidABC123/clients'].uidClient456.currentBodyweight == null);
+    await req('POST', '/api/client/coach-share', tokClient, snapshot);
+    check('later shares respect the switch', store['coaches/uidABC123/clients'].uidClient456.currentBodyweight == null && store['coaches/uidABC123/clients'].uidClient456.lastCheckInAt === today);
+
+    r = await req('PUT', '/api/coach/programs/p1', tokCoach, { name: 'Coach PPL', days: { Mon: ['Bench Press', { name: 'Row', sets: 4, reps: 8, repsMax: 10 }], Wed: ['Squat'] } });
+    check('PUT /api/coach/programs saves to the library', r.status === 200 && store['coaches/uidABC123/programs']?.p1?.exerciseCount === 3);
+    await req('PUT', '/api/coach/programs/empty', tokCoach, { name: 'Empty', days: {} });
+    r = await req('GET', '/api/coach/programs', tokCoach);
+    check('GET /api/coach/programs lists them', r.body?.programs?.length === 2);
+
+    r = await req('PATCH', '/api/coach/clients/uidClient456', tokCoach, { programId: 'empty' });
+    check('assigning an empty program -> 422', r.status === 422);
+    r = await req('PATCH', '/api/coach/clients/uidClient456', tokCoach, { programId: 'p1', macroTargets: { calories: 2400, protein: 180, carbs: 250, fat: 70 }, nutritionSummary: '2400 kcal' });
+    const asn = store['users/uidClient456/coachAssignment']?.uidABC123;
+    check('assign program -> full program + macros reach the client', r.status === 200 && asn?.program?.days?.length === 2 && asn?.program?.days?.[0]?.exercises?.[1]?.sets?.length === 4 && asn?.macroTargets?.protein === 180 && asn?.currentProgram === 'Coach PPL');
+    check('coach doc keeps the name, not the whole program', store['coaches/uidABC123/clients'].uidClient456.currentProgramId === 'p1' && !store['coaches/uidABC123/clients'].uidClient456.program);
+    r = await req('GET', '/api/client/coach-assignment', tokClient);
+    check('client reads the assigned program', r.body?.assignments?.[0]?.program?.title === 'Coach PPL');
+
+    r = await req('POST', '/coach/workouts', tokCoach, { clientUid: 'uidClient456', date: today, workout: { sets: [{ exerciseName: 'Deadlift', weight: 140, reps: 3 }] } });
+    check('log-for-client by uid via the Firestore link', r.status === 200 && store['users/uidClient456/workouts']?.[r.body?.recordId]?.workout?.loggedByCoach === 'migrateduser');
+    r = await req('POST', '/coach/workouts', tokCoach, { clientUid: 'uidNobody', date: today, workout: { sets: [] } });
+    check('log-for-client for an unlinked uid -> 403', r.status === 403);
+
+    store['coaches/uidABC123/exerciseVideos'] = { 'hip-thrust': { exerciseName: 'Hip Thrust', videoUrl: 'https://example.com/ht', notes: '' } };
+    r = await req('GET', '/exercise-videos', tokClient);
+    check('client sees coach videos via the Firestore link, once', r.status === 200 && r.body?.items?.filter(i => i.exerciseName === 'Hip Thrust').length === 1);
+
+    r = await req('DELETE', '/api/client/coaches/uidABC123', tokClient);
+    check('client leaves -> link, shared data and assignment removed', r.status === 200 && !store['coaches/uidABC123/clients']?.uidClient456 && !store['users/uidClient456/coachInvites']?.uidABC123 && !store['users/uidClient456/coachAssignment']?.uidABC123);
+    r = await req('DELETE', '/api/client/coaches/uidABC123', tokClient);
+    check('leaving twice -> 404', r.status === 404);
 
     // ── DELETE /account (migrated user, Apple App Store Guideline 5.1.1(v)) ──
     // Uses a dedicated fixture (deleteuser/uidDelete789) rather than

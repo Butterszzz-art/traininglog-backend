@@ -151,6 +151,28 @@ Everything on the shelf as metadata: `{ success, access: "full" | "preview", pla
 
 Unknown ids return `404 premium.not_found`. Run `node scripts/test-premium-content.js` to validate the content files and the gating rules.
 
+## Coaching
+
+All routes need `Authorization: Bearer <token>` and a Firebase (migrated) account. A link lives in two places: `coaches/{coachUid}/clients/{clientUid}` (the coach's roster) and `users/{clientUid}/coachInvites/{coachUid}` (the client's side).
+
+**Coach side**
+- `GET /api/coach/clients`: roster. Each row has `status` (`pending` or `active`) plus whatever the client shares: `lastCheckIn`, `compliancePercent`, `workoutsLoggedThisWeek`, `currentBodyweight`, `weeklyWeightChangePercent`, `sharing`. `alerts` / `alertStatus` (`ok`, `watch`, `action`) are computed at read time by `src/coachShare.js`, and missing data never raises an alert.
+- `GET /api/coach/clients/:clientUid`: the same row plus `checkIns` (latest 12), `bodyweight` (up to 120 points) and `weeklyWorkouts`.
+- `POST /api/coach/clients/invite` `{ clientUsername }`: needs the Coach plan (`403 coach.plan_required`). `INTAKE_COACH_USERNAME` is always allowed, and `COACH_PLAN_REQUIRED=false` turns the check off.
+- `PATCH /api/coach/clients/:clientUid` `{ programId?, macroTargets?, nutritionSummary?, currentProgram?, trainingMode? }`: `programId` copies a library program, converted to the app's program format, into the client's assignment (`''` clears it). `macroTargets` is `{ calories, protein, carbs, fat }`.
+- `DELETE /api/coach/clients/:clientUid`: removes a client or cancels an invite, including everything the client shared.
+- `GET /api/coach/programs`, `PUT /api/coach/programs/:id` `{ name, notes?, days: { Mon: [{ name, sets, reps, repsMax? }] } }`, `DELETE /api/coach/programs/:id`: the coach's program library, shared by the mobile builder and the desktop console.
+- `POST /coach/workouts` `{ clientUid | clientUsername, date, title?, workout }`: checks the Firestore link first and falls back to Airtable `CoachClients`.
+- Notes: `POST|GET /api/coach/clients/:clientUid/notes`. Videos: `POST|GET /coach/exercise-videos`, `DELETE /coach/exercise-videos/:id`. Leads: `GET /api/coach/leads`, `PATCH /api/coach/leads/:id`.
+
+**Client side**
+- `GET /api/client/coach-invites`, `POST /api/coach/clients/accept` `{ coachUsername }`, `DELETE /api/client/coaches/:coachUid` (decline a pending invite or leave a coach).
+- `GET|PUT /api/client/coach-sharing` `{ checkIns, bodyweight, workouts }`: all on by default. Turning a switch off deletes that data from every coach's copy.
+- `POST /api/client/coach-share` `{ checkIns, bodyweight, workouts: { thisWeek, weekStart, weekly }, compliancePercent, activeProgramName }`: filtered by the switches and copied to each active coach. Returns `{ coaches: 0 }` when there is no coach.
+- `GET /api/client/coach-assignment` (includes `program` and `macroTargets`), `GET /api/client/coach-notes`, `GET /exercise-videos`.
+
+Run `node scripts/test-coach-share.js` (helpers) and `node scripts/test-firestore-routes.js` (routes).
+
 ## Auth error note after JWT secret rotation
 
 If the server JWT secret changes, previously issued browser tokens become invalid and requests can fail with:
