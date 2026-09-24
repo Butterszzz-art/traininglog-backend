@@ -37,6 +37,14 @@ test('buildShareFields drops what the client switched off', () => {
   assert.strictEqual(f.currentBodyweight, 80);
 });
 
+test('buildShareFields keeps missing numbers as null, not 0', () => {
+  const f = cs.buildShareFields({ workouts: { thisWeek: null, weekly: [] }, compliancePercent: null }, null, NOW);
+  assert.strictEqual(f.compliancePercent, null);
+  assert.strictEqual(f.workoutsLoggedThisWeek, null);
+  const g = cs.buildShareFields({ checkIns: [{ date: '2026-09-20', energy: '', sleep: null, stress: 0 }] }, null, NOW);
+  assert.deepStrictEqual(g.latestCheckInJson, { date: '2026-09-20', stress: 0 });
+});
+
 test('weeklyChangePercent compares the last two 7-day windows', () => {
   const series = [];
   for (let i = 13; i >= 0; i--) {

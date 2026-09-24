@@ -37,6 +37,9 @@ function isoDate(value) {
 }
 
 function num(value, min, max) {
+  // Number(null) and Number('') are 0: treat them as "not provided" so a
+  // missing value never turns into a real-looking 0.
+  if (value === null || value === undefined || value === '' || typeof value === 'boolean') return null;
   const n = Number(value);
   if (!Number.isFinite(n)) return null;
   if (min !== undefined && n < min) return null;
