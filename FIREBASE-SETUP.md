@@ -60,3 +60,33 @@ When the webhook handler lands, it must call `syncTierClaim(username, tier)`
 (defined next to `updateUserPlan` in `server.js`) after updating Airtable, and
 the client should call `getIdToken(true)` after checkout so tier gating updates
 immediately.
+
+## Storage-efficiency rollout (compact workouts, leaderboard counters, index exemptions)
+
+New workout saves are stored in a compact form (`workoutFormat.js`: default
+per-set values are dropped and rebuilt on read — each save is verified to
+read back identical, otherwise the original is stored). `GET /leaderboard`
+reads running `totalVolume` / `workoutCount` counters on `users/{uid}`
+instead of scanning all workouts. Existing data needs converting once, in
+this order:
+
+1. Deploy the functions code.
+2. Convert existing workouts and fix their stored `sessionVolume` (workouts
+   from the app's log screen were saved with 0). Check the dry run first:
+   `node scripts/compact-workouts.js --dry-run`, then
+   `node scripts/compact-workouts.js`. It writes a JSONL backup of every doc
+   it changes before changing it (path printed at the end — keep it);
+   `node scripts/restore-workouts.js <backup.jsonl>` puts the originals back.
+3. Rebuild the leaderboard counters from the corrected volumes, and remove the
+   old unused per-set docs:
+   `node scripts/backfill-leaderboard-totals.js --delete-sets`
+   (safe to re-run; `--dry-run` prints without writing).
+4. Deploy the index exemptions for the stored JSON fields (`workout`,
+   `programData`, `templateData`, ...), which Firestore otherwise indexes field
+   by field: `firebase deploy --only firestore:indexes`. If the CLI offers to
+   delete indexes that aren't in `firestore.indexes.json`, answer no unless
+   you've checked they're unused.
+
+Until steps 2–3 run, the leaderboard only reflects workouts saved after the
+deploy. Unconverted workouts keep working as they are — `GET /workouts` reads
+both formats.

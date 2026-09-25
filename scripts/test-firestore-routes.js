@@ -28,16 +28,23 @@ const firebasePath = path.join(BACKEND_DIR, 'firebase.js');
 
 // ── Fake Firestore ───────────────────────────────────────────────────────────
 const store = {}; // collectionPath -> { docId -> data }
+let usernameReads = 0; // reads of usernames/* (resolveFirestoreUid cache check)
 function docRefFor(colPath, docId) {
   return {
     id: docId,
     __colPath: colPath,
     async get() {
+      if (colPath === 'usernames') usernameReads++;
       const data = store[colPath][docId];
-      return { exists: !!data, get: (f) => data?.[f], data: () => data };
+      return { id: docId, exists: !!data, get: (f) => data?.[f], data: () => data };
     },
     async set(data, opts) {
-      store[colPath][docId] = opts?.merge ? { ...(store[colPath][docId] || {}), ...data } : data;
+      const prev = store[colPath][docId] || {};
+      const resolved = {};
+      for (const [k, v] of Object.entries(data)) {
+        resolved[k] = v && typeof v === 'object' && '__increment' in v ? (Number(prev[k]) || 0) + v.__increment : v;
+      }
+      store[colPath][docId] = opts?.merge ? { ...prev, ...resolved } : resolved;
     },
     async delete() { delete store[colPath][docId]; },
     collection(subPath) { return collection(`${colPath}/${docId}/${subPath}`); }
@@ -47,15 +54,29 @@ function collection(colPath) {
   store[colPath] = store[colPath] || {};
   const filters = [];
   let limitN = null;
+  let order = null;
+  let afterId = null;
   const api = {
     doc(id) {
       const docId = id || `auto_${Math.random().toString(36).slice(2, 8)}`;
       return docRefFor(colPath, docId);
     },
-    async get() { // naive: ignores orderBy direction, applies == filters + limit only
+    async get() { // naive: single orderBy, == filters, startAfter(snapshot), limit
       let entries = Object.entries(store[colPath] || {});
       for (const [field, value] of filters) {
         entries = entries.filter(([, data]) => data?.[field] === value);
+      }
+      if (order) {
+        const [field, dir] = order;
+        entries.sort(([ia, a], [ib, b]) => {
+          const x = a?.[field], y = b?.[field];
+          const c = x === y ? (ia < ib ? -1 : ia > ib ? 1 : 0) : (x == null ? -1 : y == null ? 1 : x < y ? -1 : 1);
+          return dir === 'desc' ? -c : c;
+        });
+      }
+      if (afterId != null) {
+        const i = entries.findIndex(([id]) => id === afterId);
+        if (i !== -1) entries = entries.slice(i + 1);
       }
       if (limitN != null) entries = entries.slice(0, limitN);
       const docs = entries.map(([id, data]) => ({
@@ -63,7 +84,8 @@ function collection(colPath) {
       }));
       return { docs, empty: docs.length === 0 };
     },
-    orderBy() { return this; },
+    orderBy(field, dir) { order = [field, dir || 'asc']; return this; },
+    startAfter(snap) { afterId = snap.id; return this; },
     where(field, op, value) { filters.push([field, value]); return this; },
     limit(n) { limitN = n; return this; }
   };
@@ -87,7 +109,19 @@ async function recursiveDelete(docRef) {
     if (key === prefix || key.startsWith(`${prefix}/`)) delete store[key];
   }
 }
-const fakeDb = { collection, batch, recursiveDelete };
+// Transactions: reads go straight through, writes are applied at the end.
+async function runTransaction(fn) {
+  const writes = [];
+  const tx = {
+    get: (ref) => ref.get(),
+    set(ref, data, opts) { writes.push(() => ref.set(data, opts)); return tx; }
+  };
+  const result = await fn(tx);
+  for (const w of writes) await w();
+  return result;
+}
+const getAll = (...refs) => Promise.all(refs.map(r => r.get()));
+const fakeDb = { collection, batch, recursiveDelete, runTransaction, getAll };
 
 require.cache[require.resolve(firebasePath)] = {
   id: firebasePath, filename: firebasePath, loaded: true,
@@ -100,7 +134,7 @@ require.cache[require.resolve(firebasePath)] = {
       setCustomUserClaims: async () => {},
       deleteUser: async () => {}
     },
-    db: fakeDb, FieldValue: { serverTimestamp: () => 'TS' }, firebaseEnabled: true, projectId: 'test-project', initError: null
+    db: fakeDb, FieldValue: { serverTimestamp: () => 'TS', increment: (n) => ({ __increment: n }) }, firebaseEnabled: true, projectId: 'test-project', initError: null
   }
 };
 
@@ -219,6 +253,11 @@ setTimeout(() => {
     check('POST /dailylogs (migrated) 201', r.status === 201);
     check('POST /dailylogs (migrated) wrote to Firestore', Object.values(store['users/uidABC123/dailyMacros'] || {}).some(d => d.calories === 2600));
 
+    r = await req('POST', '/dailylogs', legacyTokenMigrated, { date: '2026-07-01', CaloriesTotal: 2700, ProteinTotal: 190 });
+    check('POST /dailylogs (same day re-save) overwrites the day, no duplicate', Object.keys(store['users/uidABC123/dailyMacros']).length === 1 && store['users/uidABC123/dailyMacros']['2026-07-01_log']?.calories === 2700);
+    r = await req('POST', '/dailylogs', legacyTokenMigrated, { date: '2026-07-01', Type: 'Macros', CaloriesTotal: 2600, ProteinTotal: 190 });
+    check('POST /dailylogs (different Type) is a separate doc', !!store['users/uidABC123/dailyMacros']['2026-07-01_Macros']);
+
     r = await req('GET', '/dailylogs?username=migrateduser', legacyTokenMigrated);
     check('GET /dailylogs (migrated) 200', r.status === 200);
     check('GET /dailylogs (migrated) reshapes to Airtable-style fields', r.body?.records?.some(rec => rec.Calories === 2600 && rec.ProteinGrams === 190));
@@ -227,6 +266,9 @@ setTimeout(() => {
     r = await req('POST', '/bodyweight/archive', legacyTokenMigrated, { periodStart: '2026-06-01', periodEnd: '2026-06-28', entries: [{ date: '2026-06-01', weightKg: 80 }, { date: '2026-06-28', weightKg: 79 }] });
     check('POST /bodyweight/archive (migrated) 201', r.status === 201);
     check('POST /bodyweight/archive (migrated) wrote to Firestore', Object.values(store['users/uidABC123/bodyweightArchives'] || {}).some(d => d.startWeightKg === 80 && d.endWeightKg === 79));
+
+    await req('POST', '/bodyweight/archive', legacyTokenMigrated, { periodStart: '2026-06-01', periodEnd: '2026-06-28', entries: [{ date: '2026-06-01', weightKg: 80 }, { date: '2026-06-28', weightKg: 79 }] });
+    check('POST /bodyweight/archive (re-sent period) does not duplicate', Object.keys(store['users/uidABC123/bodyweightArchives']).length === 1 && !!store['users/uidABC123/bodyweightArchives']['2026-06-01_2026-06-28']);
 
     r = await req('GET', '/bodyweight?username=migrateduser', legacyTokenMigrated);
     check('GET /bodyweight (migrated) 200', r.status === 200);
@@ -326,11 +368,67 @@ setTimeout(() => {
     check('POST /workouts (migrated) 200', r.status === 200);
     const workoutId = r.body?.recordId;
     check('POST /workouts (migrated) wrote to Firestore (whole object)', store['users/uidABC123/workouts']?.[workoutId]?.workout?.sets?.[0]?.exerciseName === 'Bench');
-    check('POST /workouts (migrated) also exploded sets subcollection', !!store[`users/uidABC123/workouts/${workoutId}/sets`]?.['0']);
+    check('POST /workouts (migrated) no longer writes a sets subcollection', !store[`users/uidABC123/workouts/${workoutId}/sets`]);
+    check('POST /workouts (migrated) incremented leaderboard totals', store['users']['uidABC123'].totalVolume === 400 && store['users']['uidABC123'].workoutCount === 1);
 
     r = await req('GET', '/workouts', legacyTokenMigrated);
     check('GET /workouts (migrated) 200', r.status === 200);
     check('GET /workouts (migrated) returns whole workout object byte-for-byte', r.body?.items?.some(i => i.id === workoutId && i.workout?.sets?.[0]?.weight === 80));
+
+    // Client-supplied id: a retried POST overwrites the same doc (no duplicate,
+    // no double-counted totals), and totals follow the new volume.
+    const retryBody = { date: '2026-07-03', title: 'Pull Day', workout: { id: 'client-uuid-1', sets: [{ exerciseName: 'Row', weight: 60, reps: 10 }] } };
+    r = await req('POST', '/workouts', legacyTokenMigrated, retryBody);
+    check('POST /workouts (client id) uses the app id as doc id', r.status === 200 && r.body?.recordId === 'client-uuid-1');
+    r = await req('POST', '/workouts', legacyTokenMigrated, { ...retryBody, workout: { ...retryBody.workout, sets: [{ exerciseName: 'Row', weight: 70, reps: 10 }] } });
+    check('POST /workouts (client id retry) same doc id', r.body?.recordId === 'client-uuid-1');
+    check('POST /workouts (client id retry) no duplicate doc', Object.keys(store['users/uidABC123/workouts']).length === 2);
+    check('POST /workouts (client id retry) totals not double-counted', store['users']['uidABC123'].workoutCount === 2 && store['users']['uidABC123'].totalVolume === 400 + 700);
+
+    r = await req('POST', '/workouts', legacyTokenMigrated, { date: '2026-07-04', workout: { id: 'bad/id', sets: [] } });
+    check('POST /workouts (unsafe client id) falls back to auto id', r.status === 200 && r.body?.recordId !== 'bad/id' && !String(r.body?.recordId).includes('/'));
+
+    // Opt-in paging (newest first): default still returns everything.
+    r = await req('GET', '/workouts', legacyTokenMigrated);
+    check('GET /workouts (no limit) returns full history', r.body?.items?.length === 3 && r.body?.nextCursor === null);
+    r = await req('GET', '/workouts?limit=2', legacyTokenMigrated);
+    check('GET /workouts?limit=2 returns 2 + nextCursor', r.body?.items?.length === 2 && r.body?.items?.[0]?.date === '2026-07-04' && !!r.body?.nextCursor);
+    r = await req('GET', `/workouts?limit=2&cursor=${r.body?.nextCursor}`, legacyTokenMigrated);
+    check('GET /workouts?cursor= returns the remaining page', r.body?.items?.length === 1 && r.body?.items?.[0]?.id === workoutId && r.body?.nextCursor === null);
+
+    // ── Compact storage (workoutFormat.js): smaller doc, identical on read ──
+    const advDefault = () => ({ method: null, drops: [], restPauseExtras: [], myo: { activationReps: null, clusters: [] }, backoff: { weight: null, reps: null }, tempo: null, partials: null, assisted: null, amrap: false, tags: {}, state: null });
+    const logEntry = (exercise, n) => ({ exercise, sets: n, repsArray: Array(n).fill(8), weightsArray: Array(n).fill(80), rpeArray: [8, ...Array(n - 1).fill(null)], dropsetArray: Array(n).fill(false), restPauseArray: Array(n).fill(false), unilateralArray: Array(n).fill(false), skippedArray: Array(n).fill(false), completedArray: Array(n).fill(true), setTypeArray: ['top-set', ...Array(n - 1).fill('standard')], advancedArray: Array.from({ length: n }, advDefault), unit: 'kg', date: '2026-06-20', goal: 'strength', repGoal: 5, targetRPE: null, targetRIR: null, maxedOut: false });
+    const fullWorkout = { id: 'compact-1', title: 'Workout on 2026-06-20', date: '2026-06-20', log: [logEntry('Squat', 4), logEntry('Leg Press', 3)], restBreaks: [2], sessionVolume: 5600, averageIntensity: 0.8, estimated1RM: 120, metrics: { volume: 5600, intensity: 0.8, oneRM: 120 } };
+    const totalsBeforeCompact = { ...store['users']['uidABC123'] };
+    r = await req('POST', '/workouts', legacyTokenMigrated, { date: '2026-06-20', title: fullWorkout.title, workout: fullWorkout });
+    const compactDoc = store['users/uidABC123/workouts']?.['compact-1'];
+    check('POST /workouts stores compact format', r.status === 200 && compactDoc?.workoutFormat === 2 && !('dropsetArray' in compactDoc.workout.log[0]) && !('metrics' in compactDoc.workout));
+    check('POST /workouts computes volume for the log shape (4x8x80 + 3x8x80)', compactDoc?.sessionVolume === 4480);
+    check('POST /workouts compact doc is much smaller', JSON.stringify(compactDoc.workout).length < JSON.stringify(fullWorkout).length * 0.5);
+    r = await req('GET', '/workouts', legacyTokenMigrated);
+    check('GET /workouts returns the compacted workout exactly as sent', require('util').isDeepStrictEqual(r.body?.items?.find(i => i.id === 'compact-1')?.workout, fullWorkout));
+    store['users/uidABC123/workouts']['legacy-doc'] = { date: '2026-01-02', title: 'Old', sessionVolume: 0, workout: { log: [{ exercise: 'X', repsArray: [1], dropsetArray: [false] }] } };
+    r = await req('GET', '/workouts', legacyTokenMigrated);
+    check('GET /workouts returns pre-existing (uncompacted) docs as stored', require('util').isDeepStrictEqual(r.body?.items?.find(i => i.id === 'legacy-doc')?.workout, { log: [{ exercise: 'X', repsArray: [1], dropsetArray: [false] }] }));
+    delete store['users/uidABC123/workouts']['compact-1'];
+    delete store['users/uidABC123/workouts']['legacy-doc'];
+    store['users']['uidABC123'].totalVolume = totalsBeforeCompact.totalVolume;
+    store['users']['uidABC123'].workoutCount = totalsBeforeCompact.workoutCount;
+
+    // ── Leaderboard: reads per-user counters, not every workout ──
+    r = await req('GET', '/leaderboard', legacyTokenMigrated);
+    check('GET /leaderboard 200', r.status === 200);
+    check('GET /leaderboard uses users/{uid} totals', r.body?.items?.some(i => i.username === 'migrateduser' && i.totalVolume === 1100 && i.workoutCount === 3));
+
+    // ── Sync routes are idempotent: re-sending the same entries doesn't duplicate ──
+    const cardioBefore = Object.keys(store['users/uidABC123/cardioLogs'] || {}).length;
+    const cardioEntries = [{ date: '2026-06-02', type: 'Bike', duration: 45 }, { id: 'cardio-1', date: '2026-06-03', type: 'Row', duration: 20 }];
+    await req('POST', '/cardio/sync', legacyTokenMigrated, { entries: cardioEntries });
+    r = await req('POST', '/cardio/sync', legacyTokenMigrated, { entries: cardioEntries });
+    check('POST /cardio/sync (resend) 201', r.status === 201 && r.body?.count === 2);
+    check('POST /cardio/sync (resend) did not duplicate', Object.keys(store['users/uidABC123/cardioLogs']).length === cardioBefore + 2);
+    check('POST /cardio/sync keeps an entry id as doc id', !!store['users/uidABC123/cardioLogs']['cardio-1']);
 
     // ── sendTemplate: writes to the RECIPIENT's templates, not the sender's ──
     r = await req('POST', '/sendTemplate', legacyTokenMigrated, { fromUser: 'migrateduser', toUser: 'clientuser', templateName: 'Shared Plan', templateData: { log: [] } });
@@ -343,6 +441,27 @@ setTimeout(() => {
     const coachLoggedId = r.body?.recordId;
     check('POST /coach/workouts wrote to CLIENT (uidClient456), stamped loggedByCoach', store['users/uidClient456/workouts']?.[coachLoggedId]?.workout?.loggedByCoach === 'migrateduser');
     check('POST /coach/workouts did not write to coach\'s own workouts', !store['users/uidABC123/workouts']?.[coachLoggedId]);
+
+    // ── coach/workouts by clientUid (what the app's roster sends) ──
+    store['coaches/uidABC123/clients'] = { ...(store['coaches/uidABC123/clients'] || {}), uidClient456: { status: 'active' }, uidPending: { status: 'pending' } };
+    store['users']['uidClient456'] = { ...(store['users']['uidClient456'] || {}), username: 'clientuser' };
+    store['users']['uidPending'] = { username: 'pendinguser' };
+    const coachBody = { clientUid: 'uidClient456', date: '2026-07-05', title: 'Leg Day', workout: { id: 'w-coach-1', log: [{ exercise: 'Squat', repsArray: [5], weightsArray: [100] }] } };
+    r = await req('POST', '/coach/workouts', legacyTokenMigrated, coachBody);
+    check('POST /coach/workouts (clientUid) 200', r.status === 200 && r.body?.recordId === 'coach-uidABC123-w-coach-1');
+    check('POST /coach/workouts (clientUid) wrote to client, stamped', store['users/uidClient456/workouts']?.['coach-uidABC123-w-coach-1']?.workout?.loggedByCoach === 'migrateduser');
+    const clientCountAfterFirst = store['users']['uidClient456'].workoutCount;
+    r = await req('POST', '/coach/workouts', legacyTokenMigrated, { ...coachBody, workout: { ...coachBody.workout, log: [...coachBody.workout.log, { exercise: 'Lunge', repsArray: [10], weightsArray: [40] }] } });
+    check('POST /coach/workouts (clientUid re-post) overwrites same doc', r.body?.recordId === 'coach-uidABC123-w-coach-1' && store['users/uidClient456/workouts']['coach-uidABC123-w-coach-1'].workout.log.length === 2);
+    check('POST /coach/workouts (clientUid re-post) not double-counted', store['users']['uidClient456'].workoutCount === clientCountAfterFirst);
+    r = await req('POST', '/coach/workouts', legacyTokenMigrated, { ...coachBody, clientUid: 'uidPending' });
+    check('POST /coach/workouts (pending link) 403', r.status === 403 && !store['users/uidPending/workouts']);
+    r = await req('POST', '/coach/workouts', legacyTokenMigrated, { ...coachBody, clientUid: 'uidNotOnRoster' });
+    check('POST /coach/workouts (not on roster) 403', r.status === 403);
+
+    // ── /saveWorkout: retired, still 200 for old builds ──
+    r = await req('POST', '/saveWorkout', legacyTokenMigrated, { username: 'migrateduser', workout: { log: [] } });
+    check('POST /saveWorkout still 200 (no longer stored)', r.status === 200 && r.body?.success === true);
 
     // ── Plan / referral ──
     r = await req('GET', '/api/user/plan', legacyTokenMigrated);
@@ -403,6 +522,17 @@ setTimeout(() => {
     r = await req('GET', '/exercises?limit=1000', legacyTokenMigrated);
     check('GET /exercises (limit=1000) returns the whole dataset for local caching', r.body?.items?.length === 873);
 
+    // ── resolveFirestoreUid cache: repeat requests skip the usernames read ──
+    await req('GET', '/workouts', legacyTokenMigrated);
+    const readsBefore = usernameReads;
+    await req('GET', '/workouts', legacyTokenMigrated);
+    await req('GET', '/programs', legacyTokenMigrated);
+    check('resolveFirestoreUid cached (no usernames reads on repeat requests)', usernameReads === readsBefore);
+
+    // Warm the cache for the deletion fixture so the test below proves
+    // deletion drops it (not just that it was never cached).
+    await req('POST', '/macrotargets', legacyTokenDelete, { calories: 2000 });
+
     // ── DELETE /account (migrated user, Apple App Store Guideline 5.1.1(v)) ──
     // Uses a dedicated fixture (deleteuser/uidDelete789) rather than
     // migrateduser/uidABC123 — every test above this point still needs that
@@ -425,6 +555,9 @@ setTimeout(() => {
 
     r = await req('DELETE', '/account', legacyTokenDelete);
     check('DELETE /account (already deleted) idempotent, not an error', r.status === 200);
+
+    await req('POST', '/macrotargets', legacyTokenDelete, { calories: 2100 });
+    check('DELETE /account dropped the cached uid (no write to the deleted uid)', !store['users']['uidDelete789']);
 
     console.log('\n=== RESULTS ===');
     for (const { label, pass } of results) console.log((pass ? 'PASS' : 'FAIL') + ' - ' + label);

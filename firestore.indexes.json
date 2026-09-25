@@ -1,0 +1,45 @@
+{
+  "indexes": [],
+  "fieldOverrides": [
+    {
+      "collectionGroup": "workouts",
+      "fieldPath": "workout",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "templates",
+      "fieldPath": "templateData",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "programs",
+      "fieldPath": "programData",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "dailyMacros",
+      "fieldPath": "logData",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "bodyweightArchives",
+      "fieldPath": "entries",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "crossfitLogs",
+      "fieldPath": "exercises",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "mobilityRoutines",
+      "fieldPath": "exercises",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "dailyMissions",
+      "fieldPath": "state",
+      "indexes": []
+    }
+  ]
+}

@@ -11,6 +11,9 @@
 // mobility, daily missions, and — if the user is a coach — their roster).
 'use strict';
 
+const { saveWorkoutWithTotals } = require('./workoutStore');
+const { compactWorkout } = require('./workoutFormat');
+
 function safeParseJson(value, fallback) {
   if (value === undefined || value === null || value === '') return fallback;
   if (typeof value !== 'string') return value;
@@ -46,35 +49,31 @@ async function migrateLegacyUserData({ username, uid, base, db, FieldValue, esca
     migratedFrom: r.id
   }));
 
-  // ── Workouts: WorkoutJSON packs an entire session (sets) into one blob.
-  // Explode into a sets subcollection per the schema doc's design. In
-  // practice this table is nearly empty (see module note above) — this
-  // exists for correctness if/when it does hold data.
+  // ── Workouts: stored in the same shape POST /workouts writes (the parsed
+  // WorkoutJSON under `workout`, so GET /workouts returns it), and through
+  // saveWorkoutWithTotals so the leaderboard counters on users/{uid} stay in
+  // step. Keyed by the Airtable record id + merge, so a re-run is idempotent
+  // (the counter update is a delta against the existing doc). In practice
+  // this table is nearly empty (see module note above) — this exists for
+  // correctness if/when it does hold data.
   try {
     const records = await base('Workouts').select({ filterByFormula: filter, pageSize: 100 }).all();
     for (const r of records) {
       const workout = safeParseJson(r.get('WorkoutJSON'), {});
-      const workoutRef = db.collection(`users/${uid}/workouts`).doc(r.id);
-      await workoutRef.set({
-        date: r.get('Date') || null,
-        title: r.get('Title') || 'Workout',
-        sessionVolume: r.get('SessionVolume') ?? null,
-        migratedFrom: r.id
-      }, { merge: true });
-      const sets = Array.isArray(workout.sets)
-        ? workout.sets
-        : Array.isArray(workout.exercises)
-          ? workout.exercises.flatMap(ex => Array.isArray(ex.sets) ? ex.sets.map(s => ({ ...s, exerciseName: s.exerciseName || ex.exercise || ex.name })) : [])
-          : [];
-      await Promise.all(sets.map((s, i) =>
-        workoutRef.collection('sets').doc(String(i)).set({
-          exerciseName: s.exerciseName || s.exercise || null,
-          weight: s.weight ?? null,
-          reps: s.reps ?? null,
-          rpe: s.rpe ?? null,
-          setNumber: s.setNumber ?? i + 1
-        })
-      ));
+      const { workout: storedWorkout, format } = compactWorkout(workout);
+      await saveWorkoutWithTotals({
+        db, FieldValue, uid,
+        docRef: db.collection(`users/${uid}/workouts`).doc(r.id),
+        data: {
+          date: r.get('Date') || null,
+          title: r.get('Title') || 'Workout',
+          sessionVolume: r.get('SessionVolume') ?? null,
+          workout: storedWorkout,
+          workoutFormat: format,
+          migratedFrom: r.id
+        },
+        merge: true
+      });
     }
     counts.Workouts = records.length;
   } catch (err) {
