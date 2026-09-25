@@ -34,10 +34,15 @@ function docRefFor(colPath, docId) {
     __colPath: colPath,
     async get() {
       const data = store[colPath][docId];
-      return { exists: !!data, get: (f) => data?.[f], data: () => data };
+      return { id: docId, exists: !!data, get: (f) => data?.[f], data: () => data };
     },
     async set(data, opts) {
-      store[colPath][docId] = opts?.merge ? { ...(store[colPath][docId] || {}), ...data } : data;
+      const prev = store[colPath][docId] || {};
+      const resolved = {};
+      for (const [k, v] of Object.entries(data)) {
+        resolved[k] = v && typeof v === 'object' && '__increment' in v ? (Number(prev[k]) || 0) + v.__increment : v;
+      }
+      store[colPath][docId] = opts?.merge ? { ...prev, ...resolved } : resolved;
     },
     async delete() { delete store[colPath][docId]; },
     collection(subPath) { return collection(`${colPath}/${docId}/${subPath}`); }
@@ -47,15 +52,29 @@ function collection(colPath) {
   store[colPath] = store[colPath] || {};
   const filters = [];
   let limitN = null;
+  let order = null;
+  let afterId = null;
   const api = {
     doc(id) {
       const docId = id || `auto_${Math.random().toString(36).slice(2, 8)}`;
       return docRefFor(colPath, docId);
     },
-    async get() { // naive: ignores orderBy direction, applies == filters + limit only
+    async get() { // naive: single orderBy, == filters, startAfter(snapshot), limit
       let entries = Object.entries(store[colPath] || {});
       for (const [field, value] of filters) {
         entries = entries.filter(([, data]) => data?.[field] === value);
+      }
+      if (order) {
+        const [field, dir] = order;
+        entries.sort(([ia, a], [ib, b]) => {
+          const x = a?.[field], y = b?.[field];
+          const c = x === y ? (ia < ib ? -1 : ia > ib ? 1 : 0) : (x == null ? -1 : y == null ? 1 : x < y ? -1 : 1);
+          return dir === 'desc' ? -c : c;
+        });
+      }
+      if (afterId != null) {
+        const i = entries.findIndex(([id]) => id === afterId);
+        if (i !== -1) entries = entries.slice(i + 1);
       }
       if (limitN != null) entries = entries.slice(0, limitN);
       const docs = entries.map(([id, data]) => ({
@@ -63,7 +82,8 @@ function collection(colPath) {
       }));
       return { docs, empty: docs.length === 0 };
     },
-    orderBy() { return this; },
+    orderBy(field, dir) { order = [field, dir || 'asc']; return this; },
+    startAfter(snap) { afterId = snap.id; return this; },
     where(field, op, value) { filters.push([field, value]); return this; },
     limit(n) { limitN = n; return this; }
   };
@@ -87,7 +107,19 @@ async function recursiveDelete(docRef) {
     if (key === prefix || key.startsWith(`${prefix}/`)) delete store[key];
   }
 }
-const fakeDb = { collection, batch, recursiveDelete };
+// Transactions: reads go straight through, writes are applied at the end.
+async function runTransaction(fn) {
+  const writes = [];
+  const tx = {
+    get: (ref) => ref.get(),
+    set(ref, data, opts) { writes.push(() => ref.set(data, opts)); return tx; }
+  };
+  const result = await fn(tx);
+  for (const w of writes) await w();
+  return result;
+}
+const getAll = (...refs) => Promise.all(refs.map(r => r.get()));
+const fakeDb = { collection, batch, recursiveDelete, runTransaction, getAll };
 
 require.cache[require.resolve(firebasePath)] = {
   id: firebasePath, filename: firebasePath, loaded: true,
@@ -100,7 +132,7 @@ require.cache[require.resolve(firebasePath)] = {
       setCustomUserClaims: async () => {},
       deleteUser: async () => {}
     },
-    db: fakeDb, FieldValue: { serverTimestamp: () => 'TS' }, firebaseEnabled: true, projectId: 'test-project', initError: null
+    db: fakeDb, FieldValue: { serverTimestamp: () => 'TS', increment: (n) => ({ __increment: n }) }, firebaseEnabled: true, projectId: 'test-project', initError: null
   }
 };
 
@@ -326,11 +358,47 @@ setTimeout(() => {
     check('POST /workouts (migrated) 200', r.status === 200);
     const workoutId = r.body?.recordId;
     check('POST /workouts (migrated) wrote to Firestore (whole object)', store['users/uidABC123/workouts']?.[workoutId]?.workout?.sets?.[0]?.exerciseName === 'Bench');
-    check('POST /workouts (migrated) also exploded sets subcollection', !!store[`users/uidABC123/workouts/${workoutId}/sets`]?.['0']);
+    check('POST /workouts (migrated) no longer writes a sets subcollection', !store[`users/uidABC123/workouts/${workoutId}/sets`]);
+    check('POST /workouts (migrated) incremented leaderboard totals', store['users']['uidABC123'].totalVolume === 400 && store['users']['uidABC123'].workoutCount === 1);
 
     r = await req('GET', '/workouts', legacyTokenMigrated);
     check('GET /workouts (migrated) 200', r.status === 200);
     check('GET /workouts (migrated) returns whole workout object byte-for-byte', r.body?.items?.some(i => i.id === workoutId && i.workout?.sets?.[0]?.weight === 80));
+
+    // Client-supplied id: a retried POST overwrites the same doc (no duplicate,
+    // no double-counted totals), and totals follow the new volume.
+    const retryBody = { date: '2026-07-03', title: 'Pull Day', workout: { id: 'client-uuid-1', sets: [{ exerciseName: 'Row', weight: 60, reps: 10 }] } };
+    r = await req('POST', '/workouts', legacyTokenMigrated, retryBody);
+    check('POST /workouts (client id) uses the app id as doc id', r.status === 200 && r.body?.recordId === 'client-uuid-1');
+    r = await req('POST', '/workouts', legacyTokenMigrated, { ...retryBody, workout: { ...retryBody.workout, sets: [{ exerciseName: 'Row', weight: 70, reps: 10 }] } });
+    check('POST /workouts (client id retry) same doc id', r.body?.recordId === 'client-uuid-1');
+    check('POST /workouts (client id retry) no duplicate doc', Object.keys(store['users/uidABC123/workouts']).length === 2);
+    check('POST /workouts (client id retry) totals not double-counted', store['users']['uidABC123'].workoutCount === 2 && store['users']['uidABC123'].totalVolume === 400 + 700);
+
+    r = await req('POST', '/workouts', legacyTokenMigrated, { date: '2026-07-04', workout: { id: 'bad/id', sets: [] } });
+    check('POST /workouts (unsafe client id) falls back to auto id', r.status === 200 && r.body?.recordId !== 'bad/id' && !String(r.body?.recordId).includes('/'));
+
+    // Opt-in paging (newest first): default still returns everything.
+    r = await req('GET', '/workouts', legacyTokenMigrated);
+    check('GET /workouts (no limit) returns full history', r.body?.items?.length === 3 && r.body?.nextCursor === null);
+    r = await req('GET', '/workouts?limit=2', legacyTokenMigrated);
+    check('GET /workouts?limit=2 returns 2 + nextCursor', r.body?.items?.length === 2 && r.body?.items?.[0]?.date === '2026-07-04' && !!r.body?.nextCursor);
+    r = await req('GET', `/workouts?limit=2&cursor=${r.body?.nextCursor}`, legacyTokenMigrated);
+    check('GET /workouts?cursor= returns the remaining page', r.body?.items?.length === 1 && r.body?.items?.[0]?.id === workoutId && r.body?.nextCursor === null);
+
+    // ── Leaderboard: reads per-user counters, not every workout ──
+    r = await req('GET', '/leaderboard', legacyTokenMigrated);
+    check('GET /leaderboard 200', r.status === 200);
+    check('GET /leaderboard uses users/{uid} totals', r.body?.items?.some(i => i.username === 'migrateduser' && i.totalVolume === 1100 && i.workoutCount === 3));
+
+    // ── Sync routes are idempotent: re-sending the same entries doesn't duplicate ──
+    const cardioBefore = Object.keys(store['users/uidABC123/cardioLogs'] || {}).length;
+    const cardioEntries = [{ date: '2026-06-02', type: 'Bike', duration: 45 }, { id: 'cardio-1', date: '2026-06-03', type: 'Row', duration: 20 }];
+    await req('POST', '/cardio/sync', legacyTokenMigrated, { entries: cardioEntries });
+    r = await req('POST', '/cardio/sync', legacyTokenMigrated, { entries: cardioEntries });
+    check('POST /cardio/sync (resend) 201', r.status === 201 && r.body?.count === 2);
+    check('POST /cardio/sync (resend) did not duplicate', Object.keys(store['users/uidABC123/cardioLogs']).length === cardioBefore + 2);
+    check('POST /cardio/sync keeps an entry id as doc id', !!store['users/uidABC123/cardioLogs']['cardio-1']);
 
     // ── sendTemplate: writes to the RECIPIENT's templates, not the sender's ──
     r = await req('POST', '/sendTemplate', legacyTokenMigrated, { fromUser: 'migrateduser', toUser: 'clientuser', templateName: 'Shared Plan', templateData: { log: [] } });

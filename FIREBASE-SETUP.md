@@ -60,3 +60,22 @@ When the webhook handler lands, it must call `syncTierClaim(username, tier)`
 (defined next to `updateUserPlan` in `server.js`) after updating Airtable, and
 the client should call `getIdToken(true)` after checkout so tier gating updates
 immediately.
+
+## Storage-efficiency rollout (leaderboard counters + index exemptions)
+
+`GET /leaderboard` now reads running `totalVolume` / `workoutCount` counters on
+`users/{uid}` (kept up to date by every workout write) instead of scanning all
+workouts. Workouts saved before this change aren't in those counters yet, so
+when deploying it:
+
+1. Deploy the functions code.
+2. Backfill the counters (safe to re-run; `--dry-run` prints without writing,
+   `--delete-sets` also removes the old unused `workouts/{id}/sets/*` docs):
+   `node scripts/backfill-leaderboard-totals.js --delete-sets`
+3. Deploy the index exemptions for the stored JSON fields (`workout`,
+   `programData`, `templateData`, ...), which Firestore otherwise indexes field
+   by field: `firebase deploy --only firestore:indexes`. If the CLI offers to
+   delete indexes that aren't in `firestore.indexes.json`, answer no unless
+   you've checked they're unused.
+
+Until step 2 runs, the leaderboard only shows workouts saved after the deploy.

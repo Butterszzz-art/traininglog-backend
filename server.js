@@ -11,6 +11,7 @@ const { router: aiRouter } = require('./src/routes/ai');
 const { createPremiumRouter } = require('./src/routes/premium');
 const { auth: fbAuth, db, FieldValue, firebaseEnabled, projectId: firebaseProjectId, initError: firebaseInitError } = require('./firebase');
 const { berekenClient } = require('./src/intakeCalculations');
+const { safeDocId, syncEntryDocId, saveWorkoutWithTotals, batchSetAll, queryHistoryPage } = require('./workoutStore');
 
 const app = express();
 
@@ -1192,30 +1193,20 @@ app.post('/workouts', authenticateToken, async (req, res) => {
     const uid = await resolveFirestoreUid(username);
     if (uid) {
       // The whole `workout` object is stored as-is (not exploded) so GET can
-      // return it byte-for-byte — that's the API's existing contract. A
-      // `sets` subcollection is also populated for future analytics, mirroring
-      // legacyMigration.js's design, but GET doesn't reconstruct from it.
-      const docRef = db.collection(`users/${uid}/workouts`).doc();
-      await docRef.set({
-        date: String(date),
-        title: String(title || 'Workout'),
-        sessionVolume,
-        workout
+      // return it byte-for-byte — that's the API's existing contract. (A
+      // per-set `sets` subcollection used to be written too; nothing read
+      // it, and it cost one extra doc + write per set.)
+      //
+      // The app's own workout id is used as the doc id when present, so a
+      // retried POST (e.g. the archiver timing out after the write landed)
+      // overwrites the same doc instead of duplicating it.
+      const workoutsCol = db.collection(`users/${uid}/workouts`);
+      const clientId = safeDocId(workout.id);
+      const docRef = clientId ? workoutsCol.doc(clientId) : workoutsCol.doc();
+      await saveWorkoutWithTotals({
+        db, FieldValue, uid, docRef,
+        data: { date: String(date), title: String(title || 'Workout'), sessionVolume, workout }
       });
-      const sets = Array.isArray(workout.sets)
-        ? workout.sets
-        : Array.isArray(workout.exercises)
-          ? workout.exercises.flatMap(ex => Array.isArray(ex.sets) ? ex.sets.map(s => ({ ...s, exerciseName: s.exerciseName || ex.exercise || ex.name })) : [])
-          : [];
-      await Promise.all(sets.map((s, i) =>
-        docRef.collection('sets').doc(String(i)).set({
-          exerciseName: s.exerciseName || s.exercise || null,
-          weight: s.weight ?? null,
-          reps: s.reps ?? null,
-          rpe: s.rpe ?? null,
-          setNumber: s.setNumber ?? i + 1
-        })
-      ));
       return sendSuccess(res, 200, { recordId: docRef.id });
     }
 
@@ -1259,11 +1250,11 @@ app.get('/workouts', authenticateToken, async (req, res) => {
 
     const uid = await resolveFirestoreUid(username);
     if (uid) {
-      const snap = await db.collection(`users/${uid}/workouts`).orderBy('date', 'desc').get();
-      const items = snap.docs.map(d => ({
+      const { docs, nextCursor } = await queryHistoryPage(db.collection(`users/${uid}/workouts`), 'date', req.query);
+      const items = docs.map(d => ({
         id: d.id, username, date: d.get('date'), title: d.get('title'), workout: d.get('workout') ?? null
       }));
-      return sendSuccess(res, 200, { items });
+      return sendSuccess(res, 200, { items, nextCursor });
     }
 
     if (!airtableEnabled) return sendError(res, 503, 'workouts.airtable_disabled', 'Airtable is not configured.');
@@ -1450,8 +1441,8 @@ app.get('/dailylogs', authenticateToken, async (req, res) => {
 
     const uid = await resolveFirestoreUid(username);
     if (uid) {
-      const snap = await db.collection(`users/${uid}/dailyMacros`).orderBy('date', 'desc').get();
-      const records = snap.docs.map(d => ({
+      const { docs, nextCursor } = await queryHistoryPage(db.collection(`users/${uid}/dailyMacros`), 'date', req.query);
+      const records = docs.map(d => ({
         id: d.id,
         Date: d.get('date'),
         Calories: d.get('calories'),
@@ -1461,7 +1452,7 @@ app.get('/dailylogs', authenticateToken, async (req, res) => {
         ...(d.get('type') ? { Type: d.get('type') } : {}),
         ...(d.get('logData') != null ? { LogData: JSON.stringify(d.get('logData')) } : {})
       }));
-      return res.json({ success: true, records });
+      return res.json({ success: true, records, nextCursor });
     }
 
     if (!airtableEnabled) return res.json({ records: [] });
@@ -1750,9 +1741,12 @@ app.post('/measurements/sync', authenticateToken, async (req, res) => {
     const uid = await resolveFirestoreUid(username);
     if (uid) {
       const col = db.collection(`users/${uid}/measurements`);
-      const recordIds = await Promise.all(entries.map(async e => {
-        const docRef = col.doc();
-        await docRef.set({
+      // Batched (one commit instead of N round-trips) and keyed by the
+      // entry's own id or a content hash, so a re-sent entry overwrites
+      // its existing doc rather than duplicating it.
+      const writes = entries.map(e => ({
+        ref: col.doc(syncEntryDocId(e)),
+        data: {
           date: String(e.date || ''),
           neck: e.neck != null ? Number(e.neck) : null,
           shoulders: e.shoulders != null ? Number(e.shoulders) : null,
@@ -1762,9 +1756,10 @@ app.post('/measurements/sync', authenticateToken, async (req, res) => {
           arm: e.arm != null ? Number(e.arm) : null,
           thigh: e.thigh != null ? Number(e.thigh) : null,
           syncedAt: new Date().toISOString()
-        });
-        return docRef.id;
+        }
       }));
+      await batchSetAll(db, writes);
+      const recordIds = writes.map(w => w.ref.id);
       return sendSuccess(res, 201, { count: recordIds.length, recordIds });
     }
 
@@ -1821,8 +1816,8 @@ app.get('/measurements', authenticateToken, async (req, res) => {
 
     const uid = await resolveFirestoreUid(username);
     if (uid) {
-      const snap = await db.collection(`users/${uid}/measurements`).orderBy('date', 'desc').get();
-      const items = snap.docs.map(d => ({
+      const { docs, nextCursor } = await queryHistoryPage(db.collection(`users/${uid}/measurements`), 'date', req.query);
+      const items = docs.map(d => ({
         id: d.id,
         date: d.get('date'),
         neck: d.get('neck'),
@@ -1834,7 +1829,7 @@ app.get('/measurements', authenticateToken, async (req, res) => {
         thigh: d.get('thigh'),
         syncedAt: d.get('syncedAt')
       }));
-      return sendSuccess(res, 200, { items });
+      return sendSuccess(res, 200, { items, nextCursor });
     }
 
     if (!airtableEnabled) return res.json({ success: true, items: [] });
@@ -1884,9 +1879,12 @@ app.post('/cardio/sync', authenticateToken, async (req, res) => {
     const uid = await resolveFirestoreUid(username);
     if (uid) {
       const col = db.collection(`users/${uid}/cardioLogs`);
-      const recordIds = await Promise.all(entries.map(async e => {
-        const docRef = col.doc();
-        await docRef.set({
+      // Batched (one commit instead of N round-trips) and keyed by the
+      // entry's own id or a content hash, so a re-sent entry overwrites
+      // its existing doc rather than duplicating it.
+      const writes = entries.map(e => ({
+        ref: col.doc(syncEntryDocId(e)),
+        data: {
           date: String(e.date || ''),
           type: String(e.type || ''),
           duration: e.duration != null ? Number(e.duration) : null,
@@ -1896,9 +1894,10 @@ app.post('/cardio/sync', authenticateToken, async (req, res) => {
           met: e.met != null ? Number(e.met) : null,
           notes: e.notes ? String(e.notes) : '',
           syncedAt: new Date().toISOString()
-        });
-        return docRef.id;
+        }
       }));
+      await batchSetAll(db, writes);
+      const recordIds = writes.map(w => w.ref.id);
       return sendSuccess(res, 201, { count: recordIds.length, recordIds });
     }
 
@@ -1953,8 +1952,8 @@ app.get('/cardio', authenticateToken, async (req, res) => {
 
     const uid = await resolveFirestoreUid(username);
     if (uid) {
-      const snap = await db.collection(`users/${uid}/cardioLogs`).orderBy('date', 'desc').get();
-      const items = snap.docs.map(d => ({
+      const { docs, nextCursor } = await queryHistoryPage(db.collection(`users/${uid}/cardioLogs`), 'date', req.query);
+      const items = docs.map(d => ({
         id: d.id,
         date: d.get('date'),
         type: d.get('type'),
@@ -1966,7 +1965,7 @@ app.get('/cardio', authenticateToken, async (req, res) => {
         notes: d.get('notes'),
         syncedAt: d.get('syncedAt')
       }));
-      return sendSuccess(res, 200, { items });
+      return sendSuccess(res, 200, { items, nextCursor });
     }
 
     if (!airtableEnabled) return res.json({ success: true, items: [] });
@@ -2012,9 +2011,12 @@ app.post('/crossfit/sync', authenticateToken, async (req, res) => {
     const uid = await resolveFirestoreUid(username);
     if (uid) {
       const col = db.collection(`users/${uid}/crossfitLogs`);
-      const recordIds = await Promise.all(entries.map(async e => {
-        const docRef = col.doc();
-        await docRef.set({
+      // Batched (one commit instead of N round-trips) and keyed by the
+      // entry's own id or a content hash, so a re-sent entry overwrites
+      // its existing doc rather than duplicating it.
+      const writes = entries.map(e => ({
+        ref: col.doc(syncEntryDocId(e)),
+        data: {
           date: String(e.date || ''),
           workoutName: String(e.name || e.workoutName || ''),
           minutes: e.minutes != null ? Number(e.minutes) : null,
@@ -2023,9 +2025,10 @@ app.post('/crossfit/sync', authenticateToken, async (req, res) => {
           notes: e.notes ? String(e.notes) : '',
           exercises: e.exercises || [],
           syncedAt: new Date().toISOString()
-        });
-        return docRef.id;
+        }
       }));
+      await batchSetAll(db, writes);
+      const recordIds = writes.map(w => w.ref.id);
       return sendSuccess(res, 201, { count: recordIds.length, recordIds });
     }
 
@@ -2079,8 +2082,8 @@ app.get('/crossfit', authenticateToken, async (req, res) => {
 
     const uid = await resolveFirestoreUid(username);
     if (uid) {
-      const snap = await db.collection(`users/${uid}/crossfitLogs`).orderBy('date', 'desc').get();
-      const items = snap.docs.map(d => ({
+      const { docs, nextCursor } = await queryHistoryPage(db.collection(`users/${uid}/crossfitLogs`), 'date', req.query);
+      const items = docs.map(d => ({
         id: d.id,
         date: d.get('date'),
         workoutName: d.get('workoutName'),
@@ -2091,7 +2094,7 @@ app.get('/crossfit', authenticateToken, async (req, res) => {
         exercises: d.get('exercises') || [],
         syncedAt: d.get('syncedAt')
       }));
-      return sendSuccess(res, 200, { items });
+      return sendSuccess(res, 200, { items, nextCursor });
     }
 
     if (!airtableEnabled) return res.json({ success: true, items: [] });
@@ -3417,12 +3420,12 @@ app.post('/coach/workouts', authenticateToken, async (req, res) => {
     // Cross-user write: resolve the CLIENT's uid, not the coach's.
     const clientUid = await resolveFirestoreUid(clientUsername);
     if (clientUid) {
+      // Always a fresh auto id here — honouring a coach-supplied id would let
+      // a coach overwrite one of the client's own workouts.
       const docRef = db.collection(`users/${clientUid}/workouts`).doc();
-      await docRef.set({
-        date: String(date),
-        title: String(title || 'Workout (logged by coach)'),
-        sessionVolume,
-        workout: stamped
+      await saveWorkoutWithTotals({
+        db, FieldValue, uid: clientUid, docRef,
+        data: { date: String(date), title: String(title || 'Workout (logged by coach)'), sessionVolume, workout: stamped }
       });
       return sendSuccess(res, 200, { recordId: docRef.id });
     }
