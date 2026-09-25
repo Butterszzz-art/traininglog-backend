@@ -71,6 +71,21 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // profiles/{username}, profileAvatars/{username}, profileReports/{id} —
+    // public-facing profile (photo, display name, bio). Other users may only
+    // see a profile subject to its owner's visibility setting (everyone /
+    // coach / private), which needs a coach-link lookup rules can't express
+    // cheaply, so every read and write goes through the API (Admin SDK).
+    match /profiles/{username} {
+      allow read, write: if false;
+    }
+    match /profileAvatars/{username} {
+      allow read, write: if false;
+    }
+    match /profileReports/{reportId} {
+      allow read, write: if false;
+    }
+
     // Everything else: deny by default.
     match /{document=**} {
       allow read, write: if false;

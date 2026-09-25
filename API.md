@@ -151,6 +151,33 @@ Everything on the shelf as metadata: `{ success, access: "full" | "preview", pla
 
 Unknown ids return `404 premium.not_found`. Run `node scripts/test-premium-content.js` to validate the content files and the gating rules.
 
+## Profiles (photo, display name, bio)
+
+All routes need `Authorization: Bearer <token>` and a migrated (Firebase) backend. Profiles are keyed by lowercase username. Other users see a profile only if its `visibility` allows it: `everyone`, `coach` (the owner's actively linked coach or clients) or `private` (owner only).
+
+### `GET /api/profiles/me`
+`{ success, profile: { username, displayName, bio, visibility, avatarVersion, avatar } }` — `avatar` is a `data:` URL or `null`.
+
+### `PUT /api/profiles/me`
+Body: any of `{ displayName (≤40 chars), bio (≤160 chars, ≤3 lines), visibility }`. Omitted fields are kept. Text is stripped of control characters.
+
+### `PUT /api/profiles/me/avatar`
+Body: `{ image: "data:image/jpeg;base64,..." }`. JPEG, PNG or WebP (checked by file signature), at most 150 KB. The app sends a 256×256 JPEG. Returns `{ avatarVersion }`.
+
+### `DELETE /api/profiles/me/avatar`
+Removes the photo; the app falls back to initials.
+
+### `POST /api/profiles/lookup`
+Body: `{ usernames: [...≤100], have: { username: avatarVersion } }`. Returns `{ profiles: { <usernameLower>: { username, displayName, bio, avatarVersion, avatar? } } }`. `avatar` is only included when the version in `have` is out of date. Hidden or missing profiles come back as `{ username, hidden: true }`.
+
+### `POST /api/profiles/:username/report`
+Body: `{ reason: "inappropriate" | "impersonation" | "spam" | "other", note? }`. Stored in `profileReports` for review; one report per reporter per profile.
+
+### `DELETE /api/profiles/:username/avatar`
+Moderators only (usernames listed, comma-separated, in the `PROFILE_ADMINS` env var). Removes the photo and clears the bio.
+
+Run `node scripts/test-profiles.js` for the route tests.
+
 ## Auth error note after JWT secret rotation
 
 If the server JWT secret changes, previously issued browser tokens become invalid and requests can fail with:

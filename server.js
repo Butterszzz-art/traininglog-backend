@@ -9,6 +9,7 @@ const rateLimit = require('express-rate-limit');
 const leaderboardRoute = require('./leaderboard');
 const { router: aiRouter } = require('./src/routes/ai');
 const { createPremiumRouter } = require('./src/routes/premium');
+const { createProfilesRouter, deleteProfile } = require('./src/routes/profiles');
 const { auth: fbAuth, db, FieldValue, firebaseEnabled, projectId: firebaseProjectId, initError: firebaseInitError } = require('./firebase');
 const { berekenClient } = require('./src/intakeCalculations');
 const { compactWorkout, readStoredWorkout } = require('./workoutFormat');
@@ -716,6 +717,7 @@ async function deleteFirestoreAccount(uid, username) {
   await db.recursiveDelete(db.collection('users').doc(uid));
   await db.recursiveDelete(db.collection('coaches').doc(uid)); // no-op if this user never coached anyone
   await db.collection('usernames').doc(String(username).toLowerCase()).delete();
+  await deleteProfile(db, username);
   forgetCachedUid(username);
 }
 
@@ -4085,6 +4087,30 @@ const premiumLimiter = rateLimit({
   message: { success: false, error: { code: 'premium.rate_limited', message: 'Too many requests. Try again shortly.' } }
 });
 app.use('/api/premium', authenticateToken, premiumLimiter, createPremiumRouter({ getPlanInfo: getUserPlanInfo, sendError }));
+
+// Public profiles (photo, display name, bio, visibility) — see
+// src/routes/profiles.js. Writes and reports get a tighter limit than the
+// batch lookups the feed/leaderboard make on every render.
+const profileLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: { code: 'profile.rate_limited', message: 'Too many requests. Try again shortly.' } }
+});
+const profileWriteLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: req => req.method === 'GET' || req.path === '/lookup',
+  message: { success: false, error: { code: 'profile.rate_limited', message: 'Too many profile changes. Try again shortly.' } }
+});
+app.use('/api/profiles', authenticateToken, profileLimiter, profileWriteLimiter, createProfilesRouter({
+  db, FieldValue, firebaseEnabled, sendError, sendSuccess,
+  resolveUid: resolveFirestoreUid,
+  adminUsernames: (process.env.PROFILE_ADMINS || '').split(','),
+}));
 app.use('/', leaderboardRoute);
 
 // ── Exercise library ─────────────────────────────────────────────────────────
