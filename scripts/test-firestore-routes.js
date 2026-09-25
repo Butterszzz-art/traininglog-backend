@@ -422,6 +422,27 @@ setTimeout(() => {
     check('POST /coach/workouts wrote to CLIENT (uidClient456), stamped loggedByCoach', store['users/uidClient456/workouts']?.[coachLoggedId]?.workout?.loggedByCoach === 'migrateduser');
     check('POST /coach/workouts did not write to coach\'s own workouts', !store['users/uidABC123/workouts']?.[coachLoggedId]);
 
+    // ── coach/workouts by clientUid (what the app's roster sends) ──
+    store['coaches/uidABC123/clients'] = { ...(store['coaches/uidABC123/clients'] || {}), uidClient456: { status: 'active' }, uidPending: { status: 'pending' } };
+    store['users']['uidClient456'] = { ...(store['users']['uidClient456'] || {}), username: 'clientuser' };
+    store['users']['uidPending'] = { username: 'pendinguser' };
+    const coachBody = { clientUid: 'uidClient456', date: '2026-07-05', title: 'Leg Day', workout: { id: 'w-coach-1', log: [{ exercise: 'Squat', repsArray: [5], weightsArray: [100] }] } };
+    r = await req('POST', '/coach/workouts', legacyTokenMigrated, coachBody);
+    check('POST /coach/workouts (clientUid) 200', r.status === 200 && r.body?.recordId === 'coach-uidABC123-w-coach-1');
+    check('POST /coach/workouts (clientUid) wrote to client, stamped', store['users/uidClient456/workouts']?.['coach-uidABC123-w-coach-1']?.workout?.loggedByCoach === 'migrateduser');
+    const clientCountAfterFirst = store['users']['uidClient456'].workoutCount;
+    r = await req('POST', '/coach/workouts', legacyTokenMigrated, { ...coachBody, workout: { ...coachBody.workout, log: [...coachBody.workout.log, { exercise: 'Lunge', repsArray: [10], weightsArray: [40] }] } });
+    check('POST /coach/workouts (clientUid re-post) overwrites same doc', r.body?.recordId === 'coach-uidABC123-w-coach-1' && store['users/uidClient456/workouts']['coach-uidABC123-w-coach-1'].workout.log.length === 2);
+    check('POST /coach/workouts (clientUid re-post) not double-counted', store['users']['uidClient456'].workoutCount === clientCountAfterFirst);
+    r = await req('POST', '/coach/workouts', legacyTokenMigrated, { ...coachBody, clientUid: 'uidPending' });
+    check('POST /coach/workouts (pending link) 403', r.status === 403 && !store['users/uidPending/workouts']);
+    r = await req('POST', '/coach/workouts', legacyTokenMigrated, { ...coachBody, clientUid: 'uidNotOnRoster' });
+    check('POST /coach/workouts (not on roster) 403', r.status === 403);
+
+    // ── /saveWorkout: retired, still 200 for old builds ──
+    r = await req('POST', '/saveWorkout', legacyTokenMigrated, { username: 'migrateduser', workout: { log: [] } });
+    check('POST /saveWorkout still 200 (no longer stored)', r.status === 200 && r.body?.success === true);
+
     // ── Plan / referral ──
     r = await req('GET', '/api/user/plan', legacyTokenMigrated);
     check('GET /api/user/plan (migrated) 200', r.status === 200);

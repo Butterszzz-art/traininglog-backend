@@ -1189,19 +1189,16 @@ app.post('/auth/email-for-username', loginLimiter, async (req, res) => {
   }
 });
 
-// Save workout (in-memory — kept for backwards compat)
-const savedWorkouts = [];
+// POST /saveWorkout — RETIRED. Older app builds post the whole in-progress
+// workout here after every exercise added. It used to append each one to an
+// in-memory array that nothing read and nothing ever cleared (so instance
+// memory only grew). Workouts reach Firestore via POST /workouts instead
+// (the app's archiver). Still answers 200 so old builds don't queue retries.
 app.post('/saveWorkout', authenticateToken, (req, res) => {
   const { username, workout } = req.body || {};
   if (!username || !workout) {
     return sendError(res, 400, 'workout.validation', 'username and workout are required.');
   }
-  savedWorkouts.push({
-    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    username,
-    workout,
-    savedAt: new Date().toISOString()
-  });
   sendSuccess(res, 200, { message: 'Workout saved' });
 });
 
@@ -3427,9 +3424,50 @@ app.patch('/api/coach/leads/:id', authenticateToken, async (req, res) => {
 app.post('/coach/workouts', authenticateToken, async (req, res) => {
   try {
     const coachUsername = req.user.username;
-    const { clientUsername, date, title, workout } = req.body || {};
-    if (!clientUsername || !date || !workout) {
-      return sendError(res, 422, 'coach.invalid_payload', 'clientUsername, date and workout are required.');
+    const { clientUsername, clientUid: bodyClientUid, date, title, workout } = req.body || {};
+    if ((!clientUsername && !bodyClientUid) || !date || !workout || typeof workout !== 'object') {
+      return sendError(res, 422, 'coach.invalid_payload', 'clientUid (or clientUsername), date and workout are required.');
+    }
+
+    // The app's coach roster (GET /api/coach/clients) identifies clients by
+    // uid — the coaches/{coachUid}/clients/{clientUid} link written by the
+    // invite/accept flow — so that's what it sends. Verify that link rather
+    // than the Airtable CoachClients table.
+    if (!clientUsername) {
+      if (!firebaseEnabled) return sendError(res, 503, 'coach.firebase_disabled', 'Client linking requires a migrated (Firebase) account.');
+      const targetUid = safeDocId(bodyClientUid);
+      if (!targetUid) return sendError(res, 422, 'coach.invalid_payload', 'Invalid clientUid.');
+      const coachUid = await resolveCallerUid(req.user);
+      if (!coachUid) return sendError(res, 409, 'coach.not_migrated', 'Your account needs to complete migration first. Contact support.');
+
+      const [linkSnap, clientSnap] = await Promise.all([
+        db.collection(`coaches/${coachUid}/clients`).doc(targetUid).get(),
+        db.collection('users').doc(targetUid).get()
+      ]);
+      // Pending invites don't grant write access; the users/{uid} check also
+      // rules out legacy roster rows keyed by an Airtable record id.
+      if (!linkSnap.exists || (linkSnap.get('status') || 'active') !== 'active' || !clientSnap.exists) {
+        return sendError(res, 403, 'coach.not_linked', 'This client is not linked to your coach account.');
+      }
+
+      const stamped = { ...workout, loggedByCoach: coachUsername };
+      // The app re-posts the growing session after each exercise; keying by
+      // its workout id makes those re-posts overwrite one doc. Namespaced by
+      // coach so a coach can only ever overwrite their own coach-logged
+      // entries, never the client's own workouts.
+      const workoutId = safeDocId(workout.id);
+      const workoutsCol = db.collection(`users/${targetUid}/workouts`);
+      const docRef = workoutId ? workoutsCol.doc(`coach-${coachUid}-${workoutId}`) : workoutsCol.doc();
+      await saveWorkoutWithTotals({
+        db, FieldValue, uid: targetUid, docRef,
+        data: {
+          date: String(date),
+          title: String(title || 'Workout (logged by coach)'),
+          sessionVolume: computeSessionVolume(stamped),
+          workout: stamped
+        }
+      });
+      return sendSuccess(res, 200, { recordId: docRef.id });
     }
 
     // Link verification always goes through Airtable's CoachClients table —
