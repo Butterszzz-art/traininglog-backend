@@ -251,6 +251,11 @@ setTimeout(() => {
     check('POST /dailylogs (migrated) 201', r.status === 201);
     check('POST /dailylogs (migrated) wrote to Firestore', Object.values(store['users/uidABC123/dailyMacros'] || {}).some(d => d.calories === 2600));
 
+    r = await req('POST', '/dailylogs', legacyTokenMigrated, { date: '2026-07-01', CaloriesTotal: 2700, ProteinTotal: 190 });
+    check('POST /dailylogs (same day re-save) overwrites the day, no duplicate', Object.keys(store['users/uidABC123/dailyMacros']).length === 1 && store['users/uidABC123/dailyMacros']['2026-07-01_log']?.calories === 2700);
+    r = await req('POST', '/dailylogs', legacyTokenMigrated, { date: '2026-07-01', Type: 'Macros', CaloriesTotal: 2600, ProteinTotal: 190 });
+    check('POST /dailylogs (different Type) is a separate doc', !!store['users/uidABC123/dailyMacros']['2026-07-01_Macros']);
+
     r = await req('GET', '/dailylogs?username=migrateduser', legacyTokenMigrated);
     check('GET /dailylogs (migrated) 200', r.status === 200);
     check('GET /dailylogs (migrated) reshapes to Airtable-style fields', r.body?.records?.some(rec => rec.Calories === 2600 && rec.ProteinGrams === 190));
@@ -259,6 +264,9 @@ setTimeout(() => {
     r = await req('POST', '/bodyweight/archive', legacyTokenMigrated, { periodStart: '2026-06-01', periodEnd: '2026-06-28', entries: [{ date: '2026-06-01', weightKg: 80 }, { date: '2026-06-28', weightKg: 79 }] });
     check('POST /bodyweight/archive (migrated) 201', r.status === 201);
     check('POST /bodyweight/archive (migrated) wrote to Firestore', Object.values(store['users/uidABC123/bodyweightArchives'] || {}).some(d => d.startWeightKg === 80 && d.endWeightKg === 79));
+
+    await req('POST', '/bodyweight/archive', legacyTokenMigrated, { periodStart: '2026-06-01', periodEnd: '2026-06-28', entries: [{ date: '2026-06-01', weightKg: 80 }, { date: '2026-06-28', weightKg: 79 }] });
+    check('POST /bodyweight/archive (re-sent period) does not duplicate', Object.keys(store['users/uidABC123/bodyweightArchives']).length === 1 && !!store['users/uidABC123/bodyweightArchives']['2026-06-01_2026-06-28']);
 
     r = await req('GET', '/bodyweight?username=migrateduser', legacyTokenMigrated);
     check('GET /bodyweight (migrated) 200', r.status === 200);

@@ -34,6 +34,14 @@ function syncEntryDocId(entry) {
   return safeDocId(entry?.id) || contentDocId(entry);
 }
 
+// Natural-key doc id from date-like parts, e.g. ('2026-07-01', 'Macros') ->
+// '2026-07-01_Macros'. Returns null when a part is missing so callers can
+// fall back to an auto id.
+function naturalDocId(...parts) {
+  if (parts.some(p => p == null || String(p).trim() === '')) return null;
+  return safeDocId(parts.map(p => String(p).trim().replace(/[^A-Za-z0-9_-]/g, '-')).join('_'));
+}
+
 async function saveWorkoutWithTotals({ db, FieldValue, uid, docRef, data, merge = false }) {
   const userRef = db.collection('users').doc(uid);
   await db.runTransaction(async tx => {
@@ -81,4 +89,4 @@ async function queryHistoryPage(colRef, orderField, query = {}) {
   return { docs, nextCursor: snap.docs.length > pageSize ? docs[docs.length - 1].id : null };
 }
 
-module.exports = { safeDocId, syncEntryDocId, saveWorkoutWithTotals, batchSetAll, queryHistoryPage };
+module.exports = { safeDocId, naturalDocId, syncEntryDocId, saveWorkoutWithTotals, batchSetAll, queryHistoryPage };

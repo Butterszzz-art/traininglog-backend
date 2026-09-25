@@ -11,7 +11,7 @@ const { router: aiRouter } = require('./src/routes/ai');
 const { createPremiumRouter } = require('./src/routes/premium');
 const { auth: fbAuth, db, FieldValue, firebaseEnabled, projectId: firebaseProjectId, initError: firebaseInitError } = require('./firebase');
 const { berekenClient } = require('./src/intakeCalculations');
-const { safeDocId, syncEntryDocId, saveWorkoutWithTotals, batchSetAll, queryHistoryPage } = require('./workoutStore');
+const { safeDocId, naturalDocId, syncEntryDocId, saveWorkoutWithTotals, batchSetAll, queryHistoryPage } = require('./workoutStore');
 
 const app = express();
 
@@ -1399,7 +1399,12 @@ app.post('/dailylogs', authenticateToken, async (req, res) => {
 
     const uid = await resolveFirestoreUid(username);
     if (uid) {
-      const docRef = db.collection(`users/${uid}/dailyMacros`).doc();
+      // Each save is the whole day's snapshot (all meals + totals), so one
+      // doc per date+type: re-saving the day overwrites instead of piling up
+      // a new doc per save.
+      const dailyCol = db.collection(`users/${uid}/dailyMacros`);
+      const dailyId = naturalDocId(date, body.Type || 'log');
+      const docRef = dailyId ? dailyCol.doc(dailyId) : dailyCol.doc();
       await docRef.set({
         date: String(date),
         calories, proteinGrams, carbGrams, fatGrams,
@@ -1622,7 +1627,10 @@ app.post('/bodyweight/archive', authenticateToken, async (req, res) => {
 
     const uid = await resolveFirestoreUid(username);
     if (uid) {
-      const docRef = db.collection(`users/${uid}/bodyweightArchives`).doc();
+      // Keyed by the archived period so a re-sent archive overwrites itself.
+      const archiveCol = db.collection(`users/${uid}/bodyweightArchives`);
+      const archiveId = naturalDocId(periodStart, periodEnd);
+      const docRef = archiveId ? archiveCol.doc(archiveId) : archiveCol.doc();
       await docRef.set({
         periodStart: periodStart ? String(periodStart) : '',
         periodEnd: periodEnd ? String(periodEnd) : '',
