@@ -61,21 +61,32 @@ When the webhook handler lands, it must call `syncTierClaim(username, tier)`
 the client should call `getIdToken(true)` after checkout so tier gating updates
 immediately.
 
-## Storage-efficiency rollout (leaderboard counters + index exemptions)
+## Storage-efficiency rollout (compact workouts, leaderboard counters, index exemptions)
 
-`GET /leaderboard` now reads running `totalVolume` / `workoutCount` counters on
-`users/{uid}` (kept up to date by every workout write) instead of scanning all
-workouts. Workouts saved before this change aren't in those counters yet, so
-when deploying it:
+New workout saves are stored in a compact form (`workoutFormat.js`: default
+per-set values are dropped and rebuilt on read — each save is verified to
+read back identical, otherwise the original is stored). `GET /leaderboard`
+reads running `totalVolume` / `workoutCount` counters on `users/{uid}`
+instead of scanning all workouts. Existing data needs converting once, in
+this order:
 
 1. Deploy the functions code.
-2. Backfill the counters (safe to re-run; `--dry-run` prints without writing,
-   `--delete-sets` also removes the old unused `workouts/{id}/sets/*` docs):
+2. Convert existing workouts and fix their stored `sessionVolume` (workouts
+   from the app's log screen were saved with 0). Check the dry run first:
+   `node scripts/compact-workouts.js --dry-run`, then
+   `node scripts/compact-workouts.js`. It writes a JSONL backup of every doc
+   it changes before changing it (path printed at the end — keep it);
+   `node scripts/restore-workouts.js <backup.jsonl>` puts the originals back.
+3. Rebuild the leaderboard counters from the corrected volumes, and remove the
+   old unused per-set docs:
    `node scripts/backfill-leaderboard-totals.js --delete-sets`
-3. Deploy the index exemptions for the stored JSON fields (`workout`,
+   (safe to re-run; `--dry-run` prints without writing).
+4. Deploy the index exemptions for the stored JSON fields (`workout`,
    `programData`, `templateData`, ...), which Firestore otherwise indexes field
    by field: `firebase deploy --only firestore:indexes`. If the CLI offers to
    delete indexes that aren't in `firestore.indexes.json`, answer no unless
    you've checked they're unused.
 
-Until step 2 runs, the leaderboard only shows workouts saved after the deploy.
+Until steps 2–3 run, the leaderboard only reflects workouts saved after the
+deploy. Unconverted workouts keep working as they are — `GET /workouts` reads
+both formats.

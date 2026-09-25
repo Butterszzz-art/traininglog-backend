@@ -396,6 +396,26 @@ setTimeout(() => {
     r = await req('GET', `/workouts?limit=2&cursor=${r.body?.nextCursor}`, legacyTokenMigrated);
     check('GET /workouts?cursor= returns the remaining page', r.body?.items?.length === 1 && r.body?.items?.[0]?.id === workoutId && r.body?.nextCursor === null);
 
+    // ── Compact storage (workoutFormat.js): smaller doc, identical on read ──
+    const advDefault = () => ({ method: null, drops: [], restPauseExtras: [], myo: { activationReps: null, clusters: [] }, backoff: { weight: null, reps: null }, tempo: null, partials: null, assisted: null, amrap: false, tags: {}, state: null });
+    const logEntry = (exercise, n) => ({ exercise, sets: n, repsArray: Array(n).fill(8), weightsArray: Array(n).fill(80), rpeArray: [8, ...Array(n - 1).fill(null)], dropsetArray: Array(n).fill(false), restPauseArray: Array(n).fill(false), unilateralArray: Array(n).fill(false), skippedArray: Array(n).fill(false), completedArray: Array(n).fill(true), setTypeArray: ['top-set', ...Array(n - 1).fill('standard')], advancedArray: Array.from({ length: n }, advDefault), unit: 'kg', date: '2026-06-20', goal: 'strength', repGoal: 5, targetRPE: null, targetRIR: null, maxedOut: false });
+    const fullWorkout = { id: 'compact-1', title: 'Workout on 2026-06-20', date: '2026-06-20', log: [logEntry('Squat', 4), logEntry('Leg Press', 3)], restBreaks: [2], sessionVolume: 5600, averageIntensity: 0.8, estimated1RM: 120, metrics: { volume: 5600, intensity: 0.8, oneRM: 120 } };
+    const totalsBeforeCompact = { ...store['users']['uidABC123'] };
+    r = await req('POST', '/workouts', legacyTokenMigrated, { date: '2026-06-20', title: fullWorkout.title, workout: fullWorkout });
+    const compactDoc = store['users/uidABC123/workouts']?.['compact-1'];
+    check('POST /workouts stores compact format', r.status === 200 && compactDoc?.workoutFormat === 2 && !('dropsetArray' in compactDoc.workout.log[0]) && !('metrics' in compactDoc.workout));
+    check('POST /workouts computes volume for the log shape (4x8x80 + 3x8x80)', compactDoc?.sessionVolume === 4480);
+    check('POST /workouts compact doc is much smaller', JSON.stringify(compactDoc.workout).length < JSON.stringify(fullWorkout).length * 0.5);
+    r = await req('GET', '/workouts', legacyTokenMigrated);
+    check('GET /workouts returns the compacted workout exactly as sent', require('util').isDeepStrictEqual(r.body?.items?.find(i => i.id === 'compact-1')?.workout, fullWorkout));
+    store['users/uidABC123/workouts']['legacy-doc'] = { date: '2026-01-02', title: 'Old', sessionVolume: 0, workout: { log: [{ exercise: 'X', repsArray: [1], dropsetArray: [false] }] } };
+    r = await req('GET', '/workouts', legacyTokenMigrated);
+    check('GET /workouts returns pre-existing (uncompacted) docs as stored', require('util').isDeepStrictEqual(r.body?.items?.find(i => i.id === 'legacy-doc')?.workout, { log: [{ exercise: 'X', repsArray: [1], dropsetArray: [false] }] }));
+    delete store['users/uidABC123/workouts']['compact-1'];
+    delete store['users/uidABC123/workouts']['legacy-doc'];
+    store['users']['uidABC123'].totalVolume = totalsBeforeCompact.totalVolume;
+    store['users']['uidABC123'].workoutCount = totalsBeforeCompact.workoutCount;
+
     // ── Leaderboard: reads per-user counters, not every workout ──
     r = await req('GET', '/leaderboard', legacyTokenMigrated);
     check('GET /leaderboard 200', r.status === 200);

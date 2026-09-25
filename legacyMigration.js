@@ -12,6 +12,7 @@
 'use strict';
 
 const { saveWorkoutWithTotals } = require('./workoutStore');
+const { compactWorkout } = require('./workoutFormat');
 
 function safeParseJson(value, fallback) {
   if (value === undefined || value === null || value === '') return fallback;
@@ -59,6 +60,7 @@ async function migrateLegacyUserData({ username, uid, base, db, FieldValue, esca
     const records = await base('Workouts').select({ filterByFormula: filter, pageSize: 100 }).all();
     for (const r of records) {
       const workout = safeParseJson(r.get('WorkoutJSON'), {});
+      const { workout: storedWorkout, format } = compactWorkout(workout);
       await saveWorkoutWithTotals({
         db, FieldValue, uid,
         docRef: db.collection(`users/${uid}/workouts`).doc(r.id),
@@ -66,7 +68,8 @@ async function migrateLegacyUserData({ username, uid, base, db, FieldValue, esca
           date: r.get('Date') || null,
           title: r.get('Title') || 'Workout',
           sessionVolume: r.get('SessionVolume') ?? null,
-          workout,
+          workout: storedWorkout,
+          workoutFormat: format,
           migratedFrom: r.id
         },
         merge: true

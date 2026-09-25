@@ -11,7 +11,8 @@ const { router: aiRouter } = require('./src/routes/ai');
 const { createPremiumRouter } = require('./src/routes/premium');
 const { auth: fbAuth, db, FieldValue, firebaseEnabled, projectId: firebaseProjectId, initError: firebaseInitError } = require('./firebase');
 const { berekenClient } = require('./src/intakeCalculations');
-const { safeDocId, naturalDocId, syncEntryDocId, saveWorkoutWithTotals, batchSetAll, queryHistoryPage } = require('./workoutStore');
+const { compactWorkout, readStoredWorkout } = require('./workoutFormat');
+const { computeSessionVolume, safeDocId, naturalDocId, syncEntryDocId, saveWorkoutWithTotals, batchSetAll, queryHistoryPage } = require('./workoutStore');
 
 const app = express();
 
@@ -342,20 +343,15 @@ const loginLimiter = rateLimit({
   message: { success: false, error: { code: 'auth.rate_limited', message: 'Too many login attempts. Try again in 15 minutes.' } }
 });
 
-function computeSessionVolume(workout) {
-  if (!workout || typeof workout !== 'object') return 0;
-  const sets = Array.isArray(workout.sets)
-    ? workout.sets
-    : Array.isArray(workout.exercises)
-      ? workout.exercises.flatMap(ex => Array.isArray(ex.sets) ? ex.sets : [])
-      : [];
-  return sets.reduce((total, set) => {
-    const weight = Number(set?.weight || 0);
-    const reps   = Number(set?.reps   || 0);
-    if (!Number.isFinite(weight) || !Number.isFinite(reps)) return total;
-    return total + weight * reps;
-  }, 0);
+// `workout` + `workoutFormat` fields for a workout doc: the compact form
+// (workoutFormat.js — verified lossless, falls back to the original) and
+// always an explicit workoutFormat (null = stored as sent), so an overwrite
+// or merge can never leave a stale marker next to an uncompacted workout.
+function storedWorkoutFields(workout) {
+  const { workout: stored, format } = compactWorkout(workout);
+  return { workout: stored, workoutFormat: format };
 }
+
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 
@@ -1228,7 +1224,7 @@ app.post('/workouts', authenticateToken, async (req, res) => {
       const docRef = clientId ? workoutsCol.doc(clientId) : workoutsCol.doc();
       await saveWorkoutWithTotals({
         db, FieldValue, uid, docRef,
-        data: { date: String(date), title: String(title || 'Workout'), sessionVolume, workout }
+        data: { date: String(date), title: String(title || 'Workout'), sessionVolume, ...storedWorkoutFields(workout) }
       });
       return sendSuccess(res, 200, { recordId: docRef.id });
     }
@@ -1275,7 +1271,8 @@ app.get('/workouts', authenticateToken, async (req, res) => {
     if (uid) {
       const { docs, nextCursor } = await queryHistoryPage(db.collection(`users/${uid}/workouts`), 'date', req.query);
       const items = docs.map(d => ({
-        id: d.id, username, date: d.get('date'), title: d.get('title'), workout: d.get('workout') ?? null
+        id: d.id, username, date: d.get('date'), title: d.get('title'),
+        workout: readStoredWorkout(d.get('workout'), d.get('workoutFormat')) ?? null
       }));
       return sendSuccess(res, 200, { items, nextCursor });
     }
@@ -3464,7 +3461,7 @@ app.post('/coach/workouts', authenticateToken, async (req, res) => {
           date: String(date),
           title: String(title || 'Workout (logged by coach)'),
           sessionVolume: computeSessionVolume(stamped),
-          workout: stamped
+          ...storedWorkoutFields(stamped)
         }
       });
       return sendSuccess(res, 200, { recordId: docRef.id });
@@ -3497,7 +3494,7 @@ app.post('/coach/workouts', authenticateToken, async (req, res) => {
       const docRef = db.collection(`users/${clientUid}/workouts`).doc();
       await saveWorkoutWithTotals({
         db, FieldValue, uid: clientUid, docRef,
-        data: { date: String(date), title: String(title || 'Workout (logged by coach)'), sessionVolume, workout: stamped }
+        data: { date: String(date), title: String(title || 'Workout (logged by coach)'), sessionVolume, ...storedWorkoutFields(stamped) }
       });
       return sendSuccess(res, 200, { recordId: docRef.id });
     }

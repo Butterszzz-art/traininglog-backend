@@ -42,6 +42,29 @@ function naturalDocId(...parts) {
   return safeDocId(parts.map(p => String(p).trim().replace(/[^A-Za-z0-9_-]/g, '-')).join('_'));
 }
 
+// Session volume (sum of weight × reps) for every workout shape the app
+// sends: flat `sets` (history.js), `exercises[].sets` (archived entries), and
+// the log screen's `log[]` entries with parallel repsArray/weightsArray
+// (same maths as the app's calculateWorkoutVolume). The `log` shape used to
+// be missed entirely, so those workouts counted as 0 on the leaderboard.
+function computeSessionVolume(workout) {
+  if (!workout || typeof workout !== 'object') return 0;
+  const num = v => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+  let pairs = [];
+  if (Array.isArray(workout.sets)) {
+    pairs = workout.sets.map(s => [s?.weight, s?.reps]);
+  } else if (Array.isArray(workout.exercises)) {
+    pairs = workout.exercises.flatMap(ex => (Array.isArray(ex?.sets) ? ex.sets.map(s => [s?.weight, s?.reps]) : []));
+  } else if (Array.isArray(workout.log)) {
+    pairs = workout.log.flatMap(e => {
+      const reps = Array.isArray(e?.repsArray) ? e.repsArray : [];
+      const weights = Array.isArray(e?.weightsArray) ? e.weightsArray : [];
+      return reps.map((r, i) => [weights[i], r]);
+    });
+  }
+  return pairs.reduce((total, [w, r]) => total + num(w) * num(r), 0);
+}
+
 async function saveWorkoutWithTotals({ db, FieldValue, uid, docRef, data, merge = false }) {
   const userRef = db.collection('users').doc(uid);
   await db.runTransaction(async tx => {
@@ -89,4 +112,4 @@ async function queryHistoryPage(colRef, orderField, query = {}) {
   return { docs, nextCursor: snap.docs.length > pageSize ? docs[docs.length - 1].id : null };
 }
 
-module.exports = { safeDocId, naturalDocId, syncEntryDocId, saveWorkoutWithTotals, batchSetAll, queryHistoryPage };
+module.exports = { computeSessionVolume, safeDocId, naturalDocId, syncEntryDocId, saveWorkoutWithTotals, batchSetAll, queryHistoryPage };

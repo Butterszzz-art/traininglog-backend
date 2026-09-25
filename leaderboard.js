@@ -2,6 +2,7 @@ const express = require('express');
 const Airtable = require('airtable');
 const jwt = require('jsonwebtoken');
 const { db, firebaseEnabled } = require('./firebase');
+const { computeSessionVolume } = require('./workoutStore');
 
 const router = express.Router();
 
@@ -28,20 +29,6 @@ function parseMaybeJson(input) {
   try { return JSON.parse(input); } catch { return null; }
 }
 
-function computeVolumeFromWorkout(workout) {
-  if (!workout || typeof workout !== 'object') return 0;
-  const sets = Array.isArray(workout.sets)
-    ? workout.sets
-    : Array.isArray(workout.exercises)
-      ? workout.exercises.flatMap(ex => Array.isArray(ex.sets) ? ex.sets : [])
-      : [];
-  return sets.reduce((total, set) => {
-    const weight = Number(set?.weight || 0);
-    const reps   = Number(set?.reps   || 0);
-    if (!Number.isFinite(weight) || !Number.isFinite(reps)) return total;
-    return total + weight * reps;
-  }, 0);
-}
 
 // Firestore is authoritative for any username that has migrated (same rule
 // every other route in server.js follows) — Airtable's Workouts table only
@@ -87,7 +74,7 @@ router.get('/leaderboard', authenticateToken, async (_req, res) => {
 
           let sessionVolume = Number(fields.SessionVolume);
           if (!Number.isFinite(sessionVolume)) {
-            sessionVolume = computeVolumeFromWorkout(parseMaybeJson(fields.WorkoutJSON));
+            sessionVolume = computeSessionVolume(parseMaybeJson(fields.WorkoutJSON));
           }
 
           const current = legacyTotals.get(username) || { username, totalVolume: 0, workoutCount: 0 };
