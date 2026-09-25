@@ -28,11 +28,13 @@ const firebasePath = path.join(BACKEND_DIR, 'firebase.js');
 
 // ── Fake Firestore ───────────────────────────────────────────────────────────
 const store = {}; // collectionPath -> { docId -> data }
+let usernameReads = 0; // reads of usernames/* (resolveFirestoreUid cache check)
 function docRefFor(colPath, docId) {
   return {
     id: docId,
     __colPath: colPath,
     async get() {
+      if (colPath === 'usernames') usernameReads++;
       const data = store[colPath][docId];
       return { id: docId, exists: !!data, get: (f) => data?.[f], data: () => data };
     },
@@ -479,6 +481,17 @@ setTimeout(() => {
     r = await req('GET', '/exercises?limit=1000', legacyTokenMigrated);
     check('GET /exercises (limit=1000) returns the whole dataset for local caching', r.body?.items?.length === 873);
 
+    // ── resolveFirestoreUid cache: repeat requests skip the usernames read ──
+    await req('GET', '/workouts', legacyTokenMigrated);
+    const readsBefore = usernameReads;
+    await req('GET', '/workouts', legacyTokenMigrated);
+    await req('GET', '/programs', legacyTokenMigrated);
+    check('resolveFirestoreUid cached (no usernames reads on repeat requests)', usernameReads === readsBefore);
+
+    // Warm the cache for the deletion fixture so the test below proves
+    // deletion drops it (not just that it was never cached).
+    await req('POST', '/macrotargets', legacyTokenDelete, { calories: 2000 });
+
     // ── DELETE /account (migrated user, Apple App Store Guideline 5.1.1(v)) ──
     // Uses a dedicated fixture (deleteuser/uidDelete789) rather than
     // migrateduser/uidABC123 — every test above this point still needs that
@@ -501,6 +514,9 @@ setTimeout(() => {
 
     r = await req('DELETE', '/account', legacyTokenDelete);
     check('DELETE /account (already deleted) idempotent, not an error', r.status === 200);
+
+    await req('POST', '/macrotargets', legacyTokenDelete, { calories: 2100 });
+    check('DELETE /account dropped the cached uid (no write to the deleted uid)', !store['users']['uidDelete789']);
 
     console.log('\n=== RESULTS ===');
     for (const { label, pass } of results) console.log((pass ? 'PASS' : 'FAIL') + ' - ' + label);

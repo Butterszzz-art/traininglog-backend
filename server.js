@@ -720,6 +720,7 @@ async function deleteFirestoreAccount(uid, username) {
   await db.recursiveDelete(db.collection('users').doc(uid));
   await db.recursiveDelete(db.collection('coaches').doc(uid)); // no-op if this user never coached anyone
   await db.collection('usernames').doc(String(username).toLowerCase()).delete();
+  forgetCachedUid(username);
 }
 
 // Every Airtable table that stores per-user rows keyed by the plain Username
@@ -901,11 +902,36 @@ app.get('/config', (_req, res) => {
 // truth for a converted route (legacyMigration.js already copied their
 // history at migration time), so there's no risk of a route silently serving
 // a stale partial view from two half-populated stores.
+// Almost every route resolves username -> uid first, which cost one Firestore
+// read per request. Found mappings are cached per instance for
+// UID_CACHE_TTL_MS: a username only ever maps to one uid (set once at
+// signup-complete), and deleteFirestoreAccount() drops its entry here.
+// "Not found" is deliberately not cached, so a user who finishes
+// signup-complete moves off the Airtable path immediately. Caveat: another
+// warm instance can keep a deleted account's mapping for up to the TTL.
+const UID_CACHE_TTL_MS = 5 * 60 * 1000;
+const UID_CACHE_MAX = 10000;
+const uidCache = new Map(); // lowercased username -> { uid, at }
+
+function forgetCachedUid(username) {
+  if (username) uidCache.delete(String(username).toLowerCase());
+}
+
 async function resolveFirestoreUid(username) {
   if (!firebaseEnabled || !username) return null;
+  const key = String(username).toLowerCase();
+  const hit = uidCache.get(key);
+  if (hit && Date.now() - hit.at < UID_CACHE_TTL_MS) return hit.uid;
   try {
-    const snap = await db.collection('usernames').doc(String(username).toLowerCase()).get();
-    return snap.exists ? (snap.get('uid') || null) : null;
+    const snap = await db.collection('usernames').doc(key).get();
+    const uid = snap.exists ? (snap.get('uid') || null) : null;
+    if (uid) {
+      if (uidCache.size >= UID_CACHE_MAX) uidCache.delete(uidCache.keys().next().value); // evict oldest
+      uidCache.set(key, { uid, at: Date.now() });
+    } else {
+      uidCache.delete(key);
+    }
+    return uid;
   } catch (err) {
     console.error('[Firestore] resolveFirestoreUid failed:', err.message);
     return null; // fail safe to the Airtable path rather than erroring the request
