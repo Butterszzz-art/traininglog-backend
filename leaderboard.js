@@ -11,8 +11,11 @@ const LEADERBOARD_SIZE = 100;
 const airtableApiKey = process.env.AIRTABLE_API_TOKEN || process.env.AIRTABLE_TOKEN || process.env.AIRTABLE_API_KEY;
 const airtableBaseId = process.env.AIRTABLE_BASE_ID;
 const airtableEnabled = Boolean(airtableApiKey && airtableBaseId);
-const airtable = new Airtable({ apiKey: airtableApiKey });
-const base = airtable.base(airtableBaseId || '');
+// Only construct the client when configured: `new Airtable()` throws without
+// an API key, which would stop the whole function from loading.
+const base = airtableEnabled
+  ? new Airtable({ apiKey: airtableApiKey, requestTimeout: 8000, noRetryIfRateLimited: true }).base(airtableBaseId)
+  : null;
 
 function authenticateToken(req, res, next) {
   const token = (req.headers['authorization'] || '').split(' ')[1];
