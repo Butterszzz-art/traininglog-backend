@@ -21,6 +21,8 @@ const intakeCoachUsername = defineSecret('INTAKE_COACH_USERNAME');
 const googleHealthClientId = defineSecret('GOOGLE_HEALTH_CLIENT_ID');
 const googleHealthClientSecret = defineSecret('GOOGLE_HEALTH_CLIENT_SECRET');
 const googleHealthRedirectUri = defineSecret('GOOGLE_HEALTH_REDIRECT_URI');
+// Resend API key for emailing report and block alerts (src/moderationEmail.js).
+const resendApiKey = defineSecret('RESEND_API_KEY');
 
 const app = require('./server');
 
@@ -30,6 +32,7 @@ const app = require('./server');
 exports.api = onRequest({
   secrets: [
     jwtSecret, anthropicApiKey, intakeCoachUsername,
-    googleHealthClientId, googleHealthClientSecret, googleHealthRedirectUri
+    googleHealthClientId, googleHealthClientSecret, googleHealthRedirectUri,
+    resendApiKey
   ]
 }, app);
