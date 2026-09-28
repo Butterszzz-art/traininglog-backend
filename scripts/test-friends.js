@@ -144,6 +144,17 @@ async function run() {
     assert.deepStrictEqual((await call('GET', '/', 'Alice')).body.friends, []);
   });
 
+  await t('a block either way stops friend requests (looks like an unknown user)', async () => {
+    store.profileBlocks = { carl: { blocked: ['bob'] } };
+    let r = await call('POST', '/requests', 'Bob', { username: 'carl' }); // carl blocked bob
+    assert.strictEqual(r.status, 404);
+    assert.strictEqual(r.body.error.code, 'friends.not_found');
+    r = await call('POST', '/requests', 'carl', { username: 'bob' });     // blocker can't either
+    assert.strictEqual(r.status, 404);
+    assert.strictEqual(store.friendships?.[pairId('bob', 'carl')], undefined);
+    delete store.profileBlocks;
+  });
+
   await t('deleteFriendships clears every row for that user', async () => {
     await call('POST', '/requests', 'Alice', { username: 'bob' });
     await call('POST', '/requests', 'carl', { username: 'alice' });

@@ -5,7 +5,9 @@
 const assert = require('assert');
 const http = require('http');
 const express = require('express');
-const { createProfilesRouter, deleteProfile, parseAvatar, cleanText, profileKey } = require('../src/routes/profiles');
+const {
+  createProfilesRouter, deleteProfile, parseAvatar, cleanText, profileKey, containsObjectionable, parseTerms,
+} = require('../src/routes/profiles');
 
 // ── Fake Firestore ───────────────────────────────────────────────────────────
 const store = {}; // collectionPath -> { docId -> data }
@@ -37,6 +39,7 @@ const db = {
 };
 const FieldValue = { serverTimestamp: () => SERVER_TS };
 
+const alerts = []; // messages sent to notifyModerators
 const uids = { alice: 'uid_alice', bob: 'uid_bob', coachcarl: 'uid_carl', mod: 'uid_mod' };
 
 // ── App ──────────────────────────────────────────────────────────────────────
@@ -53,6 +56,8 @@ app.use('/api/profiles', createProfilesRouter({
   sendError: (res, status, code, message) => res.status(status).json({ success: false, error: { code, message } }),
   sendSuccess: (res, status, data) => res.status(status).json({ success: true, ...data }),
   adminUsernames: ['Mod'],
+  objectionableTerms: ['badword', 'two words'],
+  notifyModerators: async msg => { alerts.push(msg); },
 }));
 
 let port;
@@ -195,6 +200,71 @@ async function run() {
     assert.strictEqual(r.status, 200);
     assert.strictEqual(store.profileAvatars.bob, undefined);
     assert.strictEqual(store.profiles.bob.avatarVersion, null);
+  });
+  await t('containsObjectionable matches whole words only', () => {
+    const terms = parseTerms(' Badword, two words ,');
+    assert.deepStrictEqual(terms, ['badword', 'two words']);
+    assert.ok(containsObjectionable('what a BADWORD!', terms));
+    assert.ok(containsObjectionable('say two words now', terms));
+    assert.ok(!containsObjectionable('notbadwordy', terms));
+    assert.ok(!containsObjectionable('anything', []));
+  });
+  await t('PUT /me rejects objectionable names and bios', async () => {
+    let r = await call('PUT', '/me', 'Bob', { bio: 'I am a badword' });
+    assert.strictEqual(r.status, 422);
+    assert.strictEqual(r.body.error.code, 'profile.objectionable');
+    r = await call('PUT', '/me', 'Bob', { displayName: 'Two  Words' });
+    assert.strictEqual(r.status, 422);
+    r = await call('PUT', '/me', 'Bob', { bio: 'Clean bio' });
+    assert.strictEqual(r.status, 200);
+  });
+  await t('reports alert the moderators', async () => {
+    alerts.length = 0;
+    const r = await call('POST', '/bob/report', 'Alice', { reason: 'spam' });
+    assert.strictEqual(r.status, 201);
+    await new Promise(res => setImmediate(res));
+    assert.ok(alerts.some(a => a.includes('@bob') && a.includes('spam')));
+  });
+  await t('block: hides the user in lookups, ends friendship, alerts moderators', async () => {
+    alerts.length = 0;
+    await db.collection('friendships').doc('alice__bob').set({ users: ['alice', 'bob'], status: 'accepted' });
+    let r = await call('POST', '/Bob/block', 'Alice');
+    assert.strictEqual(r.status, 200);
+    assert.deepStrictEqual(store.profileBlocks.alice.blocked, ['bob']);
+    assert.strictEqual(store.friendships.alice__bob, undefined);
+    await new Promise(res => setImmediate(res));
+    assert.strictEqual(alerts.filter(a => a.includes('blocked @bob')).length, 1);
+
+    r = await call('POST', '/bob/block', 'Alice'); // idempotent, no second alert
+    assert.strictEqual(r.status, 200);
+    assert.deepStrictEqual(store.profileBlocks.alice.blocked, ['bob']);
+    await new Promise(res => setImmediate(res));
+    assert.strictEqual(alerts.filter(a => a.includes('blocked @bob')).length, 1);
+
+    r = await call('POST', '/lookup', 'Alice', { usernames: ['bob'] });
+    assert.deepStrictEqual(r.body.profiles.bob, { username: 'Bob', hidden: true, blocked: true });
+    r = await call('POST', '/lookup', 'coachcarl', { usernames: ['bob'] }); // others still see Bob
+    assert.ok(!r.body.profiles.bob.hidden);
+
+    r = await call('GET', '/blocks', 'Alice');
+    assert.deepStrictEqual(r.body.blocked, ['bob']);
+  });
+  await t('block: cannot block yourself or an invalid name', async () => {
+    assert.strictEqual((await call('POST', '/alice/block', 'Alice')).status, 422);
+    assert.strictEqual((await call('POST', '/%2E%2E/block', 'Alice')).status, 422);
+  });
+  await t('unblock restores the profile', async () => {
+    const r = await call('DELETE', '/bob/block', 'Alice');
+    assert.strictEqual(r.status, 200);
+    assert.deepStrictEqual(store.profileBlocks.alice.blocked, []);
+    const l = await call('POST', '/lookup', 'Alice', { usernames: ['bob'] });
+    assert.ok(!l.body.profiles.bob.hidden);
+  });
+  await t('deleteProfile also removes the block list (account deletion)', async () => {
+    await call('POST', '/bob/block', 'Alice');
+    assert.ok(store.profileBlocks.alice);
+    await deleteProfile(db, 'Alice');
+    assert.strictEqual(store.profileBlocks.alice, undefined);
   });
   await t('deleteProfile removes profile + avatar (account deletion)', async () => {
     await call('PUT', '/me/avatar', 'Bob', { image: PNG });

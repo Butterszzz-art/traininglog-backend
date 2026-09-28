@@ -14,7 +14,7 @@
 // whichever side sent the request. Listing uses a single array-contains on
 // `users`, which needs no composite index.
 const express = require('express');
-const { profileKey } = require('./profiles');
+const { profileKey, isBlockedEitherWay } = require('./profiles');
 
 const MAX_FRIENDS = 500;
 const MAX_PENDING_OUT = 50;
@@ -89,7 +89,11 @@ function createFriendsRouter({ db, FieldValue, firebaseEnabled, sendError, sendS
       if (target === me) return sendError(res, 422, 'friends.self', 'You can’t add yourself.');
 
       const account = await lookupAccount(target);
-      if (!account) return sendError(res, 404, 'friends.not_found', 'No user found with that username.');
+      // A block either way looks like "no such user" so the sender can't tell
+      // they've been blocked.
+      if (!account || await isBlockedEitherWay(db, me, target)) {
+        return sendError(res, 404, 'friends.not_found', 'No user found with that username.');
+      }
 
       const ref = friendships().doc(pairId(me, target));
       const snap = await ref.get();

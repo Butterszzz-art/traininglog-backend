@@ -9,7 +9,7 @@ const rateLimit = require('express-rate-limit');
 const leaderboardRoute = require('./leaderboard');
 const { router: aiRouter } = require('./src/routes/ai');
 const { createPremiumRouter } = require('./src/routes/premium');
-const { createProfilesRouter, deleteProfile } = require('./src/routes/profiles');
+const { createProfilesRouter, deleteProfile, parseTerms: parseProfileTerms } = require('./src/routes/profiles');
 const { createFriendsRouter, deleteFriendships } = require('./src/routes/friends');
 const { auth: fbAuth, db, FieldValue, firebaseEnabled, projectId: firebaseProjectId, initError: firebaseInitError } = require('./firebase');
 const { berekenClient } = require('./src/intakeCalculations');
@@ -4108,10 +4108,29 @@ const profileWriteLimiter = rateLimit({
   skip: req => req.method === 'GET' || req.path === '/lookup',
   message: { success: false, error: { code: 'profile.rate_limited', message: 'Too many profile changes. Try again shortly.' } }
 });
+// Moderation alerts for reports and blocks (Apple requires acting on reports
+// within 24 hours, so a person has to see them). MODERATION_WEBHOOK_URL is a
+// Slack or Discord incoming webhook; the body carries both payload shapes.
+async function notifyModerators(message) {
+  console.warn('[moderation]', message);
+  const url = process.env.MODERATION_WEBHOOK_URL;
+  if (!url) return;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: message, content: message }),
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!res.ok) throw new Error(`webhook HTTP ${res.status}`);
+}
+
 app.use('/api/profiles', authenticateToken, profileLimiter, profileWriteLimiter, createProfilesRouter({
   db, FieldValue, firebaseEnabled, sendError, sendSuccess,
   resolveUid: resolveFirestoreUid,
   adminUsernames: (process.env.PROFILE_ADMINS || '').split(','),
+  // Comma-separated words/phrases rejected in display names and bios.
+  objectionableTerms: parseProfileTerms(process.env.OBJECTIONABLE_TERMS),
+  notifyModerators,
 }));
 
 // Friend requests (send → accept/decline) — see src/routes/friends.js. The app
