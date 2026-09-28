@@ -10,6 +10,7 @@ const leaderboardRoute = require('./leaderboard');
 const { router: aiRouter } = require('./src/routes/ai');
 const { createPremiumRouter } = require('./src/routes/premium');
 const { createProfilesRouter, deleteProfile } = require('./src/routes/profiles');
+const { createFriendsRouter, deleteFriendships } = require('./src/routes/friends');
 const { auth: fbAuth, db, FieldValue, firebaseEnabled, projectId: firebaseProjectId, initError: firebaseInitError } = require('./firebase');
 const { berekenClient } = require('./src/intakeCalculations');
 const { compactWorkout, readStoredWorkout } = require('./workoutFormat');
@@ -718,6 +719,7 @@ async function deleteFirestoreAccount(uid, username) {
   await db.recursiveDelete(db.collection('coaches').doc(uid)); // no-op if this user never coached anyone
   await db.collection('usernames').doc(String(username).toLowerCase()).delete();
   await deleteProfile(db, username);
+  await deleteFriendships(db, username);
   forgetCachedUid(username);
 }
 
@@ -4110,6 +4112,28 @@ app.use('/api/profiles', authenticateToken, profileLimiter, profileWriteLimiter,
   db, FieldValue, firebaseEnabled, sendError, sendSuccess,
   resolveUid: resolveFirestoreUid,
   adminUsernames: (process.env.PROFILE_ADMINS || '').split(','),
+}));
+
+// Friend requests (send → accept/decline) — see src/routes/friends.js. The app
+// polls GET /api/friends to show incoming requests, so reads get the looser
+// limit and only sends/answers count against the tighter one.
+const friendsLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: { code: 'friends.rate_limited', message: 'Too many requests. Try again shortly.' } }
+});
+const friendsWriteLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: req => req.method === 'GET',
+  message: { success: false, error: { code: 'friends.rate_limited', message: 'Too many friend requests. Try again shortly.' } }
+});
+app.use('/api/friends', authenticateToken, friendsLimiter, friendsWriteLimiter, createFriendsRouter({
+  db, FieldValue, firebaseEnabled, sendError, sendSuccess,
 }));
 app.use('/', leaderboardRoute);
 

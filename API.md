@@ -178,6 +178,27 @@ Moderators only (usernames listed, comma-separated, in the `PROFILE_ADMINS` env 
 
 Run `node scripts/test-profiles.js` for the route tests.
 
+## Friends (request → accept)
+
+All routes need `Authorization: Bearer <token>` and a migrated (Firebase) backend. A friendship only counts once the other person accepts it.
+
+### `GET /api/friends`
+`{ success, friends: [{ username, since }], incoming: [{ username, sentAt }], outgoing: [{ username, sentAt }] }`. The app polls this to show incoming requests.
+
+### `POST /api/friends/requests`
+Body: `{ username }`. `201 { status: "pending", username }` for a new request. If that user had already sent you a request, it is accepted instead (`200 { status: "accepted" }`). Errors: `404 friends.not_found`, `409 friends.already_friends`, `422 friends.self`, `429 friends.too_many_pending` (more than 50 unanswered).
+
+### `POST /api/friends/requests/:username/accept`
+Recipient only. `404 friends.no_request` if there is no pending request from that user.
+
+### `POST /api/friends/requests/:username/decline`
+Recipient declines, or the sender cancels. The request is deleted.
+
+### `DELETE /api/friends/:username`
+Unfriend (either side).
+
+Run `node scripts/test-friends.js` for the route tests.
+
 ## Auth error note after JWT secret rotation
 
 If the server JWT secret changes, previously issued browser tokens become invalid and requests can fail with:
