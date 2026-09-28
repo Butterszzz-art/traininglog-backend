@@ -9,7 +9,8 @@ const rateLimit = require('express-rate-limit');
 const leaderboardRoute = require('./leaderboard');
 const { router: aiRouter } = require('./src/routes/ai');
 const { createPremiumRouter } = require('./src/routes/premium');
-const { createProfilesRouter, deleteProfile, parseTerms: parseProfileTerms } = require('./src/routes/profiles');
+const { createProfilesRouter, deleteProfile, parseTerms: parseProfileTerms, containsObjectionable } = require('./src/routes/profiles');
+const { DEFAULT_OBJECTIONABLE_TERMS } = require('./src/objectionableTerms');
 const { createModerationNotifier } = require('./src/moderationEmail');
 const { createFriendsRouter, deleteFriendships } = require('./src/routes/friends');
 const { auth: fbAuth, db, FieldValue, firebaseEnabled, projectId: firebaseProjectId, initError: firebaseInitError } = require('./firebase');
@@ -1039,6 +1040,30 @@ app.post('/login', loginLimiter, async (_req, res) => {
 // ── Firebase Auth endpoints (Phase 1 migration) ───────────────────────────────
 const USERNAME_RE = /^[a-zA-Z0-9_.-]{2,64}$/;
 
+// Words rejected in usernames, display names and bios: the built-in list plus
+// any extras in OBJECTIONABLE_TERMS (comma-separated, `*` wildcards allowed).
+const OBJECTIONABLE_TERMS = [
+  ...DEFAULT_OBJECTIONABLE_TERMS,
+  ...parseProfileTerms(process.env.OBJECTIONABLE_TERMS),
+];
+
+// Sends the 400 and returns true if `username` can't be registered. Usernames
+// are public (leaderboard, feed, friends), so they get the same
+// objectionable-content check as display names and bios.
+function rejectUsername(res, username) {
+  if (!USERNAME_RE.test(username)) {
+    sendError(res, 400, 'auth.invalid_username',
+      'Username must be 2-64 characters: letters, numbers, dot, dash, underscore.');
+    return true;
+  }
+  if (containsObjectionable(username, OBJECTIONABLE_TERMS)) {
+    sendError(res, 400, 'auth.objectionable_username',
+      'That username isn’t allowed. Please choose another.');
+    return true;
+  }
+  return false;
+}
+
 const usernameCheckLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 60, // typed availability checks are chattier than login attempts
@@ -1051,10 +1076,7 @@ const usernameCheckLimiter = rateLimit({
 app.get('/auth/username-available', usernameCheckLimiter, async (req, res) => {
   if (!firebaseEnabled) return sendError(res, 503, 'auth.firebase_disabled', 'Firebase auth is not configured.');
   const username = typeof req.query.username === 'string' ? req.query.username.trim() : '';
-  if (!USERNAME_RE.test(username)) {
-    return sendError(res, 400, 'auth.invalid_username',
-      'Username must be 2-64 characters: letters, numbers, dot, dash, underscore.');
-  }
+  if (rejectUsername(res, username)) return;
   try {
     // Firestore is the sole source of truth for accounts now — the Airtable
     // legacy-reclaim check was retired once migration completed (it also used
@@ -1097,10 +1119,7 @@ app.post('/auth/signup-complete', loginLimiter, async (req, res) => {
 
   const username = typeof req.body?.username === 'string' ? req.body.username.trim() : '';
   const referredByCode = typeof req.body?.referredBy === 'string' ? req.body.referredBy.trim() : '';
-  if (!USERNAME_RE.test(username)) {
-    return sendError(res, 400, 'auth.invalid_username',
-      'Username must be 2-64 characters: letters, numbers, dot, dash, underscore.');
-  }
+  if (rejectUsername(res, username)) return;
 
   try {
     const usernameRef = db.collection('usernames').doc(username.toLowerCase());
@@ -4122,8 +4141,7 @@ app.use('/api/profiles', authenticateToken, profileLimiter, profileWriteLimiter,
   db, FieldValue, firebaseEnabled, sendError, sendSuccess,
   resolveUid: resolveFirestoreUid,
   adminUsernames: (process.env.PROFILE_ADMINS || '').split(','),
-  // Comma-separated words/phrases rejected in display names and bios.
-  objectionableTerms: parseProfileTerms(process.env.OBJECTIONABLE_TERMS),
+  objectionableTerms: OBJECTIONABLE_TERMS,
   notifyModerators,
 }));
 

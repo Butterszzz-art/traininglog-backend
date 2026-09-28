@@ -209,6 +209,25 @@ async function run() {
     assert.ok(!containsObjectionable('notbadwordy', terms));
     assert.ok(!containsObjectionable('anything', []));
   });
+  await t('wildcards: * lets a term run into the rest of a word', () => {
+    const terms = ['bitch*', '*fuck*', 'dick'];
+    assert.ok(containsObjectionable('stop bitching', terms));
+    assert.ok(containsObjectionable('MotherFucker', terms));
+    assert.ok(containsObjectionable('what the fuck', terms));
+    assert.ok(containsObjectionable('dick', terms));
+    assert.ok(!containsObjectionable('Dickson', terms));
+    assert.ok(containsObjectionable('big_dick', terms)); // username separators are word breaks
+  });
+  await t('built-in list catches swearing and slurs without flagging fitness talk', () => {
+    const { DEFAULT_OBJECTIONABLE_TERMS: list } = require('../src/objectionableTerms');
+    ['fuck this', 'fucking strong', 'bullshit', 'dumb bitch', 'cunts', 'you twat', 'wanker',
+      'total retard', 'faggot', 'go back home paki', 'dirty kike', 'sieg heil']
+      .forEach(x => assert.ok(containsObjectionable(x, list), `should block: ${x}`));
+    ['Scunthorpe lifter', 'leg day and ass day', 'class of 2026', 'Dickson', 'cocktail after the meet',
+      'assessment week', 'shiitake and rice', 'Hitchcock fan', 'a snigger', 'spicy food', 'grass', 'Japan trip',
+      'homogenised milk', 'cumulative volume', 'raccoon']
+      .forEach(x => assert.ok(!containsObjectionable(x, list), `should allow: ${x}`));
+  });
   await t('PUT /me rejects objectionable names and bios', async () => {
     let r = await call('PUT', '/me', 'Bob', { bio: 'I am a badword' });
     assert.strictEqual(r.status, 422);

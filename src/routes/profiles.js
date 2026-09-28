@@ -84,15 +84,32 @@ function parseAvatar(dataUrl) {
 
 const BLOCKS_MAX = 500;
 
-// True if `text` contains any of `terms` as a whole word (so a term like
-// "ass" doesn't reject "class"). Terms are matched case-insensitively.
+// Compiled once per distinct term list (the list is fixed at startup).
+const _termPatterns = new WeakMap();
+function termPatterns(terms) {
+  let patterns = _termPatterns.get(terms);
+  if (!patterns) {
+    patterns = terms.map(term => {
+      const lead = term.startsWith('*');
+      const trail = term.endsWith('*');
+      const core = term.replace(/^\*|\*$/g, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return new RegExp(
+        (lead ? '' : '(^|[^\\p{L}\\p{N}])') + core + (trail ? '' : '($|[^\\p{L}\\p{N}])'), 'u');
+    });
+    _termPatterns.set(terms, patterns);
+  }
+  return patterns;
+}
+
+// True if `text` contains any of `terms`, case-insensitively. A term matches
+// as a whole word (so "dick" doesn't reject "Dickson"); `*` at either end
+// lets it run into the rest of a word ("bitch*" → bitches, "*fuck*" →
+// motherfucker). Underscores, dots and dashes count as word breaks, so
+// usernames like "big_fag" are caught too.
 function containsObjectionable(text, terms) {
-  const s = String(text || '').toLowerCase();
+  const s = String(text || '').toLowerCase().replace(/_/g, ' ');
   if (!s || !terms?.length) return false;
-  return terms.some(term => {
-    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    return new RegExp(`(^|[^\\p{L}\\p{N}])${escaped}($|[^\\p{L}\\p{N}])`, 'u').test(s);
-  });
+  return termPatterns(terms).some(re => re.test(s));
 }
 
 function parseTerms(value) {

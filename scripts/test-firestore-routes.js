@@ -211,8 +211,14 @@ setTimeout(() => {
     const results = [];
     const check = (label, cond) => results.push({ label, pass: !!cond });
 
+    // ── Usernames: objectionable names rejected before any account is made ──
+    let r = await req('GET', '/auth/username-available?username=big_fucker');
+    check('GET /auth/username-available rejects objectionable 400', r.status === 400 && r.body?.error?.code === 'auth.objectionable_username');
+    r = await req('GET', '/auth/username-available?username=Dickson_lifts');
+    check('GET /auth/username-available allows lookalikes', r.status === 200 && r.body?.available === true);
+
     // ── MacroTargets: migrated user → Firestore ──
-    let r = await req('POST', '/macrotargets', legacyTokenMigrated, { calories: 2500, protein: 180, fat: 70, carbs: 250 });
+    r = await req('POST', '/macrotargets', legacyTokenMigrated, { calories: 2500, protein: 180, fat: 70, carbs: 250 });
     check('POST /macrotargets (migrated) 200', r.status === 200);
     check('POST /macrotargets (migrated) wrote to Firestore', store['users']['uidABC123']?.macroTargets?.calories === 2500);
 
