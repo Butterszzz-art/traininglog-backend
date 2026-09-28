@@ -21,6 +21,9 @@ const intakeCoachUsername = defineSecret('INTAKE_COACH_USERNAME');
 const googleHealthClientId = defineSecret('GOOGLE_HEALTH_CLIENT_ID');
 const googleHealthClientSecret = defineSecret('GOOGLE_HEALTH_CLIENT_SECRET');
 const googleHealthRedirectUri = defineSecret('GOOGLE_HEALTH_REDIRECT_URI');
+// Slack/Discord webhook for report and block alerts (profiles.js). A secret
+// because anyone holding the URL can post to that channel.
+const moderationWebhookUrl = defineSecret('MODERATION_WEBHOOK_URL');
 
 const app = require('./server');
 
@@ -30,6 +33,7 @@ const app = require('./server');
 exports.api = onRequest({
   secrets: [
     jwtSecret, anthropicApiKey, intakeCoachUsername,
-    googleHealthClientId, googleHealthClientSecret, googleHealthRedirectUri
+    googleHealthClientId, googleHealthClientSecret, googleHealthRedirectUri,
+    moderationWebhookUrl
   ]
 }, app);
