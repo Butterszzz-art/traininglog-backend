@@ -227,6 +227,10 @@ app.use(cors({
   origin(origin, cb) {
     if (!origin) return cb(null, true);
     if (allowAll) return cb(null, true);
+    // The native apps' WebViews send capacitor://localhost (iOS) and
+    // https://localhost (Android). Node's URL parser returns "null" as the
+    // origin for non-web schemes like capacitor://, so match the raw header too.
+    if (allowedSet.has(origin)) return cb(null, true);
     try {
       if (allowedSet.has(new URL(origin).origin)) return cb(null, true);
       console.warn(`Blocked CORS origin: ${origin}`);
