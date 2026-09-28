@@ -85,6 +85,9 @@ service cloud.firestore {
     match /profileReports/{reportId} {
       allow read, write: if false;
     }
+    match /profileBlocks/{username} {
+      allow read, write: if false;
+    }
 
     // friendships/{a__b} — friend requests and accepted friendships. Written
     // and read only through the API (Admin SDK), which enforces that only the

@@ -10,6 +10,16 @@
 //                                     visibility, avatarVersion, updatedAt }
 //   profileAvatars/{usernameLower}  { data (base64), mime, version, bytes }
 //   profileReports/{autoId}         { target, reporter, reason, note, status }
+//   profileBlocks/{usernameLower}   { blocked: [usernameLower, ...], updatedAt }
+//
+// Moderation (App Store Guideline 1.2 — apps with user content must filter
+// objectionable material, let users report it and block abusive users, and
+// act on reports within 24 hours):
+//   - reports and blocks call notifyModerators() so a person sees them
+//     (server.js posts to MODERATION_WEBHOOK_URL)
+//   - a block hides the blocked user's photo/name/bio from the blocker, ends
+//     any friendship between them and stops new friend requests either way
+//   - names and bios containing any OBJECTIONABLE_TERMS are rejected
 //
 // Photos live in Firestore rather than Cloud Storage: the app shrinks them to
 // a small square JPEG (~10-30 KB) before upload, which is well under the 1 MB
@@ -72,13 +82,58 @@ function parseAvatar(dataUrl) {
   return { mime: AVATAR_MIME[kind], data: buf.toString('base64'), bytes: buf.length };
 }
 
+const BLOCKS_MAX = 500;
+
+// True if `text` contains any of `terms` as a whole word (so a term like
+// "ass" doesn't reject "class"). Terms are matched case-insensitively.
+function containsObjectionable(text, terms) {
+  const s = String(text || '').toLowerCase();
+  if (!s || !terms?.length) return false;
+  return terms.some(term => {
+    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`(^|[^\\p{L}\\p{N}])${escaped}($|[^\\p{L}\\p{N}])`, 'u').test(s);
+  });
+}
+
+function parseTerms(value) {
+  return String(value || '').split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+}
+
+// Usernames (lowercase) that `blocker` has blocked.
+async function blockedBy(db, blocker) {
+  const key = profileKey(blocker);
+  if (!key) return [];
+  const snap = await db.collection('profileBlocks').doc(key).get();
+  return snap.exists ? (snap.get('blocked') || []) : [];
+}
+
+// True if either user has blocked the other.
+async function isBlockedEitherWay(db, a, b) {
+  const [ka, kb] = [profileKey(a), profileKey(b)];
+  if (!ka || !kb) return false;
+  const [aBlocks, bBlocks] = await Promise.all([blockedBy(db, ka), blockedBy(db, kb)]);
+  return aBlocks.includes(kb) || bBlocks.includes(ka);
+}
+
 function newVersion() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
 
-function createProfilesRouter({ db, FieldValue, firebaseEnabled, resolveUid, sendError, sendSuccess, adminUsernames = [] }) {
+function createProfilesRouter({
+  db, FieldValue, firebaseEnabled, resolveUid, sendError, sendSuccess, adminUsernames = [],
+  objectionableTerms = [], notifyModerators = async () => {},
+}) {
   const router = express.Router();
   const admins = new Set(adminUsernames.map(u => String(u).trim().toLowerCase()).filter(Boolean));
+  const terms = objectionableTerms.map(t => String(t).trim().toLowerCase()).filter(Boolean);
+
+  // A failed alert must never fail the user's request — the report/block is
+  // already saved and can be found in Firestore.
+  function alertModerators(message) {
+    Promise.resolve()
+      .then(() => notifyModerators(message))
+      .catch(err => console.error('[moderation] notify failed:', err.message));
+  }
 
   const profiles = () => db.collection('profiles');
   const avatars = () => db.collection('profileAvatars');
@@ -155,6 +210,9 @@ function createProfilesRouter({ db, FieldValue, firebaseEnabled, resolveUid, sen
         }
         update.visibility = body.visibility;
       }
+      if (containsObjectionable(update.displayName, terms) || containsObjectionable(update.bio, terms)) {
+        return sendError(res, 422, 'profile.objectionable', 'That name or bio breaks our community rules. Please change it.');
+      }
 
       const key = profileKey(req.user.username);
       update.username = req.user.username;
@@ -226,13 +284,20 @@ function createProfilesRouter({ db, FieldValue, firebaseEnabled, resolveUid, sen
       if (!keys.length) return sendSuccess(res, 200, { profiles: {} });
 
       const viewer = profileKey(req.user.username);
-      const snaps = await Promise.all(keys.map(k => profiles().doc(k).get()));
+      const [snaps, blocked] = await Promise.all([
+        Promise.all(keys.map(k => profiles().doc(k).get())),
+        blockedBy(db, viewer),
+      ]);
       const needsUid = snaps.some(s => s.exists && s.get('visibility') === 'coach');
       const viewerUid = needsUid ? await callerUid(req.user) : null;
       const out = {};
       await Promise.all(snaps.map(async (snap, i) => {
         const key = keys[i];
         const data = snap.exists ? snap.data() : null;
+        if (blocked.includes(key)) {
+          out[key] = { username: data?.username || key, hidden: true, blocked: true };
+          return;
+        }
         if (!data || !(await canView(viewer, viewerUid, key, data))) {
           out[key] = { username: data?.username || key, hidden: true };
           return;
@@ -272,10 +337,72 @@ function createProfilesRouter({ db, FieldValue, firebaseEnabled, resolveUid, sen
         status: 'open',
         createdAt: FieldValue.serverTimestamp(),
       });
+      alertModerators(`Profile report (${reason}): @${target} reported by @${reporter}. Review within 24 hours.`);
       return sendSuccess(res, 201, { reported: true });
     } catch (err) {
       console.error('POST /api/profiles/:username/report failed:', err);
       return sendError(res, 500, 'profile.server_error', 'Could not send the report.');
+    }
+  });
+
+  // GET /blocks — { blocked: [username, ...] } for the caller, so the app can
+  // hide those users in the feed and leaderboard too.
+  router.get('/blocks', async (req, res) => {
+    try {
+      return sendSuccess(res, 200, { blocked: await blockedBy(db, req.user.username) });
+    } catch (err) {
+      console.error('GET /api/profiles/blocks failed:', err);
+      return sendError(res, 500, 'profile.server_error', 'Could not load blocked users.');
+    }
+  });
+
+  // POST /:username/block — hides that user from the caller and ends any
+  // friendship or pending request between them.
+  router.post('/:username/block', async (req, res) => {
+    try {
+      const target = profileKey(req.params.username);
+      const me = profileKey(req.user.username);
+      if (!target) return sendError(res, 422, 'profile.invalid_username', 'Invalid username.');
+      if (target === me) return sendError(res, 422, 'profile.cannot_block_self', 'You can’t block yourself.');
+
+      const current = await blockedBy(db, me);
+      if (!current.includes(target)) {
+        if (current.length >= BLOCKS_MAX) {
+          return sendError(res, 422, 'profile.block_limit', 'You’ve reached the limit of blocked users.');
+        }
+        await db.collection('profileBlocks').doc(me).set({
+          blocked: [...current, target],
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+        // Required lazily: friends.js requires this module at load time.
+        const { pairId } = require('./friends');
+        await db.collection('friendships').doc(pairId(me, target)).delete();
+        alertModerators(`Block: @${me} blocked @${target}. Check whether @${target} needs moderating.`);
+      }
+      return sendSuccess(res, 200, { blocked: true });
+    } catch (err) {
+      console.error('POST /api/profiles/:username/block failed:', err);
+      return sendError(res, 500, 'profile.server_error', 'Could not block that user.');
+    }
+  });
+
+  // DELETE /:username/block — unblock.
+  router.delete('/:username/block', async (req, res) => {
+    try {
+      const target = profileKey(req.params.username);
+      const me = profileKey(req.user.username);
+      if (!target) return sendError(res, 422, 'profile.invalid_username', 'Invalid username.');
+      const current = await blockedBy(db, me);
+      if (current.includes(target)) {
+        await db.collection('profileBlocks').doc(me).set({
+          blocked: current.filter(u => u !== target),
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+      }
+      return sendSuccess(res, 200, { blocked: false });
+    } catch (err) {
+      console.error('DELETE /api/profiles/:username/block failed:', err);
+      return sendError(res, 500, 'profile.server_error', 'Could not unblock that user.');
     }
   });
 
@@ -314,7 +441,11 @@ async function deleteProfile(db, username) {
   await Promise.all([
     db.collection('profiles').doc(key).delete(),
     db.collection('profileAvatars').doc(key).delete(),
+    db.collection('profileBlocks').doc(key).delete(),
   ]);
 }
 
-module.exports = { createProfilesRouter, deleteProfile, parseAvatar, cleanText, profileKey };
+module.exports = {
+  createProfilesRouter, deleteProfile, parseAvatar, cleanText, profileKey,
+  containsObjectionable, parseTerms, blockedBy, isBlockedEitherWay,
+};
