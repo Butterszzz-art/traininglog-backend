@@ -16,7 +16,7 @@
 // objectionable material, let users report it and block abusive users, and
 // act on reports within 24 hours):
 //   - reports and blocks call notifyModerators() so a person sees them
-//     (server.js posts to MODERATION_WEBHOOK_URL)
+//     (emailed to MODERATION_EMAIL_TO, see src/moderationEmail.js)
 //   - a block hides the blocked user's photo/name/bio from the blocker, ends
 //     any friendship between them and stops new friend requests either way
 //   - names and bios containing any OBJECTIONABLE_TERMS are rejected
