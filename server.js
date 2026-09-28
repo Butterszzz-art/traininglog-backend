@@ -11,6 +11,9 @@ const { router: aiRouter } = require('./src/routes/ai');
 const { createPremiumRouter } = require('./src/routes/premium');
 const { createProfilesRouter, deleteProfile, parseTerms: parseProfileTerms, containsObjectionable } = require('./src/routes/profiles');
 const { DEFAULT_OBJECTIONABLE_TERMS } = require('./src/objectionableTerms');
+const { createAppleIapRouter, createAppleVerifiers } = require('./src/routes/appleIap');
+const fs = require('fs');
+const path = require('path');
 const { createModerationNotifier } = require('./src/moderationEmail');
 const { createFriendsRouter, deleteFriendships } = require('./src/routes/friends');
 const { auth: fbAuth, db, FieldValue, firebaseEnabled, projectId: firebaseProjectId, initError: firebaseInitError } = require('./firebase');
@@ -414,6 +417,7 @@ async function getUserPlanInfo(username) {
       status: u.subStatus || 'none',
       periodEnd: u.subCurrentPeriodEnd || '',
       billingCycle: u.billingCycle || '',
+      source: u.subSource || '', // 'stripe' | 'apple' — which store manages it
       referralCode: u.referralCode || '',
       referralCredits: Number(u.referralCredits) || 0,
     };
@@ -520,163 +524,32 @@ app.get('/api/stripe/portal', authenticateToken, async (req, res) => {
 });
 
 // ── Apple In-App Purchase (IAP) ─────────────────────────────────────────────────
-// Skeleton for the iOS payment rail. Apple Guideline 3.1.1 requires digital
-// subscriptions consumed inside the app to go through StoreKit, not an
-// external processor — the Stripe checkout above is fine for web/Android but
-// cannot be the purchase path inside the iOS build. This receives Apple's
-// server-to-server notifications and converges on applyEntitlement(), the
-// same users/{uid} write path the Stripe webhook above uses.
-//
-// NOT production-ready — disabled by default (APPLE_IAP_ENABLED) so an
-// unfinished/unverified integration can't silently grant free access.
-// Remaining manual work before flipping it on, all in IAP-SETUP.md:
-//   1. `npm install @apple/app-store-server-library` (Apple's own library —
-//      it verifies the JWS signature chain up to Apple's Root CA, which is
-//      the one part of this that must not be hand-rolled: skipping proper
-//      chain verification means anyone could POST a self-signed payload and
-//      grant themselves Pro for free).
-//   2. Create the Pro/Coach auto-renewable subscription products in App
-//      Store Connect → Monetization → Subscriptions, and update
-//      APPLE_PRODUCT_PLAN_MAP below with their real product ids.
-//   3. Generate an App Store Server API key (Users and Access → Integrations)
-//      and set APPLE_BUNDLE_ID / APPLE_IAP_SANDBOX.
-//   4. Point App Store Connect's Server Notifications V2 URL at
-//      POST /api/iap/apple/notifications (production and sandbox are
-//      separate URLs, both need setting).
-//   5. Wire an actual StoreKit purchase call into the frontend — see the
-//      `purchaseViaIAP` stub in src/js/payments.js — once ios/ exists and a
-//      Capacitor IAP plugin is installed.
-//   6. Test end-to-end against Apple's sandbox before enabling in production.
-//
-// The exact method names on SignedDataVerifier below (verifyAndDecode*) are
-// written against this library's documented shape at the time this was
-// written — confirm them against the installed version's current docs
-// before relying on this, library APIs do shift between versions.
+// The iOS payment rail — see src/routes/appleIap.js. Off until
+// APPLE_IAP_ENABLED=true. Sandbox purchases (TestFlight, App Review) always
+// verify; production purchases verify once APPLE_APP_ID (the app's numeric
+// Apple ID from App Store Connect) is set.
 const appleIapEnabled = process.env.APPLE_IAP_ENABLED === 'true';
-let appleSignedDataVerifier = null;
+let appleVerifiers = [];
 if (appleIapEnabled) {
   try {
     const { SignedDataVerifier, Environment } = require('@apple/app-store-server-library');
-    // Apple's published root certificates (Apple Root CA - G3) — download
-    // the .cer files from https://www.apple.com/certificateauthority/ and
-    // load them here (e.g. as Buffers) per IAP-SETUP.md. Left empty until
-    // that manual step is done, which is also why appleIapEnabled defaults
-    // to false: an empty root-CA list can't verify anything.
-    const appleRootCAs = [];
-    appleSignedDataVerifier = new SignedDataVerifier(
-      appleRootCAs,
-      true, // enableOnlineChecks — asks Apple's OCSP responder about revocation
-      process.env.APPLE_IAP_SANDBOX === 'true' ? Environment.SANDBOX : Environment.PRODUCTION,
-      process.env.APPLE_BUNDLE_ID || 'com.pocketcoach.app'
-    );
-  } catch (err) {
-    console.error('[Apple IAP] Failed to initialize SignedDataVerifier — is @apple/app-store-server-library installed and are the APPLE_* env vars set?', err.message);
-    appleSignedDataVerifier = null;
-  }
-}
-
-// Apple product id → { plan, billingCycle }. Placeholder ids — replace with
-// the real identifiers once the products exist in App Store Connect. Kept on
-// the same 'pro'/'coach' plan names the Stripe path uses so
-// applyEntitlement() doesn't need to know which rail a call came from.
-const APPLE_PRODUCT_PLAN_MAP = {
-  'com.pocketcoach.app.pro.monthly':   { plan: 'pro',   billingCycle: 'monthly' },
-  'com.pocketcoach.app.pro.annual':    { plan: 'pro',   billingCycle: 'annual'  },
-  'com.pocketcoach.app.coach.monthly': { plan: 'coach', billingCycle: 'monthly' },
-  'com.pocketcoach.app.coach.annual':  { plan: 'coach', billingCycle: 'annual'  },
-};
-
-// Maps Apple's V2 notificationType to a status/plan override. Anything not
-// listed here (SUBSCRIBED, DID_RENEW, DID_CHANGE_RENEWAL_STATUS, etc.) just
-// means "still active" — the transaction's own expiresDate is what actually
-// gates access, not the notification type.
-function appleEntitlementFromNotification(notificationType) {
-  if (['EXPIRED', 'REFUND', 'REVOKE', 'GRACE_PERIOD_EXPIRED'].includes(notificationType)) {
-    return { plan: 'free', status: 'canceled' };
-  }
-  if (notificationType === 'DID_FAIL_TO_RENEW') return { status: 'past_due' };
-  return { status: 'active' };
-}
-
-// POST /api/iap/apple/notifications — App Store Server Notifications V2.
-// Configure in App Store Connect → your app → App Information → App Store
-// Server Notifications. Apple retries on non-2xx, so this always returns 200
-// once the payload has been durably applied (or was safely ignorable).
-app.post('/api/iap/apple/notifications', async (req, res) => {
-  if (!appleIapEnabled || !appleSignedDataVerifier) {
-    console.warn('[Apple IAP] Notification received but IAP is not enabled/configured — ignoring.');
-    return res.status(503).send('Apple IAP not configured');
-  }
-
-  try {
-    const signedPayload = req.body?.signedPayload;
-    if (!signedPayload) return res.status(400).send('Missing signedPayload');
-
-    // This is the check that must not be skipped: it verifies the JWS chain
-    // up to Apple's pinned Root CA, not just that *some* key signed it.
-    const notification = await appleSignedDataVerifier.verifyAndDecodeNotification(signedPayload);
-    const transactionInfo = notification.data?.signedTransactionInfo
-      ? await appleSignedDataVerifier.verifyAndDecodeTransaction(notification.data.signedTransactionInfo)
-      : null;
-
-    if (transactionInfo?.appAccountToken && transactionInfo?.productId) {
-      const mapped = APPLE_PRODUCT_PLAN_MAP[transactionInfo.productId];
-      if (mapped) {
-        const derived = appleEntitlementFromNotification(notification.notificationType);
-        await applyEntitlement({
-          uid: transactionInfo.appAccountToken, // set at purchase time on the client — see payments.js
-          plan: derived.plan || mapped.plan,
-          status: derived.status,
-          billingCycle: mapped.billingCycle,
-          periodEnd: transactionInfo.expiresDate ? new Date(transactionInfo.expiresDate).toISOString() : null,
-          source: 'apple',
-          sourceCustomerId: transactionInfo.originalTransactionId,
-        });
-      } else {
-        console.warn(`[Apple IAP] Unrecognized productId "${transactionInfo.productId}" — check APPLE_PRODUCT_PLAN_MAP.`);
-      }
-    }
-
-    return res.status(200).send();
-  } catch (err) {
-    console.error('[Apple IAP] Failed handling notification:', err.message);
-    return res.status(500).send('Notification handler failed');
-  }
-});
-
-// POST /api/iap/apple/verify — called by the client immediately after a
-// purchase completes, alongside (not instead of) the server notification
-// above, since server notifications can lag by seconds to minutes and a user
-// who just paid shouldn't stare at a locked feature while waiting. Body:
-// { signedTransaction } — the JWS string StoreKit 2's
-// Transaction.jsonRepresentation gives the client right after purchase.
-app.post('/api/iap/apple/verify', authenticateToken, async (req, res) => {
-  if (!appleIapEnabled || !appleSignedDataVerifier) {
-    return sendError(res, 503, 'iap.apple_disabled', 'Apple IAP is not configured yet.');
-  }
-  const { signedTransaction } = req.body || {};
-  if (!signedTransaction) return sendError(res, 400, 'iap.missing_transaction', 'signedTransaction is required.');
-
-  try {
-    const transactionInfo = await appleSignedDataVerifier.verifyAndDecodeTransaction(signedTransaction);
-    const mapped = APPLE_PRODUCT_PLAN_MAP[transactionInfo.productId];
-    if (!mapped) return sendError(res, 400, 'iap.unknown_product', 'Unrecognized product id.');
-
-    const uid = await resolveFirestoreUid(req.user.username);
-    if (!uid) return sendError(res, 400, 'iap.no_account', 'No Firestore account for this session.');
-
-    await applyEntitlement({
-      uid, plan: mapped.plan, status: 'active', billingCycle: mapped.billingCycle,
-      periodEnd: transactionInfo.expiresDate ? new Date(transactionInfo.expiresDate).toISOString() : null,
-      source: 'apple', sourceCustomerId: transactionInfo.originalTransactionId,
+    appleVerifiers = createAppleVerifiers({
+      SignedDataVerifier, Environment,
+      // Apple Root CA - G3, from https://www.apple.com/certificateauthority/
+      // (SHA-256 63:34:3A:BF:…:3E:91:79).
+      rootCertificates: [fs.readFileSync(path.join(__dirname, 'certs', 'AppleRootCA-G3.cer'))],
+      bundleId: process.env.APPLE_BUNDLE_ID || 'com.pocketcoach.app',
+      appAppleId: process.env.APPLE_APP_ID,
     });
-
-    return sendSuccess(res, 200, { plan: mapped.plan });
   } catch (err) {
-    console.error('[Apple IAP] Transaction verification failed:', err.message);
-    return sendError(res, 400, 'iap.verification_failed', 'Could not verify transaction with Apple.');
+    console.error('[Apple IAP] Failed to initialize verifiers:', err.message);
+    appleVerifiers = [];
   }
-});
+}
+app.use('/api/iap/apple', createAppleIapRouter({
+  db, enabled: appleIapEnabled, verifiers: appleVerifiers, applyEntitlement,
+  resolveUid: resolveFirestoreUid, authenticate: authenticateToken, sendError, sendSuccess,
+}));
 
 // ── Account deletion ──────────────────────────────────────────────────────────
 // Apple App Store Guideline 5.1.1(v) requires apps that support account

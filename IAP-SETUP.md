@@ -1,4 +1,4 @@
-# Payment System — Stripe Webhook + Apple IAP Skeleton
+# Payment System — Stripe Webhook + Apple IAP
 
 Two separate payment rails now converge on one write path
 (`applyEntitlement()` in `server.js`) that sets `userPlan`/`subStatus`/
@@ -27,68 +27,55 @@ Nothing else to build here — `/api/stripe/create-checkout-session` and
 `/api/stripe/portal` (both pre-existing) already set the `username`/`plan`/
 `billing` metadata the webhook reads.
 
-## 2. Apple IAP — skeleton, several manual steps before this can go live
+## 2. Apple IAP — built; needs App Store Connect setup, then switch on
 
-Why this exists at all: Apple Guideline 3.1.1 requires digital subscriptions
-that unlock features *inside* the app to go through StoreKit on iOS — Stripe
-checkout cannot be the purchase path in the App Store build. `APPLE_IAP_ENABLED`
-defaults to `false`; every `/api/iap/apple/*` route 503s until it's explicitly
-turned on, so an unfinished integration can't silently grant free access.
+iOS subscriptions go through StoreKit (Guideline 3.1.1) in every storefront,
+including the EU. Code: `src/routes/appleIap.js` (tests:
+`scripts/test-apple-iap.js`), client in TrainingLog-mobile `src/js/payments.js`
+using `@capgo/native-purchases`.
+
+How it fits together:
+- The app asks `GET /api/iap/apple/account-token` for the user's UUID
+  (`users/{uid}.appleAccountToken`; Apple requires a UUID and Firebase uids
+  aren't) and passes it to StoreKit as `appAccountToken`.
+- After purchase or restore it sends StoreKit 2's signed transaction to
+  `POST /api/iap/apple/verify`, which checks it up to Apple Root CA - G3
+  (`certs/AppleRootCA-G3.cer`), requires the token to match the signed-in
+  account, and grants the plan if the transaction is live.
+- Renewals, expiries and refunds arrive at `POST /api/iap/apple/notifications`
+  and are matched by token, falling back to `appleOriginalTransactionId`.
+- Production **and** sandbox purchases are accepted (production first). App
+  Review and TestFlight always buy in the sandbox.
 
 ### 2a. App Store Connect
-
-1. Create the app record (bundle id `com.pocketcoach.app`, matching
-   `capacitor.config.json`) if it doesn't exist yet.
-2. Monetization → Subscriptions → create a subscription group (e.g. "Pocket
-   Coach Pro") with monthly/annual products. Update `APPLE_PRODUCT_PLAN_MAP`
-   in `server.js` with the real product ids — the ones currently in the code
-   (`com.pocketcoach.app.pro.monthly` etc.) are placeholders.
-3. Users and Access → Integrations → In-App Purchase → generate an **App
-   Store Server API key** (`.p8` file, Key ID, Issuer ID).
-4. App Information → App Store Server Notifications — set both the
-   Production and Sandbox URLs to `https://<your-backend>/api/iap/apple/notifications`.
+1. Business → sign the **Paid Apps** agreement and add bank/tax details
+   (products can't be sold until this is active). Enrol in the **App Store
+   Small Business Program** for the 15% rate.
+2. Your app → Monetization → Subscriptions → create one subscription group
+   ("Pocket Coach") with these four auto-renewable products, **exactly these
+   ids**:
+   - `com.pocketcoach.app.pro.monthly`, `com.pocketcoach.app.pro.annual`
+   - `com.pocketcoach.app.coach.monthly`, `com.pocketcoach.app.coach.annual`
+   Rank Coach above Pro in the group so moving between them is an upgrade.
+   Set prices per country (EUR for the EU), and add a **1-week free trial
+   introductory offer** to each if you want to keep the 7-day trial.
+3. App Information → **App Store Server Notifications** → Version 2, both
+   Production and Sandbox URLs:
+   `https://us-central1-pocketcoach-280c4.cloudfunctions.net/api/api/iap/apple/notifications`
+4. Note the app's numeric **Apple ID** (App Information).
+5. Users and Access → Sandbox → create a sandbox tester for your own testing.
 
 ### 2b. Backend
+In the deployed `.env`: `APPLE_IAP_ENABLED=true`, `APPLE_APP_ID=<numeric Apple ID>`.
+Without `APPLE_APP_ID` only sandbox purchases verify, which is enough for
+TestFlight and App Review but not for real customers.
 
-1. `npm install @apple/app-store-server-library` (already in `package.json`,
-   just needs installing) — this is Apple's own library. It verifies the JWS
-   signature chain up to Apple's Root CA, which is the one part of this that
-   must not be hand-rolled: skip proper chain verification and anyone can
-   POST a self-signed payload and grant themselves Pro for free. Confirm the
-   `SignedDataVerifier` method names used in `server.js`
-   (`verifyAndDecodeNotification`, `verifyAndDecodeTransaction`) against
-   whatever version actually installs — they were written from the library's
-   documented shape, not tested against a running instance.
-2. Download Apple's Root CA - G3 certificate(s) from
-   https://www.apple.com/certificateauthority/ and load them into the
-   `appleRootCAs` array in `server.js` (currently empty, which is also why
-   `appleSignedDataVerifier` can't verify anything until this is done).
-3. Set `APPLE_IAP_SANDBOX=true`, `APPLE_BUNDLE_ID`, and flip
-   `APPLE_IAP_ENABLED=true` only after sandbox testing passes.
-
-### 2c. Frontend (not started)
-
-- `src/js/payments.js` has the platform abstraction (`getEntitlement`,
-  `purchase`, `restore`) but `purchaseViaIAP`/`restoreViaIAP` are stubs — they
-  need a real Capacitor IAP plugin, which needs `ios/` to exist first (see the
-  App Store readiness notes — no iOS platform has been generated locally yet).
-- At purchase time, the client must set `appAccountToken` to the user's
-  Firestore `uid` when starting the StoreKit purchase — that's how
-  `/api/iap/apple/notifications` links an Apple transaction back to a Pocket
-  Coach account (Apple's notifications carry a product id and transaction id,
-  never a username).
-- After a successful purchase, call `POST /api/iap/apple/verify` with
-  StoreKit 2's `Transaction.jsonRepresentation` — this applies the
-  entitlement immediately rather than waiting on the (sometimes delayed)
-  server notification.
-
-### 2d. Testing
-
-Use App Store Connect's Sandbox testers (Users and Access → Sandbox) and a
-TestFlight or local Xcode build — StoreKit purchases cannot be tested from a
-plain web browser. Confirm both an initial purchase (`/api/iap/apple/verify`)
-and a background renewal (`/api/iap/apple/notifications`, `DID_RENEW`) land
-correctly on `users/{uid}`.
+### 2c. Testing
+Install a TestFlight build, buy with a sandbox tester, and check:
+- `users/{uid}` gets `userPlan`, `subSource: 'apple'`, `appleOriginalTransactionId`
+- Restore Purchases on a second device signed into the same account
+- A renewal (sandbox renews monthly subscriptions every few minutes)
+  arrives at `/notifications` and extends `subCurrentPeriodEnd`
 
 ## 3. What deliberately isn't handled yet
 
