@@ -446,6 +446,7 @@ const planAccess = createPlanAccess({
   sendError,
 });
 const requirePaidPlan = planAccess.requirePaidPlan;
+const requireCoachPlan = planAccess.requireCoachPlan;
 
 app.get('/api/user/plan', authenticateToken, async (req, res) => {
   try {
@@ -2782,7 +2783,7 @@ const COACH_CLIENTS_TABLE      = process.env.AIRTABLE_COACH_CLIENTS_TABLE || 'Co
 const DAILY_MISSION_TABLE      = process.env.AIRTABLE_DAILY_MISSION_TABLE || 'DailyMissionState';
 
 // GET /api/coach/clients?coachId= — return all clients linked to a coach
-app.get('/api/coach/clients', authenticateToken, async (req, res) => {
+app.get('/api/coach/clients', authenticateToken, requireCoachPlan, async (req, res) => {
   try {
     const requestedCoachId = typeof req.query.coachId === 'string' ? req.query.coachId.trim() : '';
     if (requestedCoachId && requestedCoachId !== req.user.username) {
@@ -2892,7 +2893,7 @@ async function resolveCallerUid(user) {
 
 // POST /api/coach/clients/invite — body: { clientUsername }
 // Coach invites an existing athlete account to link as a client.
-app.post('/api/coach/clients/invite', authenticateToken, coachInviteLimiter, async (req, res) => {
+app.post('/api/coach/clients/invite', authenticateToken, requireCoachPlan, coachInviteLimiter, async (req, res) => {
   if (!firebaseEnabled) return sendError(res, 503, 'coach.firebase_disabled', 'Client linking requires a migrated (Firebase) account.');
   try {
     const clientUsername = typeof req.body?.clientUsername === 'string' ? req.body.clientUsername.trim() : '';
@@ -3025,7 +3026,7 @@ app.get('/api/client/coach-invites', authenticateToken, async (req, res) => {
 // DELETE /api/coach/clients/:clientUid — coach removes (or cancels a pending
 // invite to) a client. Client-initiated unlink is a natural follow-up to add
 // once the mobile app actually surfaces this relationship, not built yet.
-app.delete('/api/coach/clients/:clientUid', authenticateToken, async (req, res) => {
+app.delete('/api/coach/clients/:clientUid', authenticateToken, requireCoachPlan, async (req, res) => {
   if (!firebaseEnabled) return sendError(res, 503, 'coach.firebase_disabled', 'Client linking requires a migrated (Firebase) account.');
   try {
     const clientUid = String(req.params.clientUid || '').trim();
@@ -3067,7 +3068,7 @@ app.delete('/api/coach/clients/:clientUid', authenticateToken, async (req, res) 
 // side without needing read access into the other's collection.
 
 // PATCH /api/coach/clients/:clientUid — body: { currentProgram?, nutritionSummary?, trainingMode? }
-app.patch('/api/coach/clients/:clientUid', authenticateToken, coachInviteLimiter, async (req, res) => {
+app.patch('/api/coach/clients/:clientUid', authenticateToken, requireCoachPlan, coachInviteLimiter, async (req, res) => {
   if (!firebaseEnabled) return sendError(res, 503, 'coach.firebase_disabled', 'Client linking requires a migrated (Firebase) account.');
   try {
     const clientUid = String(req.params.clientUid || '').trim();
@@ -3138,7 +3139,7 @@ const coachNoteLimiter = rateLimit({
 });
 
 // POST /api/coach/clients/:clientUid/notes — body: { text }
-app.post('/api/coach/clients/:clientUid/notes', authenticateToken, coachNoteLimiter, async (req, res) => {
+app.post('/api/coach/clients/:clientUid/notes', authenticateToken, requireCoachPlan, coachNoteLimiter, async (req, res) => {
   if (!firebaseEnabled) return sendError(res, 503, 'coach.firebase_disabled', 'Client linking requires a migrated (Firebase) account.');
   try {
     const clientUid = String(req.params.clientUid || '').trim();
@@ -3175,7 +3176,7 @@ app.post('/api/coach/clients/:clientUid/notes', authenticateToken, coachNoteLimi
 
 // GET /api/coach/clients/:clientUid/notes — coach's own sent-notes history
 // for one client (their own subcollection, not the client's mirror).
-app.get('/api/coach/clients/:clientUid/notes', authenticateToken, async (req, res) => {
+app.get('/api/coach/clients/:clientUid/notes', authenticateToken, requireCoachPlan, async (req, res) => {
   if (!firebaseEnabled) return sendError(res, 503, 'coach.firebase_disabled', 'Client linking requires a migrated (Firebase) account.');
   try {
     const clientUid = String(req.params.clientUid || '').trim();
@@ -3275,7 +3276,7 @@ app.post('/api/intake', intakeLimiter, async (req, res) => {
 
 // GET /api/coach/leads — authenticated, coach-only. Returns every pending
 // intake lead for the calling coach, newest first.
-app.get('/api/coach/leads', authenticateToken, async (req, res) => {
+app.get('/api/coach/leads', authenticateToken, requireCoachPlan, async (req, res) => {
   if (!firebaseEnabled) return sendError(res, 503, 'coach.firebase_disabled', 'Leads require a migrated (Firebase) account.');
   try {
     const coachUid = await resolveCallerUid(req.user);
@@ -3305,7 +3306,7 @@ app.get('/api/coach/leads', authenticateToken, async (req, res) => {
 // Used once a lead is converted (invited as a real client via the endpoint
 // below) or dismissed, so it stops showing as an open, actionable lead.
 const LEAD_STATUSES = ['new', 'converted', 'dismissed'];
-app.patch('/api/coach/leads/:id', authenticateToken, async (req, res) => {
+app.patch('/api/coach/leads/:id', authenticateToken, requireCoachPlan, async (req, res) => {
   if (!firebaseEnabled) return sendError(res, 503, 'coach.firebase_disabled', 'Leads require a migrated (Firebase) account.');
   try {
     const coachUid = await resolveCallerUid(req.user);
@@ -3332,7 +3333,7 @@ app.patch('/api/coach/leads/:id', authenticateToken, async (req, res) => {
 });
 
 // POST /coach/workouts — coach logs a workout on behalf of a linked client
-app.post('/coach/workouts', authenticateToken, async (req, res) => {
+app.post('/coach/workouts', authenticateToken, requireCoachPlan, async (req, res) => {
   try {
     const coachUsername = req.user.username;
     const { clientUsername, clientUid: bodyClientUid, date, title, workout } = req.body || {};
@@ -3449,7 +3450,7 @@ app.post('/coach/workouts', authenticateToken, async (req, res) => {
 const EXERCISE_VIDEOS_TABLE = process.env.AIRTABLE_EXERCISE_VIDEOS_TABLE || 'ExerciseVideos';
 
 // POST /coach/exercise-videos — coach attaches/updates a video for an exercise
-app.post('/coach/exercise-videos', authenticateToken, async (req, res) => {
+app.post('/coach/exercise-videos', authenticateToken, requireCoachPlan, async (req, res) => {
   try {
     const coachUsername = req.user.username;
     const { exerciseName, videoUrl, notes } = req.body || {};
@@ -3511,7 +3512,7 @@ app.post('/coach/exercise-videos', authenticateToken, async (req, res) => {
 });
 
 // GET /coach/exercise-videos — coach lists their own videos
-app.get('/coach/exercise-videos', authenticateToken, async (req, res) => {
+app.get('/coach/exercise-videos', authenticateToken, requireCoachPlan, async (req, res) => {
   try {
     const coachUsername = req.user.username;
 
@@ -3547,7 +3548,7 @@ app.get('/coach/exercise-videos', authenticateToken, async (req, res) => {
 });
 
 // DELETE /coach/exercise-videos/:id — coach removes their own video
-app.delete('/coach/exercise-videos/:id', authenticateToken, async (req, res) => {
+app.delete('/coach/exercise-videos/:id', authenticateToken, requireCoachPlan, async (req, res) => {
   try {
     const coachUsername = req.user.username;
 

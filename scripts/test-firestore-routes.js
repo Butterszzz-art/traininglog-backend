@@ -167,7 +167,7 @@ require.cache[airtablePath] = { id: airtablePath, filename: airtablePath, loaded
 
 // Pre-seed: "migrateduser" has completed signup-complete (usernames doc exists)
 store['usernames'] = { migrateduser: { uid: 'uidABC123' }, clientuser: { uid: 'uidClient456' }, deleteuser: { uid: 'uidDelete789' } };
-store['users'] = { uidABC123: { username: 'migrateduser', referralCode: 'REFCODE1' }, uidDelete789: { username: 'deleteuser', userPlan: 'pro' } };
+store['users'] = { uidABC123: { username: 'migrateduser', referralCode: 'REFCODE1', userPlan: 'coach' }, uidDelete789: { username: 'deleteuser', userPlan: 'pro' } };
 
 const jwt = require(path.join(BACKEND_DIR, 'node_modules/jsonwebtoken'));
 const legacyTokenMigrated = jwt.sign({ id: 'rec1', username: 'migrateduser' }, process.env.JWT_SECRET);
@@ -368,6 +368,14 @@ setTimeout(() => {
     r = await req('GET', '/api/coach/clients?coachId=migrateduser', legacyTokenMigrated);
     check('GET /api/coach/clients (migrated) 200', r.status === 200);
     check('GET /api/coach/clients (migrated) lists roster', r.body?.clients?.some(c => c.clientName === 'Alice' && c.email === 'a@x.com'));
+    // Coach tools are Coach-plan only (src/planAccess.js); clientuser is free.
+    const freeToken = jwt.sign({ id: 'rec4', username: 'clientuser' }, process.env.JWT_SECRET);
+    r = await req('GET', '/api/coach/clients?coachId=clientuser', freeToken);
+    check('GET /api/coach/clients (free plan) 403 coach_required', r.status === 403 && r.body?.error?.code === 'plan.coach_required');
+    r = await req('POST', '/coach/workouts', freeToken, { clientUsername: 'migrateduser', date: '2026-07-02', workout: { sets: [] } });
+    check('POST /coach/workouts (free plan) 403', r.status === 403);
+    r = await req('POST', '/api/coach/clients/accept', freeToken, { coachUsername: 'nobody' });
+    check('POST /api/coach/clients/accept stays open to free athletes (not 403)', r.status !== 403);
 
     // ── Workouts ──
     r = await req('POST', '/workouts', legacyTokenMigrated, { date: '2026-07-01', title: 'Push Day', workout: { sets: [{ exerciseName: 'Bench', weight: 80, reps: 5 }] } });

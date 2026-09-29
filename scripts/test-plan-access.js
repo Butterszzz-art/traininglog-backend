@@ -21,6 +21,7 @@ const access = createPlanAccess({ getPlanInfo, adminUsernames: parseUsernames(' 
 const app = express();
 app.use((req, _res, next) => { req.user = { username: req.headers['x-user'] }; next(); });
 app.post('/api/ai/chat', access.requirePaidPlan, (_req, res) => res.json({ success: true, reply: 'hi' }));
+app.get('/api/coach/clients', access.requireCoachPlan, (_req, res) => res.json({ success: true, clients: [] }));
 app.use('/api/premium', createPremiumRouter({ getPlanInfo, sendError, isAdmin: access.isAdmin }));
 
 let port;
@@ -73,6 +74,15 @@ async function run() {
     } finally {
       failLookup = false;
     }
+  });
+
+  await t('coach tools: Coach plan and admin only', async () => {
+    let r = await call('GET', '/api/coach/clients', 'freebie');
+    assert.strictEqual(r.status, 403);
+    assert.strictEqual(r.body.error.code, 'plan.coach_required');
+    assert.strictEqual((await call('GET', '/api/coach/clients', 'pat')).status, 403); // Pro isn't Coach
+    assert.strictEqual((await call('GET', '/api/coach/clients', 'cora')).status, 200);
+    assert.strictEqual((await call('GET', '/api/coach/clients', '29796')).status, 200);
   });
 
   await t('premium library: free = preview, admin = full', async () => {
