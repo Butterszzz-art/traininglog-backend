@@ -12,6 +12,7 @@ const { createPremiumRouter } = require('./src/routes/premium');
 const { createProfilesRouter, deleteProfile, parseTerms: parseProfileTerms, containsObjectionable } = require('./src/routes/profiles');
 const { DEFAULT_OBJECTIONABLE_TERMS } = require('./src/objectionableTerms');
 const { createAppleIapRouter, createAppleVerifiers } = require('./src/routes/appleIap');
+const { createPlanAccess, parseUsernames } = require('./src/planAccess');
 const fs = require('fs');
 const path = require('path');
 const { createModerationNotifier } = require('./src/moderationEmail');
@@ -437,9 +438,21 @@ async function getUserPlanInfo(username) {
   };
 }
 
+// Paid-plan gate for AI features (src/planAccess.js). ADMIN_USERNAMES always
+// get full access.
+const planAccess = createPlanAccess({
+  getPlanInfo: getUserPlanInfo,
+  adminUsernames: parseUsernames(process.env.ADMIN_USERNAMES),
+  sendError,
+});
+const requirePaidPlan = planAccess.requirePaidPlan;
+
 app.get('/api/user/plan', authenticateToken, async (req, res) => {
   try {
-    return res.json(await getUserPlanInfo(req.user?.username));
+    const info = await getUserPlanInfo(req.user?.username);
+    // `admin` lets the app unlock paid features for admins without
+    // pretending they hold a subscription.
+    return res.json({ ...info, admin: planAccess.isAdmin(req.user?.username) });
   } catch (err) {
     console.error('[GET /api/user/plan]', err.message);
     return res.json({ plan: 'free', status: 'none' });
@@ -3911,7 +3924,7 @@ app.post('/mobility/sessions', authenticateToken, async (req, res) => {
 // ── AI Chat ───────────────────────────────────────────────────────────────────
 
 // POST /ai/chat — proxy to Anthropic claude-haiku-4-5
-app.post('/ai/chat', authenticateToken, async (req, res) => {
+app.post('/ai/chat', authenticateToken, requirePaidPlan, async (req, res) => {
   try {
     const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
     if (!ANTHROPIC_API_KEY) {
@@ -3974,7 +3987,8 @@ const aiLimiter = rateLimit({
   message: { success: false, error: { code: 'ai.rate_limited', message: 'Too many AI requests. Try again shortly.' } }
 });
 
-app.use('/api/ai', authenticateToken, aiLimiter, aiRouter);
+// Every AI feature is Pro — see src/planAccess.js.
+app.use('/api/ai', authenticateToken, aiLimiter, requirePaidPlan, aiRouter);
 
 // Ebooks and the ready-made program library. Full content is only returned to
 // Pro/Coach accounts (checked per request); free accounts get teasers.
@@ -3985,7 +3999,7 @@ const premiumLimiter = rateLimit({
   legacyHeaders: false,
   message: { success: false, error: { code: 'premium.rate_limited', message: 'Too many requests. Try again shortly.' } }
 });
-app.use('/api/premium', authenticateToken, premiumLimiter, createPremiumRouter({ getPlanInfo: getUserPlanInfo, sendError }));
+app.use('/api/premium', authenticateToken, premiumLimiter, createPremiumRouter({ getPlanInfo: getUserPlanInfo, sendError, isAdmin: planAccess.isAdmin }));
 
 // Public profiles (photo, display name, bio, visibility) — see
 // src/routes/profiles.js. Writes and reports get a tighter limit than the

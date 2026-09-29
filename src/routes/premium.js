@@ -91,13 +91,14 @@ function ebookPreview(e) {
   return { chapterTitle: chapter.title, heading: section.heading, body: section.body };
 }
 
-function createPremiumRouter({ getPlanInfo, sendError }) {
+function createPremiumRouter({ getPlanInfo, sendError, isAdmin = () => false }) {
   const router = express.Router();
 
   async function accessFor(req, res) {
     try {
       const info = await getPlanInfo(req.user && req.user.username);
-      return { plan: info.plan || 'free', paid: PAID_PLANS.has(info.plan) };
+      const admin = isAdmin(req.user && req.user.username);
+      return { plan: info.plan || 'free', paid: admin || PAID_PLANS.has(info.plan) };
     } catch (err) {
       console.error('[premium] plan lookup failed:', err.message);
       sendError(res, 503, 'premium.plan_lookup_failed', 'Could not verify your plan. Please try again.');
