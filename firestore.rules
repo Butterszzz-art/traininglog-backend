@@ -109,6 +109,21 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // feedPosts, feedReports, shares, exerciseBests — community feed,
+    // friend-to-friend sharing and the exercise leaderboard. API-only.
+    match /feedPosts/{postId} {
+      allow read, write: if false;
+    }
+    match /feedReports/{reportId} {
+      allow read, write: if false;
+    }
+    match /shares/{shareId} {
+      allow read, write: if false;
+    }
+    match /exerciseBests/{bestId} {
+      allow read, write: if false;
+    }
+
     // Everything else: deny by default.
     match /{document=**} {
       allow read, write: if false;

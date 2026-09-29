@@ -7,9 +7,40 @@
         { "fieldPath": "groupId", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "feedPosts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "author", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "exerciseBests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "lift", "order": "ASCENDING" },
+        { "fieldPath": "bestE1rm", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": [
+    {
+      "collectionGroup": "shares",
+      "fieldPath": "data",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "feedPosts",
+      "fieldPath": "workout",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "exerciseBests",
+      "fieldPath": "sessions",
+      "indexes": []
+    },
     {
       "collectionGroup": "groupPosts",
       "fieldPath": "share",

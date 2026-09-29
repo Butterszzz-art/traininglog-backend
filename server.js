@@ -18,6 +18,11 @@ const path = require('path');
 const { createModerationNotifier } = require('./src/moderationEmail');
 const { createFriendsRouter, deleteFriendships } = require('./src/routes/friends');
 const { createGroupsRouter, removeUserFromGroups } = require('./src/routes/groups');
+const { createFeedRouter, deleteFeedPosts } = require('./src/routes/feed');
+const { createSharesRouter, deleteShares } = require('./src/routes/shares');
+const { createExerciseBoardRouter, recordExerciseBests, deleteExerciseBests } = require('./src/routes/exerciseBoard');
+const { pairId: friendPairId } = require('./src/routes/friends');
+const { isBlockedEitherWay, profileKey } = require('./src/routes/profiles');
 const { auth: fbAuth, db, FieldValue, firebaseEnabled, projectId: firebaseProjectId, initError: firebaseInitError } = require('./firebase');
 const { berekenClient } = require('./src/intakeCalculations');
 const { compactWorkout, readStoredWorkout } = require('./workoutFormat');
@@ -615,6 +620,9 @@ async function deleteFirestoreAccount(uid, username) {
   await deleteProfile(db, username);
   await deleteFriendships(db, username);
   await removeUserFromGroups(db, username);
+  await deleteFeedPosts(db, username);
+  await deleteShares(db, username);
+  await deleteExerciseBests(db, username);
   forgetCachedUid(username);
 }
 
@@ -1143,6 +1151,12 @@ app.post('/workouts', authenticateToken, async (req, res) => {
         db, FieldValue, uid, docRef,
         data: { date: String(date), title: String(title || 'Workout'), sessionVolume, ...storedWorkoutFields(workout) }
       });
+      // Exercise leaderboard bests; a failure here must not fail the save.
+      try {
+        await recordExerciseBests(db, { username, workoutId: docRef.id, date, workout });
+      } catch (err) {
+        console.error('[exercise board] recording bests failed:', err.message);
+      }
       return sendSuccess(res, 200, { recordId: docRef.id });
     }
 
@@ -2673,6 +2687,19 @@ app.post('/sendTemplate', authenticateToken, async (req, res) => {
     return sendError(res, 400, 'templates.invalid_payload', 'fromUser, toUser, templateName, and templateData are required.');
   }
 
+  // Only to accepted friends (and not blocked either way) — otherwise anyone
+  // could drop templates into any account. The sender is the caller, never
+  // the body's fromUser.
+  const me = profileKey(req.user?.username);
+  const to = profileKey(toUser);
+  if (!me || !to || me === to) return sendError(res, 422, 'templates.invalid_recipient', 'Enter a friend’s username.');
+  if (firebaseEnabled) {
+    const friendship = await db.collection('friendships').doc(friendPairId(me, to)).get();
+    if (!friendship.exists || friendship.get('status') !== 'accepted' || await isBlockedEitherWay(db, me, to)) {
+      return sendError(res, 403, 'templates.not_friends', 'You can only share templates with friends.');
+    }
+  }
+
   // Cross-user write: resolve the RECIPIENT's uid, not the caller's.
   const toUid = await resolveFirestoreUid(toUser);
   if (toUid) {
@@ -4083,6 +4110,35 @@ app.use('/api/groups', authenticateToken, groupsLimiter, groupsWriteLimiter, cre
   adminUsernames: (process.env.PROFILE_ADMINS || '').split(','),
   objectionableTerms: OBJECTIONABLE_TERMS,
   notifyModerators,
+}));
+// Community feed (you + friends), sharing with friends, and the exercise
+// leaderboard — see src/routes/feed.js, shares.js and exerciseBoard.js.
+const socialLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: { code: 'social.rate_limited', message: 'Too many requests. Try again shortly.' } }
+});
+const socialWriteLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: req => req.method === 'GET',
+  message: { success: false, error: { code: 'social.rate_limited', message: 'You’re posting too fast. Try again shortly.' } }
+});
+app.use('/api/feed', authenticateToken, socialLimiter, socialWriteLimiter, createFeedRouter({
+  db, FieldValue, firebaseEnabled, sendError, sendSuccess,
+  adminUsernames: (process.env.PROFILE_ADMINS || '').split(','),
+  objectionableTerms: OBJECTIONABLE_TERMS,
+  notifyModerators,
+}));
+app.use('/api/shares', authenticateToken, socialLimiter, socialWriteLimiter, createSharesRouter({
+  db, firebaseEnabled, sendError, sendSuccess, objectionableTerms: OBJECTIONABLE_TERMS,
+}));
+app.use('/api/leaderboard/exercises', authenticateToken, socialLimiter, createExerciseBoardRouter({
+  db, firebaseEnabled, sendError, sendSuccess,
 }));
 app.use('/', leaderboardRoute);
 
