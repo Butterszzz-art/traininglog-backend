@@ -1,6 +1,20 @@
 {
-  "indexes": [],
+  "indexes": [
+    {
+      "collectionGroup": "groupPosts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "groupId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    }
+  ],
   "fieldOverrides": [
+    {
+      "collectionGroup": "groupPosts",
+      "fieldPath": "share",
+      "indexes": []
+    },
     {
       "collectionGroup": "workouts",
       "fieldPath": "workout",

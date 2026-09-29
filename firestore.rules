@@ -96,6 +96,19 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // groups/{id}, groupPosts/{id}, groupReports/{id} — community groups.
+    // Only the API (Admin SDK) reads and writes them, since it checks
+    // membership, friendships, blocks and the word filter.
+    match /groups/{groupId} {
+      allow read, write: if false;
+    }
+    match /groupPosts/{postId} {
+      allow read, write: if false;
+    }
+    match /groupReports/{reportId} {
+      allow read, write: if false;
+    }
+
     // Everything else: deny by default.
     match /{document=**} {
       allow read, write: if false;

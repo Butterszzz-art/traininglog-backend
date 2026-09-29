@@ -17,6 +17,7 @@ const fs = require('fs');
 const path = require('path');
 const { createModerationNotifier } = require('./src/moderationEmail');
 const { createFriendsRouter, deleteFriendships } = require('./src/routes/friends');
+const { createGroupsRouter, removeUserFromGroups } = require('./src/routes/groups');
 const { auth: fbAuth, db, FieldValue, firebaseEnabled, projectId: firebaseProjectId, initError: firebaseInitError } = require('./firebase');
 const { berekenClient } = require('./src/intakeCalculations');
 const { compactWorkout, readStoredWorkout } = require('./workoutFormat');
@@ -613,6 +614,7 @@ async function deleteFirestoreAccount(uid, username) {
   await db.collection('usernames').doc(String(username).toLowerCase()).delete();
   await deleteProfile(db, username);
   await deleteFriendships(db, username);
+  await removeUserFromGroups(db, username);
   forgetCachedUid(username);
 }
 
@@ -4057,6 +4059,30 @@ const friendsWriteLimiter = rateLimit({
 });
 app.use('/api/friends', authenticateToken, friendsLimiter, friendsWriteLimiter, createFriendsRouter({
   db, FieldValue, firebaseEnabled, sendError, sendSuccess,
+}));
+// Community groups (members, posts, shared programs, reports) — see
+// src/routes/groups.js. Reads are polled when a group is open, so only
+// writes count against the tighter limit.
+const groupsLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: { code: 'groups.rate_limited', message: 'Too many requests. Try again shortly.' } }
+});
+const groupsWriteLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: req => req.method === 'GET',
+  message: { success: false, error: { code: 'groups.rate_limited', message: 'You’re posting too fast. Try again shortly.' } }
+});
+app.use('/api/groups', authenticateToken, groupsLimiter, groupsWriteLimiter, createGroupsRouter({
+  db, FieldValue, firebaseEnabled, sendError, sendSuccess,
+  adminUsernames: (process.env.PROFILE_ADMINS || '').split(','),
+  objectionableTerms: OBJECTIONABLE_TERMS,
+  notifyModerators,
 }));
 app.use('/', leaderboardRoute);
 
