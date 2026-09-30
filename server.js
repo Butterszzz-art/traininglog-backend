@@ -21,7 +21,6 @@ const { createGroupsRouter, removeUserFromGroups } = require('./src/routes/group
 const { createFeedRouter, deleteFeedPosts } = require('./src/routes/feed');
 const { createSharesRouter, deleteShares } = require('./src/routes/shares');
 const { createNotificationsRouter, notifyVolumePasses, deleteNotifications } = require('./src/routes/notifications');
-const { createExerciseBoardRouter, recordExerciseBests, deleteExerciseBests } = require('./src/routes/exerciseBoard');
 const { createSyncRouter } = require('./src/routes/sync');
 const { FieldPath } = require('firebase-admin/firestore');
 const { createExerciseBoardRouter, recordExerciseBests, forgetExerciseSession, deleteExerciseBests } = require('./src/routes/exerciseBoard');
@@ -4194,7 +4193,7 @@ app.use('/api/leaderboard/exercises', authenticateToken, socialLimiter, createEx
 // leaderboard moves) — see src/routes/notifications.js. The app polls GET.
 app.use('/api/notifications', authenticateToken, socialLimiter, socialWriteLimiter, createNotificationsRouter({
   db, firebaseEnabled, sendError, sendSuccess,
-
+}));
 
 // Cloud sync for on-device data (see src/routes/sync.js). Generous limits:
 // a first sync on a phone with years of logs pushes a few hundred batches.
