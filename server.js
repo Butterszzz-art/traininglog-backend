@@ -214,6 +214,23 @@ function authenticateToken(req, res, next) {
   });
 }
 
+// History GETs take ?username= for backwards compatibility, but only ever
+// return the signed-in user's own data. Omitted -> the caller's own username;
+// someone else's -> 403 (sent here, returns null).
+function ownUsername(req, res) {
+  const own = req.user?.username || '';
+  const requested = typeof req.query.username === 'string' ? req.query.username.trim() : '';
+  if (requested && requested.toLowerCase() !== own.toLowerCase()) {
+    sendError(res, 403, 'auth.forbidden', 'You can only read your own data.');
+    return null;
+  }
+  if (!own) {
+    sendError(res, 403, 'auth.forbidden', 'Account has no username.');
+    return null;
+  }
+  return own;
+}
+
 // ── Stripe (requires STRIPE_SECRET_KEY) ────────────────────────────────────────
 // Initialized here, above CORS/body-parsing, because the webhook route below
 // needs `stripe`/`stripeEnabled` and must itself be registered before the
@@ -520,7 +537,8 @@ app.post('/api/stripe/create-checkout-session', authenticateToken, async (req, r
 
 app.get('/api/stripe/portal', authenticateToken, async (req, res) => {
   if (!stripeEnabled) return res.status(503).json({ error: 'Stripe not configured' });
-  const username = req.query.username;
+  // Always the caller's own portal — never one named in ?username=.
+  const username = req.user?.username;
   if (!username) return res.status(400).json({ error: 'username required' });
 
   try {
@@ -737,8 +755,8 @@ app.get('/api/referral/validate', async (req, res) => {
   } catch { return res.json({ valid: false }); }
 });
 
-app.get('/api/referral/stats', async (req, res) => {
-  const username = req.query.username;
+app.get('/api/referral/stats', authenticateToken, async (req, res) => {
+  const username = req.user?.username;
   if (!username) return res.json({ referralCode: '', referralCredits: 0, referralCount: 0 });
   try {
     const uid = await resolveFirestoreUid(username);
@@ -1441,8 +1459,8 @@ app.post('/dailylogs', authenticateToken, async (req, res) => {
 // GET /dailylogs — fetch daily logs for a user
 app.get('/dailylogs', authenticateToken, async (req, res) => {
   try {
-    const username = typeof req.query.username === 'string' ? req.query.username.trim() : '';
-    if (!username) return sendError(res, 422, 'dailylogs.missing_username', 'username query param is required.');
+    const username = ownUsername(req, res);
+    if (!username) return;
 
     const uid = await resolveFirestoreUid(username);
     if (uid) {
@@ -1683,8 +1701,8 @@ app.post('/bodyweight/archive', authenticateToken, async (req, res) => {
 // GET /bodyweight?username= — fetch archived bodyweight snapshots
 app.get('/bodyweight', authenticateToken, async (req, res) => {
   try {
-    const username = typeof req.query.username === 'string' ? req.query.username.trim() : '';
-    if (!username) return sendError(res, 422, 'bodyweight.missing_username', 'username is required.');
+    const username = ownUsername(req, res);
+    if (!username) return;
 
     const uid = await resolveFirestoreUid(username);
     if (uid) {
@@ -1819,8 +1837,8 @@ app.post('/measurements/sync', authenticateToken, async (req, res) => {
 // GET /measurements?username= — fetch synced measurement history
 app.get('/measurements', authenticateToken, async (req, res) => {
   try {
-    const username = typeof req.query.username === 'string' ? req.query.username.trim() : '';
-    if (!username) return sendError(res, 422, 'measurements.missing_username', 'username is required.');
+    const username = ownUsername(req, res);
+    if (!username) return;
 
     const uid = await resolveFirestoreUid(username);
     if (uid) {
@@ -1955,8 +1973,8 @@ app.post('/cardio/sync', authenticateToken, async (req, res) => {
 // GET /cardio?username= — fetch synced cardio history
 app.get('/cardio', authenticateToken, async (req, res) => {
   try {
-    const username = typeof req.query.username === 'string' ? req.query.username.trim() : '';
-    if (!username) return sendError(res, 422, 'cardio.missing_username', 'username is required.');
+    const username = ownUsername(req, res);
+    if (!username) return;
 
     const uid = await resolveFirestoreUid(username);
     if (uid) {
@@ -2085,8 +2103,8 @@ app.post('/crossfit/sync', authenticateToken, async (req, res) => {
 // GET /crossfit?username= — fetch synced CrossFit history
 app.get('/crossfit', authenticateToken, async (req, res) => {
   try {
-    const username = typeof req.query.username === 'string' ? req.query.username.trim() : '';
-    if (!username) return sendError(res, 422, 'crossfit.missing_username', 'username is required.');
+    const username = ownUsername(req, res);
+    if (!username) return;
 
     const uid = await resolveFirestoreUid(username);
     if (uid) {
@@ -3781,8 +3799,8 @@ const MOBILITY_SESSIONS_TABLE  = process.env.AIRTABLE_MOBILITY_SESSIONS_TABLE  |
 // GET /mobility/routines?username=
 app.get('/mobility/routines', authenticateToken, async (req, res) => {
   try {
-    const username = typeof req.query.username === 'string' ? req.query.username.trim() : '';
-    if (!username) return sendError(res, 422, 'mobility.missing_username', 'username is required.');
+    const username = ownUsername(req, res);
+    if (!username) return;
 
     const uid = await resolveFirestoreUid(username);
     if (uid) {
@@ -3918,8 +3936,8 @@ app.delete('/mobility/routines/:id', authenticateToken, async (req, res) => {
 // GET /mobility/sessions?username=
 app.get('/mobility/sessions', authenticateToken, async (req, res) => {
   try {
-    const username = typeof req.query.username === 'string' ? req.query.username.trim() : '';
-    if (!username) return sendError(res, 422, 'mobility.missing_username', 'username is required.');
+    const username = ownUsername(req, res);
+    if (!username) return;
 
     const uid = await resolveFirestoreUid(username);
     if (uid) {

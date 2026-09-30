@@ -32,15 +32,22 @@ service cloud.firestore {
     // users/{uid} and everything under it (workouts/sets, templates,
     // programs, dailyMacros, bodyweightArchives, measurements, cardioLogs,
     // crossfitLogs, dailyMissions, mobilityRoutines, mobilitySessions,
-    // activitySync) — only the account owner may read or write their own data.
+    // activitySync) — only the account owner may read their own data. All
+    // writes go through the server (Admin SDK): users/{uid} carries fields the
+    // server trusts (userPlan, subStatus, totalVolume, referralCredits, ...),
+    // so a client writing it directly could grant itself a paid plan or top
+    // the leaderboard. The app never writes Firestore from the client.
     match /users/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
 
       match /{subcollection}/{docId} {
-        allow read, write: if request.auth != null && request.auth.uid == uid;
+        allow read: if request.auth != null && request.auth.uid == uid;
+        allow write: if false;
 
         match /{nested=**} {
-          allow read, write: if request.auth != null && request.auth.uid == uid;
+          allow read: if request.auth != null && request.auth.uid == uid;
+          allow write: if false;
         }
       }
     }
