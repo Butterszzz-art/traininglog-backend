@@ -172,10 +172,34 @@ function createExerciseBoardRouter({ db, firebaseEnabled, sendError, sendSuccess
   return router;
 }
 
+// Called after a workout is deleted: drops its session and, if it held the
+// all-time best, falls back to the best remaining session.
+async function forgetExerciseSession(db, { username, workoutId }) {
+  const user = profileKey(username);
+  if (!user || !workoutId) return;
+  await Promise.all(Object.keys(LIFTS).map(async lift => {
+    const ref = db.collection('exerciseBests').doc(`${lift}__${user}`);
+    const snap = await ref.get();
+    if (!snap.exists) return;
+    const prev = snap.data();
+    const gone = prev.sessions && prev.sessions[workoutId];
+    if (!gone) return;
+    const sessions = { ...prev.sessions };
+    delete sessions[workoutId];
+    const remaining = Object.values(sessions);
+    if (!remaining.length) { await ref.delete(); return; }
+    const wasBest = prev.best && prev.best.e1rm === gone.e1rm && prev.best.date === gone.date;
+    const best = wasBest
+      ? remaining.reduce((top, s) => (s.e1rm > top.e1rm ? s : top))
+      : prev.best;
+    await ref.set({ ...prev, sessions, best, bestE1rm: best.e1rm });
+  }));
+}
+
 async function deleteExerciseBests(db, username) {
   const user = profileKey(username);
   if (!user) return;
   await Promise.all(Object.keys(LIFTS).map(lift => db.collection('exerciseBests').doc(`${lift}__${user}`).delete()));
 }
 
-module.exports = { createExerciseBoardRouter, recordExerciseBests, deleteExerciseBests, bestSetsByLift, bestInRange, liftFor, LIFTS };
+module.exports = { createExerciseBoardRouter, recordExerciseBests, forgetExerciseSession, deleteExerciseBests, bestSetsByLift, bestInRange, liftFor, LIFTS };
