@@ -68,6 +68,8 @@ function query(coll, filters = [], order = null, lim = Infinity, after = null) {
 }
 const db = {
   collection: name => query(name),
+  getAll: (...refs) => Promise.all(refs.map(r => r.get())),
+  batch: () => { const ops = []; return { set: (r, d, o) => ops.push(() => r.set(d, o)), update: (r, d) => ops.push(() => r.update(d)), commit: async () => { for (const op of ops) await op(); } }; },
   runTransaction: async fn => fn({
     get: r => r.get(), update: (r, d) => r.update(d), delete: r => r.delete(),
   }),

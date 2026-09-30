@@ -17,6 +17,14 @@
       ]
     },
     {
+      "collectionGroup": "notifications",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "to", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "exerciseBests",
       "queryScope": "COLLECTION",
       "fields": [
@@ -26,6 +34,11 @@
     }
   ],
   "fieldOverrides": [
+    {
+      "collectionGroup": "notifications",
+      "fieldPath": "data",
+      "indexes": []
+    },
     {
       "collectionGroup": "shares",
       "fieldPath": "data",

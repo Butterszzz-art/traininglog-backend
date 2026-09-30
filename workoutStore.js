@@ -65,17 +65,21 @@ function computeSessionVolume(workout) {
   return pairs.reduce((total, [w, r]) => total + num(w) * num(r), 0);
 }
 
+// Resolves with the owner's { prevTotal, nextTotal } volume, which the
+// leaderboard notifications use to see who was just passed.
 async function saveWorkoutWithTotals({ db, FieldValue, uid, docRef, data, merge = false }) {
   const userRef = db.collection('users').doc(uid);
-  await db.runTransaction(async tx => {
-    const prev = await tx.get(docRef);
+  return db.runTransaction(async tx => {
+    const [prev, user] = await Promise.all([tx.get(docRef), tx.get(userRef)]);
     const prevVolume = prev.exists ? (Number(prev.get('sessionVolume')) || 0) : 0;
     const nextVolume = Number(data.sessionVolume) || 0;
+    const prevTotal = user.exists ? (Number(user.get('totalVolume')) || 0) : 0;
     tx.set(docRef, data, merge ? { merge: true } : undefined);
     tx.set(userRef, {
       totalVolume: FieldValue.increment(nextVolume - prevVolume),
       workoutCount: FieldValue.increment(prev.exists ? 0 : 1)
     }, { merge: true });
+    return { prevTotal, nextTotal: prevTotal + nextVolume - prevVolume };
   });
 }
 

@@ -26,6 +26,8 @@ function docRef(col, id) {
   return ref;
 }
 const db = {
+  getAll: (...refs) => Promise.all(refs.map(r => r.get())),
+  batch: () => { const ops = []; return { set: (r, d, o) => ops.push(() => r.set(d, o)), commit: async () => { for (const op of ops) await op(); } }; },
   collection: col => ({
     doc: id => docRef(col, id),
     where: (field, op, value) => ({
