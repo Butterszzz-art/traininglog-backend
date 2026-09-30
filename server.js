@@ -20,7 +20,9 @@ const { createFriendsRouter, deleteFriendships } = require('./src/routes/friends
 const { createGroupsRouter, removeUserFromGroups } = require('./src/routes/groups');
 const { createFeedRouter, deleteFeedPosts } = require('./src/routes/feed');
 const { createSharesRouter, deleteShares } = require('./src/routes/shares');
-const { createExerciseBoardRouter, recordExerciseBests, deleteExerciseBests } = require('./src/routes/exerciseBoard');
+const { createSyncRouter } = require('./src/routes/sync');
+const { FieldPath } = require('firebase-admin/firestore');
+const { createExerciseBoardRouter, recordExerciseBests, forgetExerciseSession, deleteExerciseBests } = require('./src/routes/exerciseBoard');
 const { pairId: friendPairId } = require('./src/routes/friends');
 const { isBlockedEitherWay, profileKey } = require('./src/routes/profiles');
 const { auth: fbAuth, db, FieldValue, firebaseEnabled, projectId: firebaseProjectId, initError: firebaseInitError } = require('./firebase');
@@ -1200,7 +1202,12 @@ app.get('/workouts', authenticateToken, async (req, res) => {
 
     const uid = await resolveFirestoreUid(username);
     if (uid) {
-      const { docs, nextCursor } = await queryHistoryPage(db.collection(`users/${uid}/workouts`), 'date', req.query);
+      // ?since=YYYY-MM-DD limits to workouts on or after that day — the app's
+      // sync only needs the recent window it keeps on the device.
+      const since = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.since || '')) ? String(req.query.since) : null;
+      let col = db.collection(`users/${uid}/workouts`);
+      if (since) col = col.where('date', '>=', since);
+      const { docs, nextCursor } = await queryHistoryPage(col, 'date', req.query);
       const items = docs.map(d => ({
         id: d.id, username, date: d.get('date'), title: d.get('title'),
         workout: readStoredWorkout(d.get('workout'), d.get('workoutFormat')) ?? null
@@ -1233,6 +1240,45 @@ app.get('/workouts', authenticateToken, async (req, res) => {
     });
 
     return sendSuccess(res, 200, { items });
+  } catch (err) {
+    return sendError(res, 500, 'workouts.server_error', String(err));
+  }
+});
+
+// DELETE /workouts/:id — removes one of the caller's own workouts, so a
+// workout deleted on one device disappears from the others (and from the
+// leaderboard totals and exercise board).
+app.delete('/workouts/:id', authenticateToken, async (req, res) => {
+  try {
+    const username = req.user.username;
+    const id = safeDocId(req.params.id);
+    if (!id) return sendError(res, 422, 'workouts.invalid_id', 'Invalid workout id.');
+
+    const uid = await resolveFirestoreUid(username);
+    if (!uid) return sendError(res, 409, 'workouts.not_migrated', 'This account can’t delete synced workouts.');
+
+    const docRef = db.collection(`users/${uid}/workouts`).doc(id);
+    const userRef = db.collection('users').doc(uid);
+    let existed = false;
+    await db.runTransaction(async tx => {
+      const prev = await tx.get(docRef);
+      existed = prev.exists;
+      if (!prev.exists) return;
+      tx.delete(docRef);
+      tx.set(userRef, {
+        totalVolume: FieldValue.increment(-(Number(prev.get('sessionVolume')) || 0)),
+        workoutCount: FieldValue.increment(-1)
+      }, { merge: true });
+    });
+    if (existed) {
+      try {
+        await forgetExerciseSession(db, { username, workoutId: id });
+      } catch (err) {
+        console.error('[exercise board] forgetting session failed:', err.message);
+      }
+    }
+    // Deleting something already gone is a success: the device wanted it gone.
+    return sendSuccess(res, 200, { deleted: existed });
   } catch (err) {
     return sendError(res, 500, 'workouts.server_error', String(err));
   }
@@ -4139,6 +4185,22 @@ app.use('/api/shares', authenticateToken, socialLimiter, socialWriteLimiter, cre
 }));
 app.use('/api/leaderboard/exercises', authenticateToken, socialLimiter, createExerciseBoardRouter({
   db, firebaseEnabled, sendError, sendSuccess,
+}));
+
+// Cloud sync for on-device data (see src/routes/sync.js). Generous limits:
+// a first sync on a phone with years of logs pushes a few hundred batches.
+const syncLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: { code: 'sync.rate_limited', message: 'Too many sync requests. Try again shortly.' } }
+});
+app.use('/api/sync', authenticateToken, syncLimiter, createSyncRouter({
+  db, firebaseEnabled, sendError, sendSuccess,
+  resolveUid: resolveFirestoreUid,
+  documentId: FieldPath.documentId(),
+  enabled: () => process.env.CLOUD_SYNC_ENABLED !== 'false',
 }));
 app.use('/', leaderboardRoute);
 
