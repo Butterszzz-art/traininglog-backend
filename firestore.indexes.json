@@ -27,6 +27,16 @@
   ],
   "fieldOverrides": [
     {
+      "collectionGroup": "syncItems",
+      "fieldPath": "data",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "photos",
+      "fieldPath": "data",
+      "indexes": []
+    },
+    {
       "collectionGroup": "shares",
       "fieldPath": "data",
       "indexes": []

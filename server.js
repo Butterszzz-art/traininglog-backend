@@ -21,6 +21,7 @@ const { createGroupsRouter, removeUserFromGroups } = require('./src/routes/group
 const { createFeedRouter, deleteFeedPosts } = require('./src/routes/feed');
 const { createSharesRouter, deleteShares } = require('./src/routes/shares');
 const { createSyncRouter } = require('./src/routes/sync');
+const { createPhotosRouter } = require('./src/routes/photos');
 const { FieldPath } = require('firebase-admin/firestore');
 const { createExerciseBoardRouter, recordExerciseBests, forgetExerciseSession, deleteExerciseBests } = require('./src/routes/exerciseBoard');
 const { pairId: friendPairId } = require('./src/routes/friends');
@@ -4202,6 +4203,19 @@ app.use('/api/sync', authenticateToken, syncLimiter, createSyncRouter({
   documentId: FieldPath.documentId(),
   enabled: () => process.env.CLOUD_SYNC_ENABLED !== 'false',
 }));
+// Progress photos (see src/routes/photos.js).
+const photosLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: { code: 'photos.rate_limited', message: 'Too many photo requests. Try again shortly.' } }
+});
+app.use('/api/photos', authenticateToken, photosLimiter, createPhotosRouter({
+  db, FieldValue, firebaseEnabled, sendError, sendSuccess,
+  resolveUid: resolveFirestoreUid,
+}));
+
 app.use('/', leaderboardRoute);
 
 // ── Exercise library ─────────────────────────────────────────────────────────
