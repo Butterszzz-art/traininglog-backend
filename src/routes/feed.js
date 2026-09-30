@@ -15,6 +15,7 @@
 const express = require('express');
 const { profileKey, cleanText, containsObjectionable, blockedBy } = require('./profiles');
 const { cleanPostText } = require('./groups');
+const { notify } = require('./notifications');
 
 const POST_TYPES = new Set(['update', 'pr', 'workout']);
 const REPORT_REASONS = new Set(['inappropriate', 'harassment', 'spam', 'other']);
@@ -137,6 +138,13 @@ function createFeedRouter({
       };
       if (workout) data.workout = workout;
       const ref = await posts().add(data);
+      // Friends hear about it; repeats from the same friend collapse into one row.
+      await notify(db, {
+        to: await friendKeys(req.me), type: 'feed_post', actor: req.me, actorName: req.user.username,
+        text: type === 'workout' ? `logged a workout: ${workout.title}` : type === 'pr' ? 'posted a new PR' : 'posted an update',
+        data: { postId: ref.id, kind: type },
+        collapseKey: `feed_post__${req.me}`,
+      });
       return sendSuccess(res, 201, { post: shape({ id: ref.id, data: () => data }, req.me, req.isAdmin) });
     } catch (err) {
       console.error('POST /api/feed failed:', err);

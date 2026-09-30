@@ -15,6 +15,7 @@
 // `users`, which needs no composite index.
 const express = require('express');
 const { profileKey, isBlockedEitherWay } = require('./profiles');
+const { notify } = require('./notifications');
 
 const MAX_FRIENDS = 500;
 const MAX_PENDING_OUT = 50;
@@ -107,6 +108,7 @@ function createFriendsRouter({ db, FieldValue, firebaseEnabled, sendError, sendS
       }
       if (existing?.status === 'pending' && existing.requester === target) {
         await ref.set({ status: 'accepted', respondedAt: FieldValue.serverTimestamp() }, { merge: true });
+        await notify(db, { to: target, type: 'friend_accepted', actor: me, actorName: req.user.username, text: 'accepted your friend request' });
         return sendSuccess(res, 200, { status: 'accepted', username: account.username });
       }
 
@@ -127,6 +129,7 @@ function createFriendsRouter({ db, FieldValue, firebaseEnabled, sendError, sendS
         createdAt: FieldValue.serverTimestamp(),
         respondedAt: null,
       });
+      await notify(db, { to: target, type: 'friend_request', actor: me, actorName: req.user.username, text: 'sent you a friend request' });
       return sendSuccess(res, 201, { status: 'pending', username: account.username });
     } catch (err) {
       console.error('POST /api/friends/requests failed:', err);
@@ -150,6 +153,7 @@ function createFriendsRouter({ db, FieldValue, firebaseEnabled, sendError, sendS
       const { ref, data } = await pendingTo(me, other);
       if (!data || data.recipient !== me) return sendError(res, 404, 'friends.no_request', 'That friend request no longer exists.');
       await ref.set({ status: 'accepted', respondedAt: FieldValue.serverTimestamp() }, { merge: true });
+      await notify(db, { to: other, type: 'friend_accepted', actor: me, actorName: req.user.username, text: 'accepted your friend request' });
       return sendSuccess(res, 200, { status: 'accepted', username: data.names?.[other] || other });
     } catch (err) {
       console.error('POST /api/friends/requests/:username/accept failed:', err);

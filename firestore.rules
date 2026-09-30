@@ -123,6 +123,14 @@ service cloud.firestore {
     match /exerciseBests/{bestId} {
       allow read, write: if false;
     }
+    // Notifications and their per-user settings — server-only, see
+    // src/routes/notifications.js.
+    match /notifications/{notificationId} {
+      allow read, write: if false;
+    }
+    match /notificationPrefs/{username} {
+      allow read, write: if false;
+    }
 
     // Everything else: deny by default.
     match /{document=**} {

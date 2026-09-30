@@ -12,6 +12,7 @@
 const express = require('express');
 const { profileKey, cleanText, containsObjectionable, isBlockedEitherWay } = require('./profiles');
 const { pairId } = require('./friends');
+const { notify } = require('./notifications');
 
 const TYPES = new Set(['program', 'template']);
 const DATA_MAX_BYTES = 60 * 1024;
@@ -102,6 +103,10 @@ function createSharesRouter({ db, firebaseEnabled, sendError, sendSuccess, objec
         createdAt: new Date(),
       };
       const ref = await shares().add(doc);
+      await notify(db, {
+        to, type: 'share_received', actor: me, actorName: req.user.username,
+        text: `sent you a ${type}: ${name}`, data: { shareId: ref.id, kind: type, name },
+      });
       return sendSuccess(res, 201, { share: shapeOut({ id: ref.id, data: () => doc }) });
     } catch (err) {
       console.error('POST /api/shares failed:', err);

@@ -11,6 +11,7 @@
 // Ranking needs the composite index (lift asc, bestE1rm desc).
 const express = require('express');
 const { profileKey, blockedBy } = require('./profiles');
+const { notify } = require('./notifications');
 
 // Canonical lifts and the exercise names that count for them (lowercase,
 // hyphens → spaces, single spaces).
@@ -30,6 +31,7 @@ const SESSIONS_KEPT = 40;
 const RANGE_DAYS = { weekly: 7, monthly: 30 };
 const TOP_N = 50;
 const SCAN = 200;
+const PASSED_NOTIFY_MAX = 20;
 
 function liftFor(name) {
   const key = String(name || '').toLowerCase().replace(/[-_]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -98,7 +100,30 @@ async function recordExerciseBests(db, { username, workoutId, date, workout }) {
       best: newBest,
       sessions: Object.fromEntries(kept),
     });
+    if (newBest !== prevBest) await notifyPassed(db, { lift, user, username, from: prevBest ? prevBest.e1rm : 0, to: newBest.e1rm });
   }));
+}
+
+// A new all-time best that jumps over other lifters tells each of them (the
+// closest PASSED_NOTIFY_MAX). Moving off a tie counts; landing on one doesn't.
+async function notifyPassed(db, { lift, user, username, from, to }) {
+  try {
+    const snap = await db.collection('exerciseBests')
+      .where('lift', '==', lift)
+      .where('bestE1rm', '>=', from)
+      .where('bestE1rm', '<', to)
+      .orderBy('bestE1rm', 'desc')
+      .limit(PASSED_NOTIFY_MAX + 1)
+      .get();
+    const passed = snap.docs.map(d => d.data()).filter(d => d.user !== user).map(d => d.user);
+    await notify(db, {
+      to: passed.slice(0, PASSED_NOTIFY_MAX), type: 'exercise_passed', actor: user, actorName: username,
+      text: `passed you on the ${LIFTS[lift].label} board`, data: { lift, label: LIFTS[lift].label },
+      collapseKey: `exercise_passed__${lift}__${user}`,
+    });
+  } catch (err) {
+    console.error('[exercise board] pass notifications failed:', err.message);
+  }
 }
 
 function bestInRange(data, range, now = new Date()) {

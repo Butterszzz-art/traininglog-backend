@@ -20,6 +20,8 @@ const { createFriendsRouter, deleteFriendships } = require('./src/routes/friends
 const { createGroupsRouter, removeUserFromGroups } = require('./src/routes/groups');
 const { createFeedRouter, deleteFeedPosts } = require('./src/routes/feed');
 const { createSharesRouter, deleteShares } = require('./src/routes/shares');
+const { createNotificationsRouter, notifyVolumePasses, deleteNotifications } = require('./src/routes/notifications');
+const { createExerciseBoardRouter, recordExerciseBests, deleteExerciseBests } = require('./src/routes/exerciseBoard');
 const { createSyncRouter } = require('./src/routes/sync');
 const { FieldPath } = require('firebase-admin/firestore');
 const { createExerciseBoardRouter, recordExerciseBests, forgetExerciseSession, deleteExerciseBests } = require('./src/routes/exerciseBoard');
@@ -625,6 +627,7 @@ async function deleteFirestoreAccount(uid, username) {
   await deleteFeedPosts(db, username);
   await deleteShares(db, username);
   await deleteExerciseBests(db, username);
+  await deleteNotifications(db, username);
   forgetCachedUid(username);
 }
 
@@ -1149,7 +1152,7 @@ app.post('/workouts', authenticateToken, async (req, res) => {
       const workoutsCol = db.collection(`users/${uid}/workouts`);
       const clientId = safeDocId(workout.id);
       const docRef = clientId ? workoutsCol.doc(clientId) : workoutsCol.doc();
-      await saveWorkoutWithTotals({
+      const totals = await saveWorkoutWithTotals({
         db, FieldValue, uid, docRef,
         data: { date: String(date), title: String(title || 'Workout'), sessionVolume, ...storedWorkoutFields(workout) }
       });
@@ -1159,6 +1162,7 @@ app.post('/workouts', authenticateToken, async (req, res) => {
       } catch (err) {
         console.error('[exercise board] recording bests failed:', err.message);
       }
+      await notifyVolumePasses(db, { uid, username, ...totals });
       return sendSuccess(res, 200, { recordId: docRef.id });
     }
 
@@ -4186,6 +4190,11 @@ app.use('/api/shares', authenticateToken, socialLimiter, socialWriteLimiter, cre
 app.use('/api/leaderboard/exercises', authenticateToken, socialLimiter, createExerciseBoardRouter({
   db, firebaseEnabled, sendError, sendSuccess,
 }));
+// In-app notifications (friend requests, shares, groups, friends' posts,
+// leaderboard moves) — see src/routes/notifications.js. The app polls GET.
+app.use('/api/notifications', authenticateToken, socialLimiter, socialWriteLimiter, createNotificationsRouter({
+  db, firebaseEnabled, sendError, sendSuccess,
+
 
 // Cloud sync for on-device data (see src/routes/sync.js). Generous limits:
 // a first sync on a phone with years of logs pushes a few hundred batches.

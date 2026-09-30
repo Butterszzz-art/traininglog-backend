@@ -23,6 +23,7 @@
 const express = require('express');
 const { profileKey, cleanText, containsObjectionable, blockedBy, isBlockedEitherWay } = require('./profiles');
 const { pairId } = require('./friends');
+const { notify } = require('./notifications');
 
 const NAME_MAX = 60;
 const GOAL_MAX = 80;
@@ -222,6 +223,10 @@ function createGroupsRouter({
       };
       const ref = await groups().add(data);
       const now = new Date();
+      await notify(db, {
+        to: Object.keys(invitees.names), type: 'group_added', actor: me, actorName: req.user.username,
+        text: `added you to ${name}`, data: { groupId: ref.id, name },
+      });
       return sendSuccess(res, 201, { group: shapeGroup(ref.id, { ...data, createdAt: now, lastActivityAt: now }, me) });
     } catch (err) {
       console.error('POST /api/groups failed:', err);
@@ -316,6 +321,10 @@ function createGroupsRouter({
         members: FieldValue.arrayUnion(target),
         [`memberNames.${target}`]: display,
       });
+      await notify(db, {
+        to: target, type: 'group_added', actor: me, actorName: req.user.username,
+        text: `added you to ${group.data.name || 'a group'}`, data: { groupId: group.ref.id, name: group.data.name || '' },
+      });
       return sendSuccess(res, 200, { username: display });
     } catch (err) {
       console.error('POST /api/groups/:id/invite failed:', err);
@@ -394,6 +403,11 @@ function createGroupsRouter({
       const ref = await posts().add(data);
       const recent = [now.toISOString(), ...(group.data.recentPostTimes || [])].slice(0, RECENT_TIMES_MAX);
       await group.ref.update({ recentPostTimes: recent, lastActivityAt: now });
+      await notify(db, {
+        to: group.data.members || [], type: 'group_post', actor: me, actorName: req.user.username,
+        text: `posted in ${group.data.name || 'your group'}`, data: { groupId: group.ref.id, name: group.data.name || '' },
+        collapseKey: `group_post__${group.ref.id}`,
+      });
       return sendSuccess(res, 201, { post: shapePost(ref.id, data, me, group.data, req.isAdmin) });
     } catch (err) {
       console.error('POST /api/groups/:id/posts failed:', err);
