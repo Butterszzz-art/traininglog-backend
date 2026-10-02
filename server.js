@@ -31,6 +31,10 @@ const { berekenClient } = require('./src/intakeCalculations');
 const { compactWorkout, readStoredWorkout } = require('./workoutFormat');
 const { computeSessionVolume, safeDocId, naturalDocId, syncEntryDocId, saveWorkoutWithTotals, batchSetAll, queryHistoryPage } = require('./workoutStore');
 
+// The "Last updated" date of terms.html / privacy.html in the app repo. Bump it
+// whenever either changes so users/{uid}.consents shows which version was agreed.
+const TERMS_VERSION = '2026-10-02';
+
 const app = express();
 
 // Trust exactly one reverse-proxy hop. Required now that this runs as a
@@ -57,6 +61,7 @@ if (missing.length) {
 }
 // Deliberately not a hard throw here (it used to be): this file is now also
 // require()'d by functions-entry.js, including during `firebase deploy`'s
+
 // local "discovery" pass, which runs this module without the real Secret
 // Manager value for JWT_SECRET — a throw at load time crashes that pass even
 // though the actual deployed function has JWT_SECRET set correctly. All real
@@ -488,8 +493,14 @@ app.get('/api/user/plan', authenticateToken, async (req, res) => {
 
 app.post('/api/stripe/create-checkout-session', authenticateToken, async (req, res) => {
   if (!stripeEnabled) return res.status(503).json({ error: 'Stripe not configured' });
-  const { username, plan, billing } = req.body;
+  const { username, plan, billing, withdrawalWaiver } = req.body;
   if (!username || !plan) return res.status(400).json({ error: 'username and plan required' });
+  // EU/UK consumers have a 14-day right of withdrawal. The checkout sheet asks
+  // them to request that the paid service start within it (terms.html#refunds);
+  // without that request we'd owe a full refund for any days already used.
+  if (withdrawalWaiver !== true) {
+    return res.status(400).json({ error: 'Please confirm you want your subscription to start straight away.' });
+  }
 
   const priceMap = {
     'pro-monthly': process.env.STRIPE_PRO_MONTHLY_PRICE_ID,
@@ -522,7 +533,15 @@ app.post('/api/stripe/create-checkout-session', authenticateToken, async (req, r
       line_items: [{ price: priceId, quantity: 1 }],
       success_url: (process.env.APP_URL || 'https://pocketcoachcoms.org') + '/payment-success.html?plan=' + plan,
       cancel_url: (process.env.APP_URL || 'https://pocketcoachcoms.org') + '/#pricing',
-      subscription_data: { trial_period_days: trialDays, metadata: { username, plan, billing: billing || 'monthly' } },
+      subscription_data: {
+        trial_period_days: trialDays,
+        metadata: {
+          username, plan, billing: billing || 'monthly',
+          // Record of the withdrawal-period request, kept with the subscription.
+          withdrawalWaiverAcceptedAt: new Date().toISOString(),
+          termsVersion: TERMS_VERSION
+        }
+      },
       metadata: { username, plan, billing: billing || 'monthly' },
     };
     if (stripeCustomerId) sessionParams.customer = stripeCustomerId;
@@ -1013,10 +1032,17 @@ app.get('/auth/username-available', usernameCheckLimiter, async (req, res) => {
   }
 });
 
-// POST /auth/signup-complete — body { username, referredBy? }, Bearer = fresh
+// POST /auth/signup-complete — body { username, referredBy?, consents },
+// Bearer = fresh
 // Firebase ID token. Runs after createUserWithEmailAndPassword:
 //  1. claims usernames/{username} + creates users/{uid} in one transaction
 //  2. sets custom claims (username, tier: 'free', isCoach: false)
+//
+// `consents` must be { ageConfirmed: true, healthData: true } — the two
+// unticked boxes on the signup form. The Terms require users to be 16+, and
+// GDPR Art. 9 needs an explicit, affirmative opt-in before we store health
+// data, so signup is refused without both. What was agreed, and when, is kept
+// on users/{uid}.consents as the record of that consent.
 //
 // The Airtable legacy-reclaim path (matching a username against an old
 // pre-Firebase Users row, verifying its password, migrating its data) was
@@ -1043,6 +1069,14 @@ app.post('/auth/signup-complete', loginLimiter, async (req, res) => {
   const username = typeof req.body?.username === 'string' ? req.body.username.trim() : '';
   const referredByCode = typeof req.body?.referredBy === 'string' ? req.body.referredBy.trim() : '';
   if (rejectUsername(res, username)) return;
+  const consents = req.body?.consents || {};
+  if (consents.ageConfirmed !== true) {
+    return sendError(res, 400, 'auth.age_not_confirmed', 'You must confirm you are 16 or older.');
+  }
+  if (consents.healthData !== true) {
+    return sendError(res, 400, 'auth.health_consent_required',
+      'Consent to store your health and fitness data is required to use Pocket Coach.');
+  }
 
   try {
     const usernameRef = db.collection('usernames').doc(username.toLowerCase());
@@ -1088,7 +1122,13 @@ app.post('/auth/signup-complete', loginLimiter, async (req, res) => {
         referralCredits: 0,
         referredByCode: referredByCode || null,
         referredByUid,
-        isCoach: false
+        isCoach: false,
+        consents: {
+          ageConfirmed: true,
+          healthData: true,
+          termsVersion: TERMS_VERSION,
+          acceptedAt: FieldValue.serverTimestamp()
+        }
       }, { merge: true });
     });
 

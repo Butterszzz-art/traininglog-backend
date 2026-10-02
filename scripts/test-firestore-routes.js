@@ -130,6 +130,12 @@ require.cache[require.resolve(firebasePath)] = {
     // applyEntitlement() and DELETE /account can run end-to-end here too,
     // not just the Firestore-only routes the rest of this harness covers.
     auth: {
+      // Only the signup-consent tests use a Firebase ID token; every other
+      // token is rejected here exactly as before (no verifyIdToken stub).
+      verifyIdToken: async (t) => {
+        if (t === 'fb-signup-token') return { uid: 'uidSignup1', email: 'new@example.com', email_verified: false };
+        throw new Error('not a firebase token');
+      },
       getUser: async () => ({ customClaims: {} }),
       setCustomUserClaims: async () => {},
       deleteUser: async () => {}
@@ -546,6 +552,19 @@ setTimeout(() => {
     // Warm the cache for the deletion fixture so the test below proves
     // deletion drops it (not just that it was never cached).
     await req('POST', '/macrotargets', legacyTokenDelete, { calories: 2000 });
+
+    // ── POST /auth/signup-complete: 16+ and health-data consent are required ──
+    r = await req('POST', '/auth/signup-complete', 'fb-signup-token', { username: 'newlifter' });
+    check('signup-complete without consents rejected (age)', r.status === 400 && r.body?.error?.code === 'auth.age_not_confirmed');
+    r = await req('POST', '/auth/signup-complete', 'fb-signup-token', { username: 'newlifter', consents: { ageConfirmed: true } });
+    check('signup-complete without health consent rejected', r.status === 400 && r.body?.error?.code === 'auth.health_consent_required');
+    check('rejected signup claimed no username', !store['usernames']['newlifter'] && !store['users']['uidSignup1']);
+    r = await req('POST', '/auth/signup-complete', 'fb-signup-token', { username: 'newlifter', consents: { ageConfirmed: true, healthData: true } });
+    check('signup-complete with both consents 201', r.status === 201);
+    check('signup-complete stored the consent record',
+      store['users']['uidSignup1']?.consents?.ageConfirmed === true
+      && store['users']['uidSignup1']?.consents?.healthData === true
+      && typeof store['users']['uidSignup1']?.consents?.termsVersion === 'string');
 
     // ── DELETE /account (migrated user, Apple App Store Guideline 5.1.1(v)) ──
     // Uses a dedicated fixture (deleteuser/uidDelete789) rather than
