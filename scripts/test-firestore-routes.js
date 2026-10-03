@@ -383,6 +383,23 @@ setTimeout(() => {
     r = await req('POST', '/api/coach/clients/accept', freeToken, { coachUsername: 'nobody' });
     check('POST /api/coach/clients/accept stays open to free athletes (not 403)', r.status !== 403);
 
+    // Athlete declines a pending invite, then accepts a fresh one and leaves.
+    r = await req('POST', '/api/coach/clients/invite', legacyTokenMigrated, { clientUsername: 'clientuser' });
+    check('POST /api/coach/clients/invite 201', r.status === 201);
+    r = await req('DELETE', '/api/client/coaches/uidABC123', freeToken);
+    check('DELETE /api/client/coaches/:id declines a pending invite', r.status === 200 && r.body?.declined === true);
+    check('decline removes both sides', !store['users/uidClient456/coachInvites']?.uidABC123 && !store['coaches/uidABC123/clients']?.uidClient456);
+    r = await req('DELETE', '/api/client/coaches/uidABC123', freeToken);
+    check('DELETE /api/client/coaches/:id when not linked 404', r.status === 404 && r.body?.error?.code === 'coach.not_linked');
+    await req('POST', '/api/coach/clients/invite', legacyTokenMigrated, { clientUsername: 'clientuser' });
+    r = await req('POST', '/api/coach/clients/accept', freeToken, { coachUsername: 'migrateduser' });
+    check('athlete accepts the re-invite', r.status === 200 && store['coaches/uidABC123/clients']?.uidClient456?.status === 'active');
+    store['users/uidClient456/coachAssignment'] = { uidABC123: { currentProgram: 'PPL' } };
+    r = await req('DELETE', '/api/client/coaches/uidABC123', freeToken);
+    check('DELETE /api/client/coaches/:id leaves an active coach', r.status === 200 && r.body?.declined === false);
+    check('leaving clears the roster entry, invite and assignment mirror',
+      !store['coaches/uidABC123/clients']?.uidClient456 && !store['users/uidClient456/coachInvites']?.uidABC123 && !store['users/uidClient456/coachAssignment']?.uidABC123);
+
     // ── Workouts ──
     r = await req('POST', '/workouts', legacyTokenMigrated, { date: '2026-07-01', title: 'Push Day', workout: { sets: [{ exerciseName: 'Bench', weight: 80, reps: 5 }] } });
     check('POST /workouts (migrated) 200', r.status === 200);

@@ -21,6 +21,7 @@ const { createGroupsRouter, removeUserFromGroups } = require('./src/routes/group
 const { createFeedRouter, deleteFeedPosts } = require('./src/routes/feed');
 const { createSharesRouter, deleteShares } = require('./src/routes/shares');
 const { createNotificationsRouter, notifyVolumePasses, deleteNotifications } = require('./src/routes/notifications');
+const coachNotifications = require('./src/coachNotifications');
 const { createSyncRouter } = require('./src/routes/sync');
 const { FieldPath } = require('firebase-admin/firestore');
 const { createExerciseBoardRouter, recordExerciseBests, forgetExerciseSession, deleteExerciseBests } = require('./src/routes/exerciseBoard');
@@ -3027,6 +3028,12 @@ async function resolveCallerUid(user) {
   return resolveFirestoreUid(user?.username);
 }
 
+// users/{uid}.username, for notifications on routes that only know the uid.
+async function usernameForUid(uid) {
+  const snap = await db.collection('users').doc(uid).get();
+  return snap.exists ? snap.get('username') || '' : '';
+}
+
 // POST /api/coach/clients/invite — body: { clientUsername }
 // Coach invites an existing athlete account to link as a client.
 app.post('/api/coach/clients/invite', authenticateToken, requireCoachPlan, coachInviteLimiter, async (req, res) => {
@@ -3077,6 +3084,7 @@ app.post('/api/coach/clients/invite', authenticateToken, requireCoachPlan, coach
       invitedAt: now
     });
     await batch.commit();
+    await coachNotifications.notifyCoachInvite(db, { coachUsername: req.user.username, clientUsername });
 
     return sendSuccess(res, 201, {
       client: { id: clientUid, clientId: clientUid, clientName: clientUsername, email: clientEmail, status: 'pending' }
@@ -3122,6 +3130,9 @@ app.post('/api/coach/clients/accept', authenticateToken, coachInviteLimiter, asy
     batch.set(inviteRef, { status: 'active', acceptedAt: now }, { merge: true });
     batch.set(clientDocRef, { status: 'active', acceptedAt: now }, { merge: true });
     await batch.commit();
+    await coachNotifications.coachInviteAccepted(db, {
+      coachUsername: inviteSnap.get('coachUsername') || coachUsername, clientUsername: req.user.username,
+    });
 
     return sendSuccess(res, 200, { coachUsername, status: 'active' });
   } catch (err) {
@@ -3184,10 +3195,51 @@ app.delete('/api/coach/clients/:clientUid', authenticateToken, requireCoachPlan,
     batch.delete(clientDocRef);
     batch.delete(inviteRef);
     await batch.commit();
+    await coachNotifications.coachInviteWithdrawn(db, {
+      coachUsername: req.user.username, clientUsername: existing.get('athleteDisplayName') || await usernameForUid(clientUid),
+    });
 
     return sendSuccess(res, 200, { clientUid, removed: true });
   } catch (err) {
     console.error('DELETE /api/coach/clients/:clientUid failed:', err);
+    return sendError(res, 500, 'coach.server_error', String(err));
+  }
+});
+
+// DELETE /api/client/coaches/:coachUid — the athlete declines a pending
+// invite or leaves a coach they're linked to. The app's Your Coach section
+// has called this since the client-side coaching work, but the route only
+// existed on an unmerged branch, so Decline and Leave failed with a 404.
+// Same path and response as that branch (feat/coaching-readiness), so it
+// can drop its copy when it's rebased.
+app.delete('/api/client/coaches/:coachUid', authenticateToken, async (req, res) => {
+  if (!firebaseEnabled) return sendError(res, 503, 'coach.firebase_disabled', 'Client linking requires a migrated (Firebase) account.');
+  try {
+    const coachUid = String(req.params.coachUid || '').trim();
+    if (!coachUid || coachUid.includes('/')) return sendError(res, 422, 'coach.missing_coach_id', 'coachUid is required.');
+    const clientUid = await resolveCallerUid(req.user);
+    if (!clientUid) {
+      return sendError(res, 409, 'coach.not_migrated', 'Your account needs to complete migration first. Contact support.');
+    }
+    const inviteRef = db.collection(`users/${clientUid}/coachInvites`).doc(coachUid);
+    const invite = await inviteRef.get();
+    if (!invite.exists) return sendError(res, 404, 'coach.not_linked', 'You are not linked to this coach.');
+    const wasPending = invite.get('status') === 'pending';
+
+    // The coach's roster entry (and the notes under it), then the athlete's
+    // own mirrors of the invite and of what the coach assigned.
+    await db.recursiveDelete(db.collection(`coaches/${coachUid}/clients`).doc(clientUid));
+    await inviteRef.delete();
+    await db.collection(`users/${clientUid}/coachAssignment`).doc(coachUid).delete();
+
+    await coachNotifications.coachLeftByClient(db, {
+      coachUsername: invite.get('coachUsername') || await usernameForUid(coachUid),
+      clientUsername: req.user.username,
+      wasPending,
+    });
+    return sendSuccess(res, 200, { coachUid, removed: true, declined: wasPending });
+  } catch (err) {
+    console.error('DELETE /api/client/coaches/:coachUid failed:', err);
     return sendError(res, 500, 'coach.server_error', String(err));
   }
 });
@@ -3240,6 +3292,11 @@ app.patch('/api/coach/clients/:clientUid', authenticateToken, requireCoachPlan, 
       updatedAt: now
     }, { merge: true });
     await batch.commit();
+    if (existing.get('status') === 'active') {
+      await coachNotifications.notifyCoachPlan(db, {
+        coachUsername: req.user.username, clientUsername: existing.get('athleteDisplayName') || await usernameForUid(clientUid), fields,
+      });
+    }
 
     return sendSuccess(res, 200, { clientUid, ...fields });
   } catch (err) {
@@ -3302,6 +3359,9 @@ app.post('/api/coach/clients/:clientUid/notes', authenticateToken, requireCoachP
     batch.set(noteRef, note);
     batch.set(db.collection(`users/${clientUid}/coachNotes`).doc(noteRef.id), note);
     await batch.commit();
+    await coachNotifications.notifyCoachNote(db, {
+      coachUsername: req.user.username, clientUsername: existing.get('athleteDisplayName') || await usernameForUid(clientUid),
+    });
 
     return sendSuccess(res, 201, { noteId: noteRef.id });
   } catch (err) {

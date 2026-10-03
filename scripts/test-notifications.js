@@ -10,6 +10,7 @@ const { createGroupsRouter } = require('../src/routes/groups');
 const { createFeedRouter } = require('../src/routes/feed');
 const { createNotificationsRouter, notify, notifyVolumePasses, deleteNotifications } = require('../src/routes/notifications');
 const { recordExerciseBests } = require('../src/routes/exerciseBoard');
+const coach = require('../src/coachNotifications');
 
 // ── Fake Firestore ───────────────────────────────────────────────────────────
 const TS = { __ts: true };
@@ -180,7 +181,7 @@ const server = app.listen(0, async () => {
 
     console.log('— prefs');
     r = await call('bob', 'GET', '/api/notifications/prefs');
-    check('prefs default on', Object.values(r.body.prefs).every(v => v === true) && Object.keys(r.body.prefs).length === 5, r.body);
+    check('prefs default on', Object.values(r.body.prefs).every(v => v === true) && Object.keys(r.body.prefs).length === 6, r.body);
     r = await call('bob', 'PUT', '/api/notifications/prefs', { groups: false, bogus: false, shares: 'no' });
     check('mute groups only', r.body.prefs.groups === false && r.body.prefs.shares === true && !('bogus' in r.body.prefs), r.body);
     const before = (await inbox('bob')).items.length;
@@ -229,6 +230,39 @@ const server = app.listen(0, async () => {
       && (await inbox('bob')).items.some(i => i.type === 'volume_passed')
       && (await inbox('carl')).items.some(i => i.type === 'volume_passed'), sent);
     check('no pass when the total didn’t grow', await notifyVolumePasses(db, { uid: 'u_alice', username: 'Alice', prevTotal: 12500, nextTotal: 12500 }) === 0);
+
+    console.log('— coaching');
+    await coach.notifyCoachInvite(db, { coachUsername: 'carl', clientUsername: 'Alice' });
+    let inv = (await inbox('Alice')).items.find(i => i.type === 'coach_invite');
+    check('athlete is told about the invite', inv && inv.actor === 'carl' && inv.text === 'wants to coach you' && inv.data.status === 'pending', inv);
+    await coach.notifyCoachInvite(db, { coachUsername: 'carl', clientUsername: 'Alice' });
+    check('re-invite keeps one row', (await inbox('Alice')).items.filter(i => i.type === 'coach_invite').length === 1);
+    await coach.coachInviteAccepted(db, { coachUsername: 'carl', clientUsername: 'Alice' });
+    inv = (await inbox('Alice')).items.find(i => i.type === 'coach_invite');
+    check('accepting turns the invite row into a read "is now your coach"', inv.read && inv.data.status === 'accepted' && inv.text === 'is now your coach', inv);
+    check('coach is told it was accepted', (await inbox('carl')).items.some(i => i.type === 'coach_accepted' && i.actor === 'Alice'));
+    await coach.coachInviteWithdrawn(db, { coachUsername: 'carl', clientUsername: 'Alice' });
+    check('an accepted invite row survives a later removal', (await inbox('Alice')).items.some(i => i.type === 'coach_invite'));
+
+    await coach.notifyCoachInvite(db, { coachUsername: 'bob', clientUsername: 'carl' });
+    await coach.coachInviteWithdrawn(db, { coachUsername: 'bob', clientUsername: 'carl' });
+    check('a cancelled invite disappears', !(await inbox('carl')).items.some(i => i.type === 'coach_invite'));
+
+    await coach.notifyCoachNote(db, { coachUsername: 'carl', clientUsername: 'Alice' });
+    await coach.notifyCoachNote(db, { coachUsername: 'carl', clientUsername: 'Alice' });
+    const note = (await inbox('Alice')).items.filter(i => i.type === 'coach_note');
+    check('notes collapse per coach', note.length === 1 && note[0].count === 2 && note[0].category === 'coaching', note);
+    await coach.notifyCoachPlan(db, { coachUsername: 'carl', clientUsername: 'Alice', fields: { currentProgram: 'PPL', nutritionSummary: '2500 kcal' } });
+    const plan = (await inbox('Alice')).items.find(i => i.type === 'coach_plan');
+    check('plan update names what changed', plan && plan.text === 'updated your program and nutrition' && plan.data.program === 'PPL', plan);
+    check('an empty plan update sends nothing', await coach.notifyCoachPlan(db, { coachUsername: 'carl', clientUsername: 'Alice', fields: {} }) === 0);
+    await coach.notifyCoachInvite(db, { coachUsername: 'dave', clientUsername: 'bob' });
+    await coach.coachLeftByClient(db, { coachUsername: 'dave', clientUsername: 'bob', wasPending: true });
+    check('declining removes the invite row', !(await inbox('bob')).items.some(i => i.type === 'coach_invite'));
+    const leftRow = (await inbox('dave')).items.find(i => i.type === 'coach_left');
+    check('coach is told about a decline', leftRow && leftRow.text === 'declined your coaching invite' && leftRow.data.declined === true, leftRow);
+    await call('Alice', 'PUT', '/api/notifications/prefs', { coaching: false });
+    check('coaching can be muted', await coach.notifyCoachNote(db, { coachUsername: 'carl', clientUsername: 'Alice' }) === 0);
 
     console.log('— pruning + account deletion');
     for (let i = 0; i < 130; i++) store.set(`notifications/p${i}`, { to: 'carl', type: 'group_added', category: 'groups', actor: 'alice', text: 'x', read: true, count: 1, createdAt: new Date(clock - 1e9 + i) });

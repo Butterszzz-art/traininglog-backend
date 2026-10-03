@@ -1,5 +1,5 @@
-// In-app notifications: friend requests, shares, groups, friends' posts and
-// leaderboard moves.
+// In-app notifications: friend requests, shares, groups, friends' posts,
+// leaderboard moves and coaching (invites, accepts, notes, plan updates).
 //
 // Things other people did to you (sent a request, shared a template, added you
 // to a group, passed you on a leaderboard) used to be visible only if you
@@ -10,7 +10,7 @@
 // Storage (server-only, see firestore.rules):
 //   notifications/{id}        { to, type, category, actor, actorName, text,
 //                               data, count, read, createdAt }
-//   notificationPrefs/{user}  { friends, shares, groups, feed, leaderboard }
+//   notificationPrefs/{user}  { friends, shares, groups, feed, leaderboard, coaching }
 // `to` and `actor` are lowercase usernames (profileKey). Listing needs the
 // composite index (to asc, createdAt desc).
 //
@@ -20,7 +20,7 @@
 const express = require('express');
 const { profileKey, blockedBy } = require('./profiles');
 
-const CATEGORIES = ['friends', 'shares', 'groups', 'feed', 'leaderboard'];
+const CATEGORIES = ['friends', 'shares', 'groups', 'feed', 'leaderboard', 'coaching'];
 const TYPE_CATEGORY = {
   friend_request: 'friends',
   friend_accepted: 'friends',
@@ -30,6 +30,11 @@ const TYPE_CATEGORY = {
   feed_post: 'feed',
   exercise_passed: 'leaderboard',
   volume_passed: 'leaderboard',
+  coach_invite: 'coaching',
+  coach_accepted: 'coaching',
+  coach_note: 'coaching',
+  coach_plan: 'coaching',
+  coach_left: 'coaching',
 };
 const PAGE = 50;
 const KEEP = 100;           // older rows are pruned when the list is read
@@ -100,7 +105,7 @@ async function notify(db, opts) {
 
     // Collapsible: one doc per recipient + key. Unread → count + 1; read (or
     // missing) → starts again at 1 as a new unread row.
-    const refs = wanted.map(to => col.doc(safeKey(`${to}__${opts.collapseKey}`)));
+    const refs = wanted.map(to => collapsedRef(db, to, opts.collapseKey));
     for (let i = 0; i < refs.length; i += BATCH_MAX) {
       const chunk = refs.slice(i, i + BATCH_MAX);
       const snaps = await db.getAll(...chunk);
@@ -147,6 +152,12 @@ async function notifyVolumePasses(db, { uid, username, prevTotal, nextTotal }) {
     console.error('[notifications] volume passes failed:', err.message);
     return 0;
   }
+}
+
+// The doc a collapsible notification lives in, so a caller can update or
+// remove it later (e.g. a coach invite once it's answered or cancelled).
+function collapsedRef(db, to, collapseKey) {
+  return db.collection('notifications').doc(safeKey(`${profileKey(to)}__${collapseKey}`));
 }
 
 function shape(doc) {
@@ -265,4 +276,4 @@ async function deleteNotifications(db, username) {
   await db.collection('notificationPrefs').doc(key).delete();
 }
 
-module.exports = { createNotificationsRouter, notify, notifyVolumePasses, deleteNotifications, CATEGORIES, TYPE_CATEGORY };
+module.exports = { createNotificationsRouter, notify, notifyVolumePasses, collapsedRef, deleteNotifications, CATEGORIES, TYPE_CATEGORY };
