@@ -201,7 +201,7 @@ Run `node scripts/test-friends.js` for the route tests.
 
 ## Notifications (in-app)
 
-Written by the server when something happens to you: `friend_request`, `friend_accepted`, `share_received`, `group_added`, `group_post`, `feed_post` (a friend posted), `exercise_passed` and `volume_passed` (someone passed you on a leaderboard). Group posts, feed posts and passes collapse: while one is unread, repeats raise its `count`. Nothing is sent when either side has blocked the other, or when the recipient muted that category.
+Written by the server when something happens to you: `friend_request`, `friend_accepted`, `share_received`, `group_added`, `group_post`, `feed_post` (a friend posted), `exercise_passed` and `volume_passed` (someone passed you on a leaderboard), and coaching: `coach_invite` (data `{ coach, status: 'pending'|'accepted' }`; the row updates on accept and is removed if the invite is cancelled), `coach_accepted` and `coach_left` (to the coach, when the athlete accepts, declines or leaves), `coach_note`, `coach_plan`. Group posts, feed posts and passes collapse: while one is unread, repeats raise its `count`. Nothing is sent when either side has blocked the other, or when the recipient muted that category.
 
 ### `GET /api/notifications`
 `{ success, items: [{ id, type, category, actor, text, data, count, read, createdAt }], unread }`, newest 50. Rows past the newest 100 are deleted. `data` carries what the app needs to open the item (`shareId`, `groupId`, `lift`, …).
@@ -213,7 +213,7 @@ Body: `{ ids: [...] }` marks those read; `{}` marks all read. `{ updated }`.
 Dismiss one.
 
 ### `GET /api/notifications/prefs`, `PUT /api/notifications/prefs`
-`{ friends, shares, groups, feed, leaderboard }`, all `true` by default. `PUT` takes any subset of booleans.
+`{ friends, shares, groups, feed, leaderboard, coaching }`, all `true` by default. `PUT` takes any subset of booleans.
 
 Needs the `notifications (to asc, createdAt desc)` index. Run `node scripts/test-notifications.js`.
 
