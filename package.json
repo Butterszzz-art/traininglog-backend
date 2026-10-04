@@ -9,7 +9,7 @@
     "start": "node server.js"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.39.0",
+    "@anthropic-ai/sdk": "^0.104.2",
     "@apple/app-store-server-library": "^1.4.0",
     "airtable": "^0.12.2",
     "bcryptjs": "^2.4.3",
