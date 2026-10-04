@@ -4,6 +4,10 @@ const { TRAINING_KNOWLEDGE } = require('../knowledge/training-methodology');
 const { NUTRITION_KNOWLEDGE } = require('../knowledge/nutrition-methodology');
 
 const router = express.Router();
+
+// Conversational coach (streaming, tool use) plus /brief, /review, /body —
+// see src/routes/coach.js.
+router.use('/coach', require('./coach'));
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const MODEL = 'claude-sonnet-4-6';

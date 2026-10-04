@@ -376,6 +376,10 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
   }
 });
 
+// The AI coach routes (src/routes/coach.js) take the phone's whole coach data
+// pack — weeks of workouts, bodyweight, sleep and intake — which can outgrow
+// 256kb. express.json() skips bodies that are already parsed, so this runs first.
+app.use('/api/ai/coach', express.json({ limit: '1mb' }));
 app.use(express.json({ limit: '256kb' }));
 
 // ── Rate limiting ─────────────────────────────────────────────────────────────

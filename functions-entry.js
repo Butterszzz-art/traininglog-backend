@@ -31,6 +31,9 @@ const app = require('./server');
 // this one function via Express's own internal routing — Firebase Hosting
 // (once set up) or direct callers hit this same URL for every path.
 exports.api = onRequest({
+  // The default 60s cuts off the streaming AI coach (POST /api/ai/coach),
+  // which can run several model rounds with tool lookups in one request.
+  timeoutSeconds: 300,
   secrets: [
     jwtSecret, anthropicApiKey, intakeCoachUsername,
     googleHealthClientId, googleHealthClientSecret, googleHealthRedirectUri,
