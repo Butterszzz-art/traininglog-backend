@@ -6,6 +6,7 @@
 // guards its own app.listen() call (only runs via `node server.js` directly),
 // so requiring it here does not also try to bind a port.
 const { onRequest } = require('firebase-functions/v2/https');
+const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { defineSecret } = require('firebase-functions/params');
 
 // Secrets set via `firebase functions:secrets:set <NAME>` aren't visible to
@@ -36,3 +37,15 @@ exports.api = onRequest({
     resendApiKey
   ]
 }, app);
+
+// Daily: delete intake leads older than 12 months that never became a
+// client (the retention period stated in privacy.html). Needs the Cloud
+// Scheduler API, which `firebase deploy` offers to enable on first deploy.
+const { db, firebaseEnabled } = require('./firebase');
+const { purgeStaleLeads } = require('./src/leadRetention');
+
+exports.purgeStaleLeads = onSchedule({ schedule: 'every day 03:30', timeZone: 'Europe/Amsterdam' }, async () => {
+  if (!firebaseEnabled) return;
+  const { deleted, cutoff } = await purgeStaleLeads(db);
+  console.info(`[Lead retention] Deleted ${deleted} lead(s) created before ${cutoff.toISOString()}`);
+});
