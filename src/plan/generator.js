@@ -65,7 +65,7 @@ function generatePlan({ intake, instellingen = {}, packageId, startDate, tier, c
 
   // Registry defaults, then the coach's per-client intake settings on top.
   const registrySettings = {
-    pal: pal.values[intake.lifestyle?.activityLevel] ?? pal.values[pal.fallback],
+    pal: (pal.bySex[intake.persoonsgegevens.geslacht] || pal.values)[intake.lifestyle?.activityLevel] ?? pal.values[pal.fallback],
     tef: registry.resolve('nutr.tef.factor').value,
     MET: tee.MET,
     trainingsduurMinuten: tee.minutes,
@@ -98,8 +98,9 @@ function generatePlan({ intake, instellingen = {}, packageId, startDate, tier, c
   let cursor = startDate;
   const phases = pkg.phases.map((def, i) => {
     const goal = goalMap[def.type];
-    const energy = registry.resolve('nutr.energy.factor', { goal });
-    const energyRange = registry.params('nutr.energy.factor', { goal }).range;
+    // Deficit by body fat, surplus by training status (Butters University).
+    const energyRange = calc.energiebalansBereik(goal, intake.persoonsgegevens);
+    const energy = registry.cite('nutr.energy.factor', energyRange.standaard);
     const settings = { ...registrySettings, ...coachSettings, trainingsdagenPerWeek: sessions, energiebalansFactor: energy.value };
     const result = calc.berekenClient({ ...intake, doel: { ...(intake.doel || {}), categorie: goal } }, settings);
 
@@ -140,7 +141,7 @@ function generatePlan({ intake, instellingen = {}, packageId, startDate, tier, c
         bmr: result.bmr,
         restDay: { kcal: result.beoogdeInnameRustdag, proteinG: result.macros.eiwit, fatG: result.macros.vet, carbG: result.macros.koolhydratenRustdag },
         trainingDay: { kcal: result.beoogdeInnameTrainingsdag, proteinG: result.macros.eiwit, fatG: result.macros.vet, carbG: result.macros.koolhydratenTrainingsdag },
-        ranges: { ...result.bereiken, energyFactor: energyRange || null },
+        ranges: result.bereiken,
         mealSplit: result.maaltijdVerdeling,
         settingsUsed: result.instellingenGebruikt,
         provenance: {

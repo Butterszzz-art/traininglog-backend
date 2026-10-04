@@ -19,17 +19,25 @@ const registry = createRegistry();
 check('registry loads and has a version', /^\d+\.\d+\.\d+$/.test(registry.version));
 check('a rule without a statement is rejected', validateRule({ id: 'nutr.x', version: 1, domain: 'nutrition', params: {}, evidenceGrade: 'A', sources: [], verified: false }).length > 0);
 check('min <= default <= max is enforced', validateRule({ id: 'nutr.x', version: 1, domain: 'nutrition', statement: 's', params: { min: 2, default: 1, max: 3 }, evidenceGrade: 'A', sources: [], verified: false }).length > 0);
-check('conditions resolve per context', registry.resolve('nutr.energy.factor', { goal: 'vetverlies' }).value === 0.8);
+check('conditions resolve per context', registry.resolve('nutr.meals.post_training_protein', { singleMealAfterTraining: true }).value === 2.0);
 check('resolve stamps provenance', registry.resolve('nutr.protein.g_per_kg').ruleId === 'nutr.protein.g_per_kg');
 
 // Registry defaults must equal ClientIntake's constants until a reviewed rule
 // change says otherwise (then this test is updated with the rule).
 check('PAL table = ClientIntake STANDAARD_PAL', JSON.stringify(registry.params('nutr.pal.table').values) === JSON.stringify(calc.STANDAARD_PAL));
+check('PAL per sex = ClientIntake STANDAARD_PAL_PER_GESLACHT', JSON.stringify(registry.params('nutr.pal.table').bySex) === JSON.stringify(calc.STANDAARD_PAL_PER_GESLACHT));
 check('TEF = ClientIntake STANDAARD_TEF', registry.resolve('nutr.tef.factor').value === calc.STANDAARD_TEF);
-check('energy factors = ClientIntake STANDAARD_ENERGIEBALANS_FACTOR',
-  Object.entries(calc.STANDAARD_ENERGIEBALANS_FACTOR).every(([goal, f]) => registry.resolve('nutr.energy.factor', { goal }).value === f));
-check('energy ranges = ClientIntake ENERGIEBALANS_BEREIK',
-  Object.entries(calc.ENERGIEBALANS_BEREIK).every(([goal, r]) => JSON.stringify(registry.params('nutr.energy.factor', { goal }).range) === JSON.stringify(r)));
+check('deficit by body fat = ClientIntake constants', (() => {
+  const d = registry.params('nutr.energy.factor').deficit;
+  return JSON.stringify(d.bodyFatAnchors) === JSON.stringify(calc.TEKORT_VETPERCENTAGE_ANKERS)
+    && JSON.stringify(d.atContestLeanness) === JSON.stringify(calc.TEKORT_BIJ_WEDSTRIJDVORM)
+    && JSON.stringify(d.atHighBodyFat) === JSON.stringify(calc.TEKORT_BIJ_HOOG_VETPERCENTAGE);
+})());
+check('surplus by training status = ClientIntake SURPLUS_PER_TRAININGSSTATUS',
+  JSON.stringify(registry.params('nutr.energy.factor').surplusByStatus) === JSON.stringify(calc.SURPLUS_PER_TRAININGSSTATUS));
+check('maintenance band = ClientIntake ONDERHOUD_BEREIK', JSON.stringify(registry.params('nutr.energy.factor').maintenance) === JSON.stringify(calc.ONDERHOUD_BEREIK));
+check('training-status thresholds = ClientIntake TRAININGSSTATUS_DREMPELS_JAREN',
+  JSON.stringify(registry.params('train.status.from_experience').thresholdsYears) === JSON.stringify(calc.TRAININGSSTATUS_DREMPELS_JAREN));
 check('protein range = ClientIntake EIWIT_BEREIK_G_PER_KG', (() => {
   const p = registry.params('nutr.protein.g_per_kg');
   return p.min === calc.EIWIT_BEREIK_G_PER_KG.min && p.default === calc.EIWIT_BEREIK_G_PER_KG.praktisch && p.max === calc.EIWIT_BEREIK_G_PER_KG.maxSlank;
@@ -61,11 +69,15 @@ check('first phase starts on the start date, 12 weeks long', cut.phases[0].plann
 check('last phase ends after 32 weeks', cut.phases[3].plannedEnd === '2027-05-23');
 check('status is draft', cut.status === 'draft');
 
+// No PAL or energy factor passed: ClientIntake picks them from sex, body fat
+// and experience, and the generator must land on the same numbers.
 const direct = calc.berekenClient({ ...intake, doel: { categorie: 'vetverlies' } }, {
-  pal: 1.725, tef: 1.1, MET: 5.7, trainingsduurMinuten: 60, eiwitFactor: 1.8, percentageVetVanREE: 0.4,
-  aantalMaaltijden: 4, postTrainingBoost: 1.5, trainingsdagenPerWeek: 4, energiebalansFactor: 0.8,
+  tef: 1.1, MET: 5.7, trainingsduurMinuten: 60, eiwitFactor: 1.8, percentageVetVanREE: 0.4,
+  aantalMaaltijden: 4, postTrainingBoost: 1.5, trainingsdagenPerWeek: 4,
 });
 check('cut kcal = ClientIntake berekenClient (vetverlies, erg actief)', cut.phases[0].nutrition.restDay.kcal === direct.beoogdeInnameRustdag);
+check('PAL excludes training and is sex-specific (man, erg actief = 1.48)', cut.phases[0].nutrition.settingsUsed.pal === 1.48);
+check('cut deficit follows body fat (man, 18%)', cut.phases[0].nutrition.settingsUsed.energiebalansFactor === calc.energiebalansBereik('vetverlies', intake.persoonsgegevens).standaard);
 check('protein = 1.8 g/kg', cut.phases[0].nutrition.restDay.proteinG === Math.round(84 * 1.8 * 10) / 10);
 check('maintain phase eats more than cut', cut.phases[1].nutrition.restDay.kcal > cut.phases[0].nutrition.restDay.kcal);
 check('kcal provenance cites the energy rule', cut.phases[0].nutrition.provenance.kcal.ruleId === 'nutr.energy.factor');
@@ -85,7 +97,7 @@ check('build > maintain > cut kcal', phys.phases[0].nutrition.restDay.kcal > phy
 
 const withSettings = generatePlan({ intake, instellingen: { eiwitFactor: 2.0, energiebalansFactor: 0.6 }, packageId: 'cut_cycle_32', startDate: '2026-10-12', tier: 'basis', registry, now });
 check('coach intake settings apply and are logged as overrides', withSettings.phases[0].nutrition.restDay.proteinG === 168 && withSettings.overrides.some(o => o.path === 'settings.eiwitFactor'));
-check('a global energiebalansFactor setting does not flatten the phases', withSettings.phases[0].nutrition.settingsUsed.energiebalansFactor === 0.8);
+check('a global energiebalansFactor setting does not flatten the phases', withSettings.phases[0].nutrition.settingsUsed.energiebalansFactor === calc.energiebalansFactorVoorDoel('vetverlies', intake.persoonsgegevens));
 
 check('unknown package is rejected', throws(() => generatePlan({ intake, packageId: 'nope', startDate: '2026-10-12', tier: 'medium', registry })));
 check('unknown tier is rejected', throws(() => generatePlan({ intake, packageId: 'cut_cycle_32', startDate: '2026-10-12', tier: 'gold', registry })));

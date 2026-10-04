@@ -95,7 +95,7 @@ function intake(email, overrides = {}) {
   r = await call('POST', '/api/intake', null, { intake: intake('ana.e2e@example.com'), consents: { healthData: true, version: 'intake-2026-10-04' } });
   check('intake', 'PocketCoach form payload with consent → 201', r.status === 201 && r.body?.leadId);
   const leadId = r.body?.leadId;
-  check('intake', 'calculations returned (erg actief uses PAL 1.725)', r.body?.calculations?.instellingenGebruikt?.pal === 1.725);
+  check('intake', 'calculations returned (vrouw, erg actief: PAL 1.45 without training)', r.body?.calculations?.instellingenGebruikt?.pal === 1.45);
   check('intake', 'veel_stress raises a red flag', (r.body?.calculations?.rodeVlaggen || []).some(f => /stress/i.test(f.bericht)));
   r = await call('POST', '/api/intake', null, { intake: intake('other.e2e@example.com', { persoonsgegevens: { naam: 'Other', email: 'other.e2e@example.com', gewicht: 90, vetpercentage: 20, geslacht: 'man' } }), instellingen: { eiwitFactor: 2.0 }, consents: { healthData: true, version: 'intake-2026-10-04' } });
   check('intake', 'ClientIntake payload (with instellingen) → 201', r.status === 201);

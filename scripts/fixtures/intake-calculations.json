@@ -61,16 +61,16 @@
         "vetvrijeMassa": 68.9,
         "bmr": 1858,
         "ee": 503,
-        "ree": 2452,
-        "totaalTrainingsdag": 3005,
-        "onderhoudPerDag": 2768,
-        "beoogdeInnameRustdag": 2215,
-        "beoogdeInnameTrainingsdag": 2717,
+        "ree": 2044,
+        "totaalTrainingsdag": 2597,
+        "onderhoudPerDag": 2360,
+        "beoogdeInnameRustdag": 1970,
+        "beoogdeInnameTrainingsdag": 2473,
         "macros": {
           "eiwit": 151.2,
-          "vet": 109,
-          "koolhydratenRustdag": 157.2,
-          "koolhydratenTrainingsdag": 282.9
+          "vet": 90.8,
+          "koolhydratenRustdag": 137,
+          "koolhydratenTrainingsdag": 262.7
         },
         "bereiken": {
           "eiwit": {
@@ -79,12 +79,17 @@
             "maxSlank": 201.6
           },
           "vet": {
-            "min": 54.5,
-            "max": 109
+            "min": 45.4,
+            "max": 90.8
           },
           "beoogdeInname": {
-            "min": 1938,
-            "max": 2491
+            "min": 1720,
+            "max": 2001
+          },
+          "energiebalansFactor": {
+            "min": 0.729,
+            "standaard": 0.835,
+            "max": 0.848
           }
         },
         "maaltijdVerdeling": {
@@ -93,33 +98,33 @@
               "maaltijd": 1,
               "postTraining": false,
               "eiwit": 30.2,
-              "vet": 27.2,
-              "koolhydraten": 39.3,
-              "kcal": 523
+              "vet": 22.7,
+              "koolhydraten": 34.3,
+              "kcal": 462
             },
             {
               "maaltijd": 2,
               "postTraining": false,
               "eiwit": 30.2,
-              "vet": 27.2,
-              "koolhydraten": 39.3,
-              "kcal": 523
+              "vet": 22.7,
+              "koolhydraten": 34.3,
+              "kcal": 462
             },
             {
               "maaltijd": 3,
               "postTraining": true,
               "eiwit": 45.4,
-              "vet": 27.2,
-              "koolhydraten": 39.3,
-              "kcal": 584
+              "vet": 22.7,
+              "koolhydraten": 34.3,
+              "kcal": 523
             },
             {
               "maaltijd": 4,
               "postTraining": true,
               "eiwit": 45.4,
-              "vet": 27.2,
-              "koolhydraten": 39.3,
-              "kcal": 584
+              "vet": 22.7,
+              "koolhydraten": 34.3,
+              "kcal": 523
             }
           ],
           "trainingsdag": [
@@ -127,33 +132,33 @@
               "maaltijd": 1,
               "postTraining": false,
               "eiwit": 30.2,
-              "vet": 27.2,
-              "koolhydraten": 70.7,
-              "kcal": 649
+              "vet": 22.7,
+              "koolhydraten": 65.7,
+              "kcal": 588
             },
             {
               "maaltijd": 2,
               "postTraining": false,
               "eiwit": 30.2,
-              "vet": 27.2,
-              "koolhydraten": 70.7,
-              "kcal": 649
+              "vet": 22.7,
+              "koolhydraten": 65.7,
+              "kcal": 588
             },
             {
               "maaltijd": 3,
               "postTraining": true,
               "eiwit": 45.4,
-              "vet": 27.2,
-              "koolhydraten": 70.7,
-              "kcal": 710
+              "vet": 22.7,
+              "koolhydraten": 65.7,
+              "kcal": 648
             },
             {
               "maaltijd": 4,
               "postTraining": true,
               "eiwit": 45.4,
-              "vet": 27.2,
-              "koolhydraten": 70.7,
-              "kcal": 710
+              "vet": 22.7,
+              "koolhydraten": 65.7,
+              "kcal": 648
             }
           ]
         },
@@ -175,9 +180,9 @@
           "trainingsdagenPerWeek": 4,
           "trainingsduurMinuten": 60,
           "MET": 5.7,
-          "pal": 1.2,
+          "pal": 1,
           "tef": 1.1,
-          "energiebalansFactor": 0.8,
+          "energiebalansFactor": 0.835,
           "eiwitFactor": 1.8,
           "percentageVetVanREE": 0.4,
           "aantalMaaltijden": 4,
@@ -258,16 +263,16 @@
         "vetvrijeMassa": 68.9,
         "bmr": 1858,
         "ee": 503,
-        "ree": 2810,
-        "totaalTrainingsdag": 3363,
-        "onderhoudPerDag": 3126,
-        "beoogdeInnameRustdag": 3439,
-        "beoogdeInnameTrainingsdag": 3941,
+        "ree": 2268,
+        "totaalTrainingsdag": 2821,
+        "onderhoudPerDag": 2584,
+        "beoogdeInnameRustdag": 2701,
+        "beoogdeInnameTrainingsdag": 3203,
         "macros": {
           "eiwit": 151.2,
-          "vet": 124.9,
-          "koolhydratenRustdag": 427.4,
-          "koolhydratenTrainingsdag": 553.1
+          "vet": 100.8,
+          "koolhydratenRustdag": 297.1,
+          "koolhydratenTrainingsdag": 422.8
         },
         "bereiken": {
           "eiwit": {
@@ -276,12 +281,17 @@
             "maxSlank": 201.6
           },
           "vet": {
-            "min": 62.4,
-            "max": 124.9
+            "min": 50.4,
+            "max": 100.8
           },
           "beoogdeInname": {
-            "min": 3326,
-            "max": 3626
+            "min": 2636,
+            "max": 2765
+          },
+          "energiebalansFactor": {
+            "min": 1.02,
+            "standaard": 1.045,
+            "max": 1.07
           }
         },
         "maaltijdVerdeling": {
@@ -290,33 +300,33 @@
               "maaltijd": 1,
               "postTraining": false,
               "eiwit": 30.2,
-              "vet": 31.2,
-              "koolhydraten": 106.9,
-              "kcal": 829
+              "vet": 25.2,
+              "koolhydraten": 74.3,
+              "kcal": 645
             },
             {
               "maaltijd": 2,
               "postTraining": false,
               "eiwit": 30.2,
-              "vet": 31.2,
-              "koolhydraten": 106.9,
-              "kcal": 829
+              "vet": 25.2,
+              "koolhydraten": 74.3,
+              "kcal": 645
             },
             {
               "maaltijd": 3,
               "postTraining": true,
               "eiwit": 45.4,
-              "vet": 31.2,
-              "koolhydraten": 106.9,
-              "kcal": 890
+              "vet": 25.2,
+              "koolhydraten": 74.3,
+              "kcal": 705
             },
             {
               "maaltijd": 4,
               "postTraining": true,
               "eiwit": 45.4,
-              "vet": 31.2,
-              "koolhydraten": 106.9,
-              "kcal": 890
+              "vet": 25.2,
+              "koolhydraten": 74.3,
+              "kcal": 705
             }
           ],
           "trainingsdag": [
@@ -324,33 +334,33 @@
               "maaltijd": 1,
               "postTraining": false,
               "eiwit": 30.2,
-              "vet": 31.2,
-              "koolhydraten": 138.3,
-              "kcal": 955
+              "vet": 25.2,
+              "koolhydraten": 105.7,
+              "kcal": 771
             },
             {
               "maaltijd": 2,
               "postTraining": false,
               "eiwit": 30.2,
-              "vet": 31.2,
-              "koolhydraten": 138.3,
-              "kcal": 955
+              "vet": 25.2,
+              "koolhydraten": 105.7,
+              "kcal": 771
             },
             {
               "maaltijd": 3,
               "postTraining": true,
               "eiwit": 45.4,
-              "vet": 31.2,
-              "koolhydraten": 138.3,
-              "kcal": 1016
+              "vet": 25.2,
+              "koolhydraten": 105.7,
+              "kcal": 831
             },
             {
               "maaltijd": 4,
               "postTraining": true,
               "eiwit": 45.4,
-              "vet": 31.2,
-              "koolhydraten": 138.3,
-              "kcal": 1016
+              "vet": 25.2,
+              "koolhydraten": 105.7,
+              "kcal": 831
             }
           ]
         },
@@ -372,9 +382,9 @@
           "trainingsdagenPerWeek": 4,
           "trainingsduurMinuten": 60,
           "MET": 5.7,
-          "pal": 1.375,
+          "pal": 1.11,
           "tef": 1.1,
-          "energiebalansFactor": 1.1,
+          "energiebalansFactor": 1.045,
           "eiwitFactor": 1.8,
           "percentageVetVanREE": 0.4,
           "aantalMaaltijden": 4,
@@ -461,16 +471,16 @@
         "vetvrijeMassa": 68.9,
         "bmr": 1858,
         "ee": 503,
-        "ree": 3168,
-        "totaalTrainingsdag": 3721,
-        "onderhoudPerDag": 3484,
-        "beoogdeInnameRustdag": 3658,
-        "beoogdeInnameTrainingsdag": 4160,
+        "ree": 2554,
+        "totaalTrainingsdag": 3108,
+        "onderhoudPerDag": 2870,
+        "beoogdeInnameRustdag": 3000,
+        "beoogdeInnameTrainingsdag": 3502,
         "macros": {
           "eiwit": 151.2,
-          "vet": 140.8,
-          "koolhydratenRustdag": 446.5,
-          "koolhydratenTrainingsdag": 572.2
+          "vet": 113.5,
+          "koolhydratenRustdag": 343.3,
+          "koolhydratenTrainingsdag": 469
         },
         "bereiken": {
           "eiwit": {
@@ -479,12 +489,17 @@
             "maxSlank": 201.6
           },
           "vet": {
-            "min": 70.4,
-            "max": 140.8
+            "min": 56.8,
+            "max": 113.5
           },
           "beoogdeInname": {
-            "min": 3584,
-            "max": 3784
+            "min": 2928,
+            "max": 3071
+          },
+          "energiebalansFactor": {
+            "min": 1.02,
+            "standaard": 1.045,
+            "max": 1.07
           }
         },
         "maaltijdVerdeling": {
@@ -493,33 +508,33 @@
               "maaltijd": 1,
               "postTraining": false,
               "eiwit": 30.2,
-              "vet": 35.2,
-              "koolhydraten": 111.6,
-              "kcal": 884
+              "vet": 28.4,
+              "koolhydraten": 85.8,
+              "kcal": 720
             },
             {
               "maaltijd": 2,
               "postTraining": false,
               "eiwit": 30.2,
-              "vet": 35.2,
-              "koolhydraten": 111.6,
-              "kcal": 884
+              "vet": 28.4,
+              "koolhydraten": 85.8,
+              "kcal": 720
             },
             {
               "maaltijd": 3,
               "postTraining": true,
               "eiwit": 45.4,
-              "vet": 35.2,
-              "koolhydraten": 111.6,
-              "kcal": 945
+              "vet": 28.4,
+              "koolhydraten": 85.8,
+              "kcal": 780
             },
             {
               "maaltijd": 4,
               "postTraining": true,
               "eiwit": 45.4,
-              "vet": 35.2,
-              "koolhydraten": 111.6,
-              "kcal": 945
+              "vet": 28.4,
+              "koolhydraten": 85.8,
+              "kcal": 780
             }
           ],
           "trainingsdag": [
@@ -527,33 +542,33 @@
               "maaltijd": 1,
               "postTraining": false,
               "eiwit": 30.2,
-              "vet": 35.2,
-              "koolhydraten": 143,
-              "kcal": 1010
+              "vet": 28.4,
+              "koolhydraten": 117.2,
+              "kcal": 845
             },
             {
               "maaltijd": 2,
               "postTraining": false,
               "eiwit": 30.2,
-              "vet": 35.2,
-              "koolhydraten": 143,
-              "kcal": 1010
+              "vet": 28.4,
+              "koolhydraten": 117.2,
+              "kcal": 845
             },
             {
               "maaltijd": 3,
               "postTraining": true,
               "eiwit": 45.4,
-              "vet": 35.2,
-              "koolhydraten": 143,
-              "kcal": 1070
+              "vet": 28.4,
+              "koolhydraten": 117.2,
+              "kcal": 906
             },
             {
               "maaltijd": 4,
               "postTraining": true,
               "eiwit": 45.4,
-              "vet": 35.2,
-              "koolhydraten": 143,
-              "kcal": 1070
+              "vet": 28.4,
+              "koolhydraten": 117.2,
+              "kcal": 906
             }
           ]
         },
@@ -575,9 +590,9 @@
           "trainingsdagenPerWeek": 4,
           "trainingsduurMinuten": 60,
           "MET": 5.7,
-          "pal": 1.55,
+          "pal": 1.25,
           "tef": 1.1,
-          "energiebalansFactor": 1.05,
+          "energiebalansFactor": 1.045,
           "eiwitFactor": 1.8,
           "percentageVetVanREE": 0.4,
           "aantalMaaltijden": 4,
@@ -661,16 +676,16 @@
         "vetvrijeMassa": 68.9,
         "bmr": 1858,
         "ee": 503,
-        "ree": 3525,
-        "totaalTrainingsdag": 4078,
-        "onderhoudPerDag": 3841,
-        "beoogdeInnameRustdag": 3841,
-        "beoogdeInnameTrainingsdag": 4344,
+        "ree": 3025,
+        "totaalTrainingsdag": 3578,
+        "onderhoudPerDag": 3341,
+        "beoogdeInnameRustdag": 3341,
+        "beoogdeInnameTrainingsdag": 3843,
         "macros": {
           "eiwit": 151.2,
-          "vet": 156.7,
-          "koolhydratenRustdag": 456.6,
-          "koolhydratenTrainingsdag": 582.3
+          "vet": 134.4,
+          "koolhydratenRustdag": 381.5,
+          "koolhydratenTrainingsdag": 507.2
         },
         "bereiken": {
           "eiwit": {
@@ -679,12 +694,17 @@
             "maxSlank": 201.6
           },
           "vet": {
-            "min": 78.3,
-            "max": 156.7
+            "min": 67.2,
+            "max": 134.4
           },
           "beoogdeInname": {
-            "min": 3726,
-            "max": 3956
+            "min": 3240,
+            "max": 3441
+          },
+          "energiebalansFactor": {
+            "min": 0.97,
+            "standaard": 1,
+            "max": 1.03
           }
         },
         "maaltijdVerdeling": {
@@ -693,33 +713,33 @@
               "maaltijd": 1,
               "postTraining": false,
               "eiwit": 30.2,
-              "vet": 39.2,
-              "koolhydraten": 114.1,
-              "kcal": 930
+              "vet": 33.6,
+              "koolhydraten": 95.4,
+              "kcal": 805
             },
             {
               "maaltijd": 2,
               "postTraining": false,
               "eiwit": 30.2,
-              "vet": 39.2,
-              "koolhydraten": 114.1,
-              "kcal": 930
+              "vet": 33.6,
+              "koolhydraten": 95.4,
+              "kcal": 805
             },
             {
               "maaltijd": 3,
               "postTraining": true,
               "eiwit": 45.4,
-              "vet": 39.2,
-              "koolhydraten": 114.1,
-              "kcal": 991
+              "vet": 33.6,
+              "koolhydraten": 95.4,
+              "kcal": 865
             },
             {
               "maaltijd": 4,
               "postTraining": true,
               "eiwit": 45.4,
-              "vet": 39.2,
-              "koolhydraten": 114.1,
-              "kcal": 991
+              "vet": 33.6,
+              "koolhydraten": 95.4,
+              "kcal": 865
             }
           ],
           "trainingsdag": [
@@ -727,33 +747,33 @@
               "maaltijd": 1,
               "postTraining": false,
               "eiwit": 30.2,
-              "vet": 39.2,
-              "koolhydraten": 145.6,
-              "kcal": 1056
+              "vet": 33.6,
+              "koolhydraten": 126.8,
+              "kcal": 931
             },
             {
               "maaltijd": 2,
               "postTraining": false,
               "eiwit": 30.2,
-              "vet": 39.2,
-              "koolhydraten": 145.6,
-              "kcal": 1056
+              "vet": 33.6,
+              "koolhydraten": 126.8,
+              "kcal": 931
             },
             {
               "maaltijd": 3,
               "postTraining": true,
               "eiwit": 45.4,
-              "vet": 39.2,
-              "koolhydraten": 145.6,
-              "kcal": 1116
+              "vet": 33.6,
+              "koolhydraten": 126.8,
+              "kcal": 991
             },
             {
               "maaltijd": 4,
               "postTraining": true,
               "eiwit": 45.4,
-              "vet": 39.2,
-              "koolhydraten": 145.6,
-              "kcal": 1116
+              "vet": 33.6,
+              "koolhydraten": 126.8,
+              "kcal": 991
             }
           ]
         },
@@ -775,7 +795,7 @@
           "trainingsdagenPerWeek": 4,
           "trainingsduurMinuten": 60,
           "MET": 5.7,
-          "pal": 1.725,
+          "pal": 1.48,
           "tef": 1.1,
           "energiebalansFactor": 1,
           "eiwitFactor": 1.8,
@@ -867,16 +887,16 @@
         "vetvrijeMassa": 68.9,
         "bmr": 1858,
         "ee": 503,
-        "ree": 2452,
-        "totaalTrainingsdag": 3005,
-        "onderhoudPerDag": 2768,
-        "beoogdeInnameRustdag": 2768,
-        "beoogdeInnameTrainingsdag": 3271,
+        "ree": 2044,
+        "totaalTrainingsdag": 2597,
+        "onderhoudPerDag": 2360,
+        "beoogdeInnameRustdag": 2360,
+        "beoogdeInnameTrainingsdag": 2862,
         "macros": {
           "eiwit": 151.2,
-          "vet": 109,
-          "koolhydratenRustdag": 295.6,
-          "koolhydratenTrainingsdag": 421.3
+          "vet": 90.8,
+          "koolhydratenRustdag": 234.3,
+          "koolhydratenTrainingsdag": 360
         },
         "bereiken": {
           "eiwit": {
@@ -885,12 +905,17 @@
             "maxSlank": 201.6
           },
           "vet": {
-            "min": 54.5,
-            "max": 109
+            "min": 45.4,
+            "max": 90.8
           },
           "beoogdeInname": {
-            "min": 2685,
-            "max": 2851
+            "min": 2289,
+            "max": 2430
+          },
+          "energiebalansFactor": {
+            "min": 0.97,
+            "standaard": 1,
+            "max": 1.03
           }
         },
         "maaltijdVerdeling": {
@@ -899,33 +924,33 @@
               "maaltijd": 1,
               "postTraining": false,
               "eiwit": 30.2,
-              "vet": 27.2,
-              "koolhydraten": 73.9,
-              "kcal": 662
+              "vet": 22.7,
+              "koolhydraten": 58.6,
+              "kcal": 560
             },
             {
               "maaltijd": 2,
               "postTraining": false,
               "eiwit": 30.2,
-              "vet": 27.2,
-              "koolhydraten": 73.9,
-              "kcal": 662
+              "vet": 22.7,
+              "koolhydraten": 58.6,
+              "kcal": 560
             },
             {
               "maaltijd": 3,
               "postTraining": true,
               "eiwit": 45.4,
-              "vet": 27.2,
-              "koolhydraten": 73.9,
-              "kcal": 722
+              "vet": 22.7,
+              "koolhydraten": 58.6,
+              "kcal": 620
             },
             {
               "maaltijd": 4,
               "postTraining": true,
               "eiwit": 45.4,
-              "vet": 27.2,
-              "koolhydraten": 73.9,
-              "kcal": 722
+              "vet": 22.7,
+              "koolhydraten": 58.6,
+              "kcal": 620
             }
           ],
           "trainingsdag": [
@@ -933,33 +958,33 @@
               "maaltijd": 1,
               "postTraining": false,
               "eiwit": 30.2,
-              "vet": 27.2,
-              "koolhydraten": 105.3,
-              "kcal": 788
+              "vet": 22.7,
+              "koolhydraten": 90,
+              "kcal": 685
             },
             {
               "maaltijd": 2,
               "postTraining": false,
               "eiwit": 30.2,
-              "vet": 27.2,
-              "koolhydraten": 105.3,
-              "kcal": 788
+              "vet": 22.7,
+              "koolhydraten": 90,
+              "kcal": 685
             },
             {
               "maaltijd": 3,
               "postTraining": true,
               "eiwit": 45.4,
-              "vet": 27.2,
-              "koolhydraten": 105.3,
-              "kcal": 848
+              "vet": 22.7,
+              "koolhydraten": 90,
+              "kcal": 746
             },
             {
               "maaltijd": 4,
               "postTraining": true,
               "eiwit": 45.4,
-              "vet": 27.2,
-              "koolhydraten": 105.3,
-              "kcal": 848
+              "vet": 22.7,
+              "koolhydraten": 90,
+              "kcal": 746
             }
           ]
         },
@@ -981,7 +1006,7 @@
           "trainingsdagenPerWeek": 4,
           "trainingsduurMinuten": 60,
           "MET": 5.7,
-          "pal": 1.2,
+          "pal": 1,
           "tef": 1.1,
           "energiebalansFactor": 1,
           "eiwitFactor": 1.8,
@@ -1165,16 +1190,16 @@
         "vetvrijeMassa": 68.9,
         "bmr": 1858,
         "ee": 503,
-        "ree": 2452,
-        "totaalTrainingsdag": 3005,
-        "onderhoudPerDag": 2847,
-        "beoogdeInnameRustdag": 1993,
-        "beoogdeInnameTrainingsdag": 2496,
+        "ree": 2044,
+        "totaalTrainingsdag": 2597,
+        "onderhoudPerDag": 2439,
+        "beoogdeInnameRustdag": 1707,
+        "beoogdeInnameTrainingsdag": 2210,
         "macros": {
           "eiwit": 184.8,
-          "vet": 109,
-          "koolhydratenRustdag": 68.2,
-          "koolhydratenTrainingsdag": 193.9
+          "vet": 90.8,
+          "koolhydratenRustdag": 37.6,
+          "koolhydratenTrainingsdag": 163.3
         },
         "bereiken": {
           "eiwit": {
@@ -1183,12 +1208,17 @@
             "maxSlank": 201.6
           },
           "vet": {
-            "min": 54.5,
-            "max": 109
+            "min": 45.4,
+            "max": 90.8
           },
           "beoogdeInname": {
-            "min": 1993,
-            "max": 2563
+            "min": 1778,
+            "max": 2068
+          },
+          "energiebalansFactor": {
+            "min": 0.729,
+            "standaard": 0.835,
+            "max": 0.848
           }
         },
         "maaltijdVerdeling": {
@@ -1197,25 +1227,25 @@
               "maaltijd": 1,
               "postTraining": false,
               "eiwit": 46.2,
-              "vet": 36.3,
-              "koolhydraten": 22.7,
-              "kcal": 603
+              "vet": 30.3,
+              "koolhydraten": 12.5,
+              "kcal": 507
             },
             {
               "maaltijd": 2,
               "postTraining": true,
               "eiwit": 69.3,
-              "vet": 36.3,
-              "koolhydraten": 22.7,
-              "kcal": 695
+              "vet": 30.3,
+              "koolhydraten": 12.5,
+              "kcal": 600
             },
             {
               "maaltijd": 3,
               "postTraining": true,
               "eiwit": 69.3,
-              "vet": 36.3,
-              "koolhydraten": 22.7,
-              "kcal": 695
+              "vet": 30.3,
+              "koolhydraten": 12.5,
+              "kcal": 600
             }
           ],
           "trainingsdag": [
@@ -1223,25 +1253,25 @@
               "maaltijd": 1,
               "postTraining": false,
               "eiwit": 46.2,
-              "vet": 36.3,
-              "koolhydraten": 64.6,
-              "kcal": 770
+              "vet": 30.3,
+              "koolhydraten": 54.4,
+              "kcal": 675
             },
             {
               "maaltijd": 2,
               "postTraining": true,
               "eiwit": 69.3,
-              "vet": 36.3,
-              "koolhydraten": 64.6,
-              "kcal": 863
+              "vet": 30.3,
+              "koolhydraten": 54.4,
+              "kcal": 767
             },
             {
               "maaltijd": 3,
               "postTraining": true,
               "eiwit": 69.3,
-              "vet": 36.3,
-              "koolhydraten": 64.6,
-              "kcal": 863
+              "vet": 30.3,
+              "koolhydraten": 54.4,
+              "kcal": 767
             }
           ]
         },
@@ -1263,7 +1293,7 @@
           "trainingsdagenPerWeek": 5,
           "trainingsduurMinuten": 60,
           "MET": 5.7,
-          "pal": 1.2,
+          "pal": 1,
           "tef": 1.1,
           "energiebalansFactor": 0.7,
           "eiwitFactor": 2.2,
@@ -1287,7 +1317,11 @@
         "rodeVlaggen": [
           {
             "niveau": "rood",
-            "bericht": "Beoogde inname op rustdagen ligt meer dan 25% onder onderhoud — mogelijk te agressief tekort."
+            "bericht": "Tekort van 30% is groter dan het maximum van 27% bij dit vetpercentage — mogelijk te agressief."
+          },
+          {
+            "niveau": "rood",
+            "bericht": "Beoogde inname ligt onder het BMR — risico op metabole vertraging en verlies van spiermassa."
           }
         ]
       }

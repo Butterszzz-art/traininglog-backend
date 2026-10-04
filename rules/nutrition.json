@@ -22,21 +22,28 @@
   },
   {
     "id": "nutr.pal.table",
-    "version": 1,
+    "version": 2,
     "domain": "nutrition",
-    "statement": "Physical activity level multiplier by activity outside training.",
-    "params": { "values": { "sedentair": 1.2, "licht actief": 1.375, "actief": 1.55, "erg actief": 1.725 }, "fallback": "sedentair" },
+    "statement": "Physical activity level for activity outside training, by sex. Resistance training is not in it: it is costed separately as training-day expenditure.",
+    "params": {
+      "bySex": {
+        "man": { "sedentair": 1.0, "licht actief": 1.11, "actief": 1.25, "erg actief": 1.48 },
+        "vrouw": { "sedentair": 1.0, "licht actief": 1.12, "actief": 1.27, "erg actief": 1.45 }
+      },
+      "values": { "sedentair": 1.0, "licht actief": 1.115, "actief": 1.26, "erg actief": 1.465 },
+      "fallback": "sedentair"
+    },
     "evidenceGrade": "unrated",
-    "sources": [{ "label": "ClientIntake calculations.js (STANDAARD_PAL)" }],
+    "sources": [{ "label": "ClientIntake calculations.js (STANDAARD_PAL_PER_GESLACHT, STANDAARD_PAL)" }, { "label": "Butters University README — Energy balance" }, { "label": "IOM (2005) physical-activity coefficients (split per sex)" }],
     "moduleRef": "BU: Energy balance",
     "bu": {
       "section": "Module: Energy balance",
-      "status": "conflict",
+      "status": "match",
       "quotes": [
         "sedentary 1.00, light 1.11–1.12, active 1.25–1.27, very active 1.45–1.48, sex-specific",
         "explicitly excluding resistance training from that multiplier"
       ],
-      "note": "BU PAL values leave out resistance training (that is costed separately) and run 1.00–1.48. ClientIntake uses 1.2–1.725, which double-counts training on top of the training-day expenditure."
+      "note": "BU values, excluding resistance training. BU gives each level as a range; which end is male and which female follows the IOM coefficients the ranges come from. 'values' (the midpoint) is used for 'anders' or an unknown sex."
     },
     "lastReviewed": null,
     "verified": false
@@ -84,29 +91,35 @@
   },
   {
     "id": "nutr.energy.factor",
-    "version": 1,
+    "version": 2,
     "domain": "nutrition",
-    "statement": "Target intake as a factor of maintenance, by goal: cut 10–30% deficit, build ~200–500 kcal surplus.",
+    "statement": "Energy-balance factor on maintenance. Fat loss: the deficit scales with body fat, from 2.5–7.5% near contest leanness to 30–50% at high body fat, linear in between. Muscle and strength goals: the surplus scales with training status (beginner 5–15%, intermediate 2–7%, advanced 1–3%). Maintenance: 1.0 ±3%.",
     "params": {
-      "default": 1.0,
-      "conditions": [
-        { "when": { "goal": "vetverlies" }, "default": 0.8, "range": { "type": "factor", "min": 0.7, "max": 0.9 } },
-        { "when": { "goal": "onderhoud" }, "default": 1.0, "range": { "type": "factor", "min": 0.97, "max": 1.03 } },
-        { "when": { "goal": "spieropbouw" }, "default": 1.1, "range": { "type": "surplusKcal", "min": 200, "max": 500 } },
-        { "when": { "goal": "krachttoename" }, "default": 1.05, "range": { "type": "surplusKcal", "min": 100, "max": 300 } }
-      ]
+      "formula": "energiebalansBereik",
+      "deficit": {
+        "bodyFatAnchors": { "man": { "wedstrijd": 6, "hoog": 32 }, "vrouw": { "wedstrijd": 14, "hoog": 40 }, "anders": { "wedstrijd": 10, "hoog": 36 } },
+        "atContestLeanness": { "min": 0.025, "standaard": 0.05, "max": 0.075 },
+        "atHighBodyFat": { "min": 0.3, "standaard": 0.3, "max": 0.5 }
+      },
+      "surplusByStatus": {
+        "1": { "min": 1.05, "standaard": 1.1, "max": 1.15 },
+        "2": { "min": 1.02, "standaard": 1.045, "max": 1.07 },
+        "3": { "min": 1.01, "standaard": 1.02, "max": 1.03 }
+      },
+      "maintenance": { "min": 0.97, "standaard": 1.0, "max": 1.03 }
     },
     "evidenceGrade": "unrated",
-    "sources": [{ "label": "ClientIntake calculations.js (STANDAARD_ENERGIEBALANS_FACTOR, ENERGIEBALANS_BEREIK)" }, { "label": "Butters University README — Energy balance" }],
+    "sources": [{ "label": "ClientIntake calculations.js (energiebalansBereik, tekortBereik, SURPLUS_PER_TRAININGSSTATUS)" }, { "label": "Butters University README — Energy balance" }],
     "moduleRef": "BU: Energy balance",
     "bu": {
       "section": "Module: Energy balance",
-      "status": "conflict",
+      "status": "match",
       "quotes": [
         "scaled by training status (beginners 5–15% surplus targeting 0.5–1%/week bodyweight gain; intermediate 2–7% targeting 0.2–0.5%/week; advanced 1–3%",
-        "For cutting rate, the PTC scales the weekly rate of loss and the size of the deficit inversely with leanness"
+        "For cutting rate, the PTC scales the weekly rate of loss and the size of the deficit inversely with leanness",
+        "Start at ~20% deficit (Overgewicht category)"
       ],
-      "note": "BU scales the surplus by training status (beginner 5–15%, intermediate 2–7%, advanced 1–3%) and the deficit by leanness (about 2.5–7.5% near contest leanness up to 30–50% at high body fat). ClientIntake uses a fixed factor per goal: 0.8 cut, 1.0 maintain, 1.1 build."
+      "note": "BU's ranges at both ends. BU gives no body-fat cut-offs, so the anchors are a judgement call, chosen so BU's worked example (untrained woman, 30% body fat) lands on its ~20% deficit. The default at high body fat is the low end of 30–50%. Maintenance ±3% is not from BU."
     },
     "lastReviewed": null,
     "verified": false
