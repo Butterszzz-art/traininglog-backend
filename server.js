@@ -654,7 +654,38 @@ async function cancelStripeSubscriptions(customerId) {
 // crossfit logs, mobility routines & sessions, coach clients & exercise
 // videos — see PHASE2-NOTES.md's collection-home table) in one call each, so
 // this doesn't need to know every subcollection name individually.
-async function deleteFirestoreAccount(uid, username) {
+// A client's data also lives on their coaches' side: each coach's roster
+// entry (coaches/{coachUid}/clients/{uid}, with the notes under it). The
+// client's own coachInvites/coachAssignment docs name those coaches, so read
+// them before users/{uid} is wiped.
+async function deleteFromCoachRosters(uid) {
+  const [invites, assignments] = await Promise.all([
+    db.collection(`users/${uid}/coachInvites`).get(),
+    db.collection(`users/${uid}/coachAssignment`).get(),
+  ]);
+  const coachUids = new Set([...invites.docs, ...assignments.docs].map(d => d.id));
+  for (const coachUid of coachUids) {
+    await db.recursiveDelete(db.collection(`coaches/${coachUid}/clients`).doc(uid));
+  }
+}
+
+// Intake leads are stored before the person has an account, so they carry
+// no uid — match them by the email given on the intake form.
+async function deleteIntakeLeads(email) {
+  if (!email || !INTAKE_COACH_USERNAME) return;
+  const coachUid = await resolveFirestoreUid(INTAKE_COACH_USERNAME);
+  if (!coachUid) return;
+  const leads = db.collection(`coaches/${coachUid}/leads`);
+  const variants = [...new Set([String(email).trim(), String(email).trim().toLowerCase()])];
+  for (const value of variants) {
+    const snap = await leads.where('intake.persoonsgegevens.email', '==', value).get();
+    for (const doc of snap.docs) await doc.ref.delete();
+  }
+}
+
+async function deleteFirestoreAccount(uid, username, email) {
+  await deleteFromCoachRosters(uid);
+  await deleteIntakeLeads(email);
   await db.recursiveDelete(db.collection('users').doc(uid));
   await db.recursiveDelete(db.collection('coaches').doc(uid)); // no-op if this user never coached anyone
   await db.collection('usernames').doc(String(username).toLowerCase()).delete();
@@ -725,13 +756,15 @@ app.delete('/account', authenticateToken, async (req, res) => {
     const legacyUser = airtableEnabled ? await getUserByUsername(username) : null;
 
     let stripeCustomerId = legacyUser?.fields?.StripeCustomerId || null;
+    let email = req.user?.email || null;
     if (uid) {
       const snap = await db.collection('users').doc(uid).get();
       stripeCustomerId = snap.get('stripeCustomerId') || stripeCustomerId;
+      email = email || snap.get('email') || null;
     }
     await cancelStripeSubscriptions(stripeCustomerId);
 
-    if (uid) await deleteFirestoreAccount(uid, username);
+    if (uid) await deleteFirestoreAccount(uid, username, email);
     if (legacyUser || !uid) await deleteLegacyAirtableAccount(username, legacyUser?.id);
 
     if (uid && firebaseEnabled) {
@@ -3441,6 +3474,19 @@ app.post('/api/intake', intakeLimiter, async (req, res) => {
     }
     const instellingen = (req.body?.instellingen && typeof req.body.instellingen === 'object') ? req.body.instellingen : {};
 
+    // GDPR Art. 9: the intake holds health data (injuries, PED use, body
+    // composition), so it is only stored with the prospect's explicit consent
+    // — the unticked checkbox on the intake form.
+    const consents = req.body?.consents;
+    if (consents?.healthData !== true) {
+      return sendError(res, 422, 'intake.consent_required', 'Explicit consent to process health data is required.');
+    }
+    const consentRecord = {
+      healthData: true,
+      version: typeof consents.version === 'string' ? consents.version.slice(0, 40) : null,
+      at: FieldValue.serverTimestamp(),
+    };
+
     const coachUid = await resolveFirestoreUid(INTAKE_COACH_USERNAME);
     if (!coachUid) {
       return sendError(res, 503, 'intake.coach_not_found', 'Configured intake coach account was not found.');
@@ -3460,7 +3506,8 @@ app.post('/api/intake', intakeLimiter, async (req, res) => {
       status: 'new',
       intake,
       instellingen,
-      calculations
+      calculations,
+      consents: consentRecord
     });
 
     return sendSuccess(res, 201, { leadId: leadRef.id, calculations });
@@ -3834,6 +3881,10 @@ app.put('/api/bodybuilding/daily-mission/:userId', authenticateToken, async (req
   try {
     const userId = req.params.userId;
     if (!userId) return sendError(res, 422, 'mission.missing_user_id', 'userId is required.');
+    // The path carries a username; only the signed-in user may write their own.
+    if (String(userId).trim().toLowerCase() !== String(req.user?.username || '').toLowerCase()) {
+      return sendError(res, 403, 'auth.forbidden', 'You can only update your own daily mission.');
+    }
 
     const state = req.body || {};
     const today = new Date().toISOString().slice(0, 10);
