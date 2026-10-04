@@ -1,0 +1,168 @@
+[
+  {
+    "id": "train.volume.henselmans",
+    "version": 1,
+    "domain": "training",
+    "statement": "Optimal weekly sets per muscle group = (f<3 ? f : 2.5) × 5 × recovery × energy-balance factor × √training status (+3 for women).",
+    "params": {
+      "formula": "trainingsvolumeAdvies",
+      "recovery": {
+        "min": 0.5,
+        "default": 1.0,
+        "max": 1.2
+      }
+    },
+    "evidenceGrade": "unrated",
+    "sources": [
+      {
+        "label": "ClientIntake calculations.js (trainingsvolumeAdvies)"
+      },
+      {
+        "label": "Menno Henselmans volume model"
+      }
+    ],
+    "moduleRef": "BU: Training intensity, volume & frequency",
+    "bu": {
+      "section": "Training intensity, volume & frequency",
+      "status": "match",
+      "quotes": [
+        "volume 10–30 sets/week/muscle depending on recovery capacity",
+        "Anchor around 10–15 direct sets/week/muscle if intermediate, and move up cautiously"
+      ],
+      "note": "Same 10–30 range scaled by recovery. BU adds that sets should be counted as direct, with indirect sets at about half, and that older clients do better on lower volume."
+    },
+    "lastReviewed": null,
+    "verified": false
+  },
+  {
+    "id": "train.status.from_experience",
+    "version": 1,
+    "domain": "training",
+    "statement": "Training status for the volume formula from years of training: under 1 year = 1 (beginner), under 4 = 2, otherwise 3 (advanced). A starting point for the coach, not a cited figure.",
+    "params": {
+      "thresholdsYears": [
+        1,
+        4
+      ],
+      "statuses": [
+        1,
+        2,
+        3
+      ]
+    },
+    "evidenceGrade": "unrated",
+    "sources": [],
+    "moduleRef": "BU: Training intensity, volume & frequency",
+    "bu": {
+      "section": "Training intensity, volume & frequency",
+      "status": "not_covered",
+      "quotes": [],
+      "note": "BU does not define training-status cut-offs by years of experience."
+    },
+    "lastReviewed": null,
+    "verified": false
+  },
+  {
+    "id": "train.split.by_frequency",
+    "version": 1,
+    "domain": "training",
+    "statement": "Training split from weekly sessions: 1–3 full body, 4 upper/lower, 5 PPL + upper/lower, 6 PPL ×2.",
+    "params": {
+      "formula": "bepaalSplitsdagen",
+      "muscleFrequency": {
+        "1": 1,
+        "2": 2,
+        "3": 3,
+        "4": 2,
+        "5": 2,
+        "6": 2
+      }
+    },
+    "evidenceGrade": "unrated",
+    "sources": [
+      {
+        "label": "ClientIntake calculations.js (bepaalSplitsdagen)"
+      }
+    ],
+    "moduleRef": "BU: Training intensity, volume & frequency",
+    "bu": {
+      "section": "Training intensity, volume & frequency",
+      "status": "match",
+      "quotes": [
+        "frequency at least once/week per 6 sets of volume per muscle",
+        "Twice weekly per muscle is a safe, well-supported default"
+      ],
+      "note": "Matches the 6-sets-per-session frequency rule and the twice-weekly default."
+    },
+    "lastReviewed": null,
+    "verified": false
+  },
+  {
+    "id": "train.volume.max_per_session",
+    "version": 2,
+    "domain": "training",
+    "statement": "At least one session per week for every 6 weekly sets of a muscle: flag more than 6 sets per muscle per session.",
+    "params": {"default": 6, "setsPerSession": 6},
+    "evidenceGrade": "unrated",
+    "sources": [{"label": "Butters University README — Training intensity, volume & frequency; seed text from src/knowledge/training-methodology.js"}],
+    "moduleRef": "BU: Training intensity, volume & frequency",
+    "bu": {
+      "section": "Training intensity, volume & frequency",
+      "status": "match",
+      "quotes": [
+        "frequency at least once/week per 6 sets of volume per muscle"
+      ],
+      "note": "BU's frequency rule (once a week per 6 sets) read as a per-session limit of 6 sets. BU's worked example puts 7 direct-equivalent sets in one session and calls that comfortable, so the flag is advice, not a hard stop."
+    },
+    "lastReviewed": null,
+    "verified": false
+  },
+  {
+    "id": "train.progression.scheme",
+    "version": 2,
+    "domain": "training",
+    "statement": "Double progression in 6–12 reps: leave 1–3 reps in reserve on most sets, failure only on the last set of an exercise; add reps, then the smallest load increment.",
+    "params": {"scheme": "double_progression", "repRange": [6, 12], "rir": [3, 1], "failure": "last_set_only"},
+    "evidenceGrade": "unrated",
+    "sources": [{"label": "Butters University README — Exercise execution / technique; seed text from src/knowledge/training-methodology.js"}],
+    "moduleRef": "BU: Exercise execution / technique",
+    "bu": {
+      "section": "Exercise execution / technique",
+      "status": "match",
+      "quotes": [
+        "Leave 1–3 reps in reserve on most sets; save all-out failure for the last set of an exercise, if at all"
+      ],
+      "note": "RIR as BU says. 6–12 reps is roughly 70–85% 1RM, inside the 30–90% band BU's training-volume module gives; BU leaves the exact load to feel, so the range is a coaching default the coach can change."
+    },
+    "lastReviewed": null,
+    "verified": false
+  },
+  {
+    "id": "train.deload.policy",
+    "version": 1,
+    "domain": "training",
+    "statement": "Deloads are reactive and per exercise: deload an exercise only when its performance unexpectedly drops (>2.5% strength loss at the same exercise with no other explanation). Scheduled every-4th-week deloads are not recommended.",
+    "params": {
+      "mode": "reactive",
+      "scope": "exercise",
+      "triggerStrengthLossPct": 2.5
+    },
+    "evidenceGrade": "unrated",
+    "sources": [
+      {
+        "label": "Butters University README — Periodization; seed text from src/knowledge/training-methodology.js"
+      }
+    ],
+    "moduleRef": "BU: Periodization",
+    "bu": {
+      "section": "Periodization",
+      "status": "match",
+      "quotes": [
+        "Trigger a deload based on evidence of accumulated fatigue (stalled lifts, rising soreness, poor sleep/recovery), not a fixed calendar date"
+      ],
+      "note": "Matches: deloads react to fatigue and are not put on a calendar."
+    },
+    "lastReviewed": null,
+    "verified": false
+  }
+]

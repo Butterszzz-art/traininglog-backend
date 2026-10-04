@@ -1,0 +1,211 @@
+[
+  {
+    "id": "nutr.bmr.method",
+    "version": 2,
+    "domain": "nutrition",
+    "statement": "Basal metabolic rate: Cunningham/Katch–McArdle from fat-free mass (370 + 21.6 × FFM kg) by default; Tinsley (24.8 × BW kg + 10) for very lean, advanced clients. Untrained clients with higher body fat get a flag to correct the estimate against weigh-ins.",
+    "params": {"formula": "bmrMethodeVoorClient", "default": "katchMcArdle", "tinsley": {"maxBodyFat": {"man": 10, "vrouw": 18, "anders": 14}, "trainingStatus": 3}, "unreliableFrom": {"bodyFat": {"man": 22, "vrouw": 30, "anders": 26}, "trainingStatus": 1}},
+    "evidenceGrade": "unrated",
+    "sources": [{"label": "ClientIntake calculations.js (bmrMethodeVoorClient, katchMcArdleBMR, tinsleyRMR)"}, {"label": "Butters University README — Energy balance"}],
+    "moduleRef": "BU: Energy balance",
+    "bu": {
+      "section": "Module: Energy balance",
+      "status": "match",
+      "quotes": [
+        "the PTC recommends the Cunningham (1991) equation (BMR = 370 + 21.6 × FFM in kg, also known as Katch-McArdle)",
+        "if you're very lean and highly muscled, prefer Tinsley (24.8 × BW(kg) + 10)",
+        "Cunningham is a poor default for higher-body-fat, untrained people"
+      ],
+      "note": "BU's formula choice. BU gives no cut-offs: 'very lean' uses the body-fat levels in params and 'highly muscled' means 4+ years of training; the 'unreliable' levels are set so BU's example (untrained woman, 30% body fat) is flagged. BU names no better formula for those clients, so they keep Katch–McArdle with a flag to correct it after 2+ weeks of weigh-ins (BU: treat any estimate as a starting point)."
+    },
+    "lastReviewed": null,
+    "verified": false
+  },
+  {
+    "id": "nutr.pal.table",
+    "version": 2,
+    "domain": "nutrition",
+    "statement": "Physical activity level for activity outside training, by sex. Resistance training is not in it: it is costed separately as training-day expenditure.",
+    "params": {
+      "bySex": {
+        "man": { "sedentair": 1.0, "licht actief": 1.11, "actief": 1.25, "erg actief": 1.48 },
+        "vrouw": { "sedentair": 1.0, "licht actief": 1.12, "actief": 1.27, "erg actief": 1.45 }
+      },
+      "values": { "sedentair": 1.0, "licht actief": 1.115, "actief": 1.26, "erg actief": 1.465 },
+      "fallback": "sedentair"
+    },
+    "evidenceGrade": "unrated",
+    "sources": [{ "label": "ClientIntake calculations.js (STANDAARD_PAL_PER_GESLACHT, STANDAARD_PAL)" }, { "label": "Butters University README — Energy balance" }, { "label": "IOM (2005) physical-activity coefficients (split per sex)" }],
+    "moduleRef": "BU: Energy balance",
+    "bu": {
+      "section": "Module: Energy balance",
+      "status": "match",
+      "quotes": [
+        "sedentary 1.00, light 1.11–1.12, active 1.25–1.27, very active 1.45–1.48, sex-specific",
+        "explicitly excluding resistance training from that multiplier"
+      ],
+      "note": "BU values, excluding resistance training. BU gives each level as a range; which end is male and which female follows the IOM coefficients the ranges come from. 'values' (the midpoint) is used for 'anders' or an unknown sex."
+    },
+    "lastReviewed": null,
+    "verified": false
+  },
+  {
+    "id": "nutr.tef.factor",
+    "version": 1,
+    "domain": "nutrition",
+    "statement": "Thermic effect of food applied as a ×1.1 multiplier on BMR×PAL and on training energy expenditure.",
+    "params": { "default": 1.1 },
+    "evidenceGrade": "unrated",
+    "sources": [{ "label": "ClientIntake calculations.js (STANDAARD_TEF)" }],
+    "moduleRef": "BU: Energy balance",
+    "bu": {
+      "section": "Module: Energy balance",
+      "status": "match",
+      "quotes": [
+        "the thermic effect of food (TEF) is layered on as a multiplier (BMR × TEF = REE), typically 10% as a population average",
+        "BMR × PAL × TEF ≈ non-training-day TDEE, or ((BMR × PAL) + RTEE) × TEF on training days"
+      ],
+      "note": "Same multiplier and the same rest-day/training-day structure as ClientIntake."
+    },
+    "lastReviewed": null,
+    "verified": false
+  },
+  {
+    "id": "nutr.training_day.expenditure",
+    "version": 1,
+    "domain": "nutrition",
+    "statement": "Training-day energy expenditure = MET × 3.5 × bodyweight / 200 × minutes.",
+    "params": { "MET": 5.7, "minutes": 60 },
+    "evidenceGrade": "unrated",
+    "sources": [{ "label": "ClientIntake calculations.js (energieverbruikTrainingsdag)" }],
+    "moduleRef": "BU: Energy balance",
+    "bu": {
+      "section": "Module: Energy balance",
+      "status": "match",
+      "quotes": [
+        "0.1 kcal/kg/min of active training time, roughly 300–500 kcal per session"
+      ],
+      "note": "MET 5.7 over 60 minutes is about 0.1 kcal/kg/min, the BU figure."
+    },
+    "lastReviewed": null,
+    "verified": false
+  },
+  {
+    "id": "nutr.energy.factor",
+    "version": 2,
+    "domain": "nutrition",
+    "statement": "Energy-balance factor on maintenance. Fat loss: the deficit scales with body fat, from 2.5–7.5% near contest leanness to 30–50% at high body fat, linear in between. Muscle and strength goals: the surplus scales with training status (beginner 5–15%, intermediate 2–7%, advanced 1–3%). Maintenance: 1.0 ±3%.",
+    "params": {
+      "formula": "energiebalansBereik",
+      "deficit": {
+        "bodyFatAnchors": { "man": { "wedstrijd": 6, "hoog": 32 }, "vrouw": { "wedstrijd": 14, "hoog": 40 }, "anders": { "wedstrijd": 10, "hoog": 36 } },
+        "atContestLeanness": { "min": 0.025, "standaard": 0.05, "max": 0.075 },
+        "atHighBodyFat": { "min": 0.3, "standaard": 0.3, "max": 0.5 }
+      },
+      "surplusByStatus": {
+        "1": { "min": 1.05, "standaard": 1.1, "max": 1.15 },
+        "2": { "min": 1.02, "standaard": 1.045, "max": 1.07 },
+        "3": { "min": 1.01, "standaard": 1.02, "max": 1.03 }
+      },
+      "maintenance": { "min": 0.97, "standaard": 1.0, "max": 1.03 }
+    },
+    "evidenceGrade": "unrated",
+    "sources": [{ "label": "ClientIntake calculations.js (energiebalansBereik, tekortBereik, SURPLUS_PER_TRAININGSSTATUS)" }, { "label": "Butters University README — Energy balance" }],
+    "moduleRef": "BU: Energy balance",
+    "bu": {
+      "section": "Module: Energy balance",
+      "status": "match",
+      "quotes": [
+        "scaled by training status (beginners 5–15% surplus targeting 0.5–1%/week bodyweight gain; intermediate 2–7% targeting 0.2–0.5%/week; advanced 1–3%",
+        "For cutting rate, the PTC scales the weekly rate of loss and the size of the deficit inversely with leanness",
+        "Start at ~20% deficit (Overgewicht category)"
+      ],
+      "note": "BU's ranges at both ends. BU gives no body-fat cut-offs, so the anchors are a judgement call, chosen so BU's worked example (untrained woman, 30% body fat) lands on its ~20% deficit. The default at high body fat is the low end of 30–50%. Maintenance ±3% is not from BU."
+    },
+    "lastReviewed": null,
+    "verified": false
+  },
+  {
+    "id": "nutr.protein.g_per_kg",
+    "version": 1,
+    "domain": "nutrition",
+    "statement": "Protein 1.6–2.4 g/kg bodyweight per day; 1.8 g/kg practical default; not raised during a deficit.",
+    "params": { "unit": "g/kg/day", "min": 1.6, "default": 1.8, "max": 2.4 },
+    "evidenceGrade": "unrated",
+    "sources": [{ "label": "ClientIntake calculations.js (EIWIT_BEREIK_G_PER_KG)" }, { "label": "Butters University README — Protein" }],
+    "moduleRef": "BU: Protein",
+    "bu": {
+      "section": "Module: Protein",
+      "status": "match",
+      "quotes": [
+        "never found a significant hypertrophy/strength benefit above 1.6 g/kg/day",
+        "the PTC still recommends 1.8 g/kg for advanced lifters",
+        "implies needs of 2.4+ g/kg"
+      ],
+      "note": "Matches: no added benefit above 1.6 g/kg, default 1.8 g/kg, 2.4+ g/kg for steroid users."
+    },
+    "lastReviewed": null,
+    "verified": false
+  },
+  {
+    "id": "nutr.fat.pct_ree",
+    "version": 2,
+    "domain": "nutrition",
+    "statement": "Fat 20–40% of rest-day energy expenditure (REE): women 40% (top of the range), men 30% (middle), anders 35%.",
+    "params": {"unit": "fraction of REE", "min": 0.2, "max": 0.4, "bySex": {"man": 0.3, "vrouw": 0.4, "anders": 0.35}},
+    "evidenceGrade": "unrated",
+    "sources": [{"label": "ClientIntake calculations.js (VET_BEREIK_PERCENTAGE_REE, VET_PERCENTAGE_REE_PER_GESLACHT)"}, {"label": "Butters University README — Fats"}],
+    "moduleRef": "BU: Fats",
+    "bu": {
+      "section": "Module: Fats",
+      "status": "match",
+      "quotes": [
+        "the PTC recommends women target the higher end (closer to 40% of REE) of the 20-40% fat-intake range",
+        "treat 20-40% of calories from fat as a reasonable target"
+      ],
+      "note": "BU puts women at the top of the 20–40% range. It sets no point for men, so they get the middle. The basis is REE, as in BU's PTC section (the 'What this means for you' list says calories)."
+    },
+    "lastReviewed": null,
+    "verified": false
+  },
+  {
+    "id": "nutr.meals.count",
+    "version": 1,
+    "domain": "nutrition",
+    "statement": "Meals per day used to split the macros.",
+    "params": { "min": 2, "default": 4, "max": 6 },
+    "evidenceGrade": "unrated",
+    "sources": [{ "label": "ClientIntake calculations.js (berekenClient aantalMaaltijden)" }],
+    "moduleRef": "BU: Protein",
+    "bu": {
+      "section": "Module: Protein",
+      "status": "match",
+      "quotes": [
+        "the PTC's recommendation is 3-5 meals/day as a practical default"
+      ],
+      "note": "Default 4 within 3–5. The ad libitum module allows 2–5, and up to 6 in a bulk."
+    },
+    "lastReviewed": null,
+    "verified": false
+  },
+  {
+    "id": "nutr.meals.post_training_protein",
+    "version": 1,
+    "domain": "nutrition",
+    "statement": "Post-training meals get 50% more protein; 100% more when only one meal sits between training and bed.",
+    "params": { "default": 1.5, "conditions": [{ "when": { "singleMealAfterTraining": true }, "default": 2.0 }] },
+    "evidenceGrade": "unrated",
+    "sources": [{ "label": "ClientIntake calculations.js (POST_TRAINING_BOOST_*)" }, { "label": "Butters University README — Protein" }],
+    "moduleRef": "BU: Protein",
+    "bu": {
+      "section": "Module: Protein",
+      "status": "match",
+      "quotes": [
+        "roughly 50-100% more per meal than pre-training meals"
+      ],
+      "note": "×1.5 (×2.0 with a single post-training meal) is 50–100% more."
+    },
+    "lastReviewed": null,
+    "verified": false
+  }
+]

@@ -23,6 +23,8 @@ const { createSharesRouter, deleteShares } = require('./src/routes/shares');
 const { createNotificationsRouter, notifyVolumePasses, deleteNotifications } = require('./src/routes/notifications');
 const coachNotifications = require('./src/coachNotifications');
 const { createSyncRouter } = require('./src/routes/sync');
+const { createCoachPlansRouter, createClientPlanRouter } = require('./src/routes/plans');
+const { createRegistry } = require('./src/rules/registry');
 const { FieldPath } = require('firebase-admin/firestore');
 const { createExerciseBoardRouter, recordExerciseBests, forgetExerciseSession, deleteExerciseBests } = require('./src/routes/exerciseBoard');
 const { pairId: friendPairId } = require('./src/routes/friends');
@@ -670,6 +672,9 @@ async function deleteFromCoachRosters(uid) {
   const coachUids = new Set([...invites.docs, ...assignments.docs].map(d => d.id));
   for (const coachUid of coachUids) {
     await db.recursiveDelete(db.collection(`coaches/${coachUid}/clients`).doc(uid));
+    // The coach's master plans for this client (drafts included).
+    const plans = await db.collection(`coaches/${coachUid}/plans`).where('clientUid', '==', uid).get();
+    for (const doc of plans.docs) await doc.ref.delete();
   }
 }
 
@@ -4383,6 +4388,38 @@ app.use('/api/sync', authenticateToken, syncLimiter, createSyncRouter({
   documentId: FieldPath.documentId(),
   enabled: () => process.env.CLOUD_SYNC_ENABLED !== 'false',
 }));
+// ── Master plans (src/routes/plans.js) ───────────────────────────────────────
+// A broken rules/*.json must not take the whole API down: only the plan
+// routes answer 503 until it is fixed.
+let planRegistry = null;
+try {
+  planRegistry = createRegistry();
+} catch (err) {
+  console.error('[plans] Rule registry failed to load — plan routes disabled:', err.message);
+}
+const plansAvailable = (_req, res, next) => {
+  if (!firebaseEnabled) return sendError(res, 503, 'plan.firebase_disabled', 'Plans require a migrated (Firebase) backend.');
+  if (!planRegistry) return sendError(res, 503, 'plan.registry_unavailable', 'The plan rules are unavailable. Try again later.');
+  return next();
+};
+const planLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: { code: 'plan.rate_limited', message: 'Too many plan requests. Try again shortly.' } }
+});
+const coachPlansRouter = planRegistry && createCoachPlansRouter({
+  db, FieldValue, registry: planRegistry, sendError, sendSuccess, resolveCallerUid,
+  notifyPlanPublished: async ({ coachUsername, clientUid, fields }) => {
+    const clientUsername = await usernameForUid(clientUid);
+    if (clientUsername) await coachNotifications.notifyCoachPlan(db, { coachUsername, clientUsername, fields });
+  },
+});
+const clientPlanRouter = createClientPlanRouter({ db, sendError, sendSuccess, resolveCallerUid });
+app.use('/api/coach/plans', authenticateToken, requireCoachPlan, planLimiter, plansAvailable, (req, res, next) => coachPlansRouter(req, res, next));
+app.use('/api/client/plan', authenticateToken, planLimiter, plansAvailable, clientPlanRouter);
+
 app.use('/', leaderboardRoute);
 
 // ── Exercise library ─────────────────────────────────────────────────────────
