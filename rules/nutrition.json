@@ -1,0 +1,118 @@
+[
+  {
+    "id": "nutr.bmr.method",
+    "version": 1,
+    "domain": "nutrition",
+    "statement": "Basal metabolic rate by Katch–McArdle from fat-free mass: 370 + 21.6 × FFM (kg).",
+    "params": { "formula": "katchMcArdleBMR" },
+    "evidenceGrade": "unrated",
+    "sources": [{ "label": "ClientIntake calculations.js (katchMcArdleBMR)" }],
+    "moduleRef": null,
+    "lastReviewed": null,
+    "verified": false
+  },
+  {
+    "id": "nutr.pal.table",
+    "version": 1,
+    "domain": "nutrition",
+    "statement": "Physical activity level multiplier by activity outside training.",
+    "params": { "values": { "sedentair": 1.2, "licht actief": 1.375, "actief": 1.55, "erg actief": 1.725 }, "fallback": "sedentair" },
+    "evidenceGrade": "unrated",
+    "sources": [{ "label": "ClientIntake calculations.js (STANDAARD_PAL)" }],
+    "moduleRef": null,
+    "lastReviewed": null,
+    "verified": false
+  },
+  {
+    "id": "nutr.tef.factor",
+    "version": 1,
+    "domain": "nutrition",
+    "statement": "Thermic effect of food applied as a ×1.1 multiplier on BMR×PAL and on training energy expenditure.",
+    "params": { "default": 1.1 },
+    "evidenceGrade": "unrated",
+    "sources": [{ "label": "ClientIntake calculations.js (STANDAARD_TEF)" }],
+    "moduleRef": null,
+    "lastReviewed": null,
+    "verified": false
+  },
+  {
+    "id": "nutr.training_day.expenditure",
+    "version": 1,
+    "domain": "nutrition",
+    "statement": "Training-day energy expenditure = MET × 3.5 × bodyweight / 200 × minutes.",
+    "params": { "MET": 5.7, "minutes": 60 },
+    "evidenceGrade": "unrated",
+    "sources": [{ "label": "ClientIntake calculations.js (energieverbruikTrainingsdag)" }],
+    "moduleRef": null,
+    "lastReviewed": null,
+    "verified": false
+  },
+  {
+    "id": "nutr.energy.factor",
+    "version": 1,
+    "domain": "nutrition",
+    "statement": "Target intake as a factor of maintenance, by goal: cut 10–30% deficit, build ~200–500 kcal surplus.",
+    "params": {
+      "default": 1.0,
+      "conditions": [
+        { "when": { "goal": "vetverlies" }, "default": 0.8, "range": { "type": "factor", "min": 0.7, "max": 0.9 } },
+        { "when": { "goal": "onderhoud" }, "default": 1.0, "range": { "type": "factor", "min": 0.97, "max": 1.03 } },
+        { "when": { "goal": "spieropbouw" }, "default": 1.1, "range": { "type": "surplusKcal", "min": 200, "max": 500 } },
+        { "when": { "goal": "krachttoename" }, "default": 1.05, "range": { "type": "surplusKcal", "min": 100, "max": 300 } }
+      ]
+    },
+    "evidenceGrade": "unrated",
+    "sources": [{ "label": "ClientIntake calculations.js (STANDAARD_ENERGIEBALANS_FACTOR, ENERGIEBALANS_BEREIK)" }, { "label": "Butters University Module 14" }],
+    "moduleRef": "BU-M14",
+    "lastReviewed": null,
+    "verified": false
+  },
+  {
+    "id": "nutr.protein.g_per_kg",
+    "version": 1,
+    "domain": "nutrition",
+    "statement": "Protein 1.6–2.4 g/kg bodyweight per day; 1.8 g/kg practical default; not raised during a deficit.",
+    "params": { "unit": "g/kg/day", "min": 1.6, "default": 1.8, "max": 2.4 },
+    "evidenceGrade": "unrated",
+    "sources": [{ "label": "ClientIntake calculations.js (EIWIT_BEREIK_G_PER_KG)" }, { "label": "Butters University Module 11" }],
+    "moduleRef": "BU-M11",
+    "lastReviewed": null,
+    "verified": false
+  },
+  {
+    "id": "nutr.fat.pct_ree",
+    "version": 1,
+    "domain": "nutrition",
+    "statement": "Fat 20–40% of rest-day energy expenditure (REE); 40% default.",
+    "params": { "unit": "fraction of REE", "min": 0.2, "default": 0.4, "max": 0.4 },
+    "evidenceGrade": "unrated",
+    "sources": [{ "label": "ClientIntake calculations.js (VET_BEREIK_PERCENTAGE_REE)" }, { "label": "Butters University Module 13" }],
+    "moduleRef": "BU-M13",
+    "lastReviewed": null,
+    "verified": false
+  },
+  {
+    "id": "nutr.meals.count",
+    "version": 1,
+    "domain": "nutrition",
+    "statement": "Meals per day used to split the macros.",
+    "params": { "min": 2, "default": 4, "max": 6 },
+    "evidenceGrade": "unrated",
+    "sources": [{ "label": "ClientIntake calculations.js (berekenClient aantalMaaltijden)" }],
+    "moduleRef": null,
+    "lastReviewed": null,
+    "verified": false
+  },
+  {
+    "id": "nutr.meals.post_training_protein",
+    "version": 1,
+    "domain": "nutrition",
+    "statement": "Post-training meals get 50% more protein; 100% more when only one meal sits between training and bed.",
+    "params": { "default": 1.5, "conditions": [{ "when": { "singleMealAfterTraining": true }, "default": 2.0 }] },
+    "evidenceGrade": "unrated",
+    "sources": [{ "label": "ClientIntake calculations.js (POST_TRAINING_BOOST_*)" }, { "label": "Butters University Module 11" }],
+    "moduleRef": "BU-M11",
+    "lastReviewed": null,
+    "verified": false
+  }
+]

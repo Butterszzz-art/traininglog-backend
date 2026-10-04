@@ -1,0 +1,5 @@
+{
+  "version": "0.1.0",
+  "description": "Pocket Coach rule registry. Formulas live in ClientIntake's calculations.js (src/intakeCalculations.js here); these rules hold the parameters, ranges and package layouts the plan generator feeds into them. Butters University is the evidence source; every rule stays verified:false until it has been reviewed against it.",
+  "files": ["nutrition.json", "training.json", "safety.json", "packages.json"]
+}

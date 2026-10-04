@@ -1,0 +1,67 @@
+[
+  {
+    "id": "pkg.cut_cycle_32",
+    "version": 1,
+    "domain": "package",
+    "statement": "Cut Cycle, 32 weeks: Cut 12 → Maintain 4 → Cut 12 → Maintain 4. A phase ends on its target or its time cap, whichever comes first.",
+    "params": {
+      "name": "Cut Cycle",
+      "blockWeeks": 4,
+      "phases": [
+        { "type": "cut", "weeks": 12 },
+        { "type": "maintain", "weeks": 4 },
+        { "type": "cut", "weeks": 12 },
+        { "type": "maintain", "weeks": 4 }
+      ]
+    },
+    "evidenceGrade": "n/a",
+    "sources": [],
+    "moduleRef": null,
+    "lastReviewed": null,
+    "verified": true
+  },
+  {
+    "id": "pkg.physique_28",
+    "version": 1,
+    "domain": "package",
+    "statement": "Physique Plan, 28 weeks: Build 16 → Maintain 4 → Cut 8. A phase ends on its target or its time cap, whichever comes first.",
+    "params": {
+      "name": "Physique Plan",
+      "blockWeeks": 4,
+      "phases": [
+        { "type": "build", "weeks": 16 },
+        { "type": "maintain", "weeks": 4 },
+        { "type": "cut", "weeks": 8 }
+      ]
+    },
+    "evidenceGrade": "n/a",
+    "sources": [],
+    "moduleRef": null,
+    "lastReviewed": null,
+    "verified": true
+  },
+  {
+    "id": "pkg.phase.goal_map",
+    "version": 1,
+    "domain": "package",
+    "statement": "Each phase type uses one intake goal category for its energy target.",
+    "params": { "map": { "cut": "vetverlies", "maintain": "onderhoud", "build": "spieropbouw" } },
+    "evidenceGrade": "n/a",
+    "sources": [],
+    "moduleRef": null,
+    "lastReviewed": null,
+    "verified": true
+  },
+  {
+    "id": "pkg.tier.adjustment_caps",
+    "version": 1,
+    "domain": "package",
+    "statement": "Ad-hoc adjustment requests per billing month: Basis 0, Medium 2, Premium unlimited. Phase-transition re-plans never count.",
+    "params": { "caps": { "basis": 0, "medium": 2, "premium": null } },
+    "evidenceGrade": "n/a",
+    "sources": [],
+    "moduleRef": null,
+    "lastReviewed": null,
+    "verified": true
+  }
+]

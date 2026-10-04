@@ -1,0 +1,141 @@
+[
+  {
+    "id": "train.volume.henselmans",
+    "version": 1,
+    "domain": "training",
+    "statement": "Optimal weekly sets per muscle group = (f<3 ? f : 2.5) × 5 × recovery × energy-balance factor × √training status (+3 for women).",
+    "params": {
+      "formula": "trainingsvolumeAdvies",
+      "recovery": {
+        "min": 0.5,
+        "default": 1.0,
+        "max": 1.2
+      }
+    },
+    "evidenceGrade": "unrated",
+    "sources": [
+      {
+        "label": "ClientIntake calculations.js (trainingsvolumeAdvies)"
+      },
+      {
+        "label": "Menno Henselmans volume model"
+      }
+    ],
+    "moduleRef": "BU-M3",
+    "lastReviewed": null,
+    "verified": false
+  },
+  {
+    "id": "train.status.from_experience",
+    "version": 1,
+    "domain": "training",
+    "statement": "Training status for the volume formula from years of training: under 1 year = 1 (beginner), under 4 = 2, otherwise 3 (advanced). A starting point for the coach, not a cited figure.",
+    "params": {
+      "thresholdsYears": [
+        1,
+        4
+      ],
+      "statuses": [
+        1,
+        2,
+        3
+      ]
+    },
+    "evidenceGrade": "unrated",
+    "sources": [],
+    "moduleRef": null,
+    "lastReviewed": null,
+    "verified": false
+  },
+  {
+    "id": "train.split.by_frequency",
+    "version": 1,
+    "domain": "training",
+    "statement": "Training split from weekly sessions: 1–3 full body, 4 upper/lower, 5 PPL + upper/lower, 6 PPL ×2.",
+    "params": {
+      "formula": "bepaalSplitsdagen",
+      "muscleFrequency": {
+        "1": 1,
+        "2": 2,
+        "3": 3,
+        "4": 2,
+        "5": 2,
+        "6": 2
+      }
+    },
+    "evidenceGrade": "unrated",
+    "sources": [
+      {
+        "label": "ClientIntake calculations.js (bepaalSplitsdagen)"
+      }
+    ],
+    "moduleRef": "BU-M20",
+    "lastReviewed": null,
+    "verified": false
+  },
+  {
+    "id": "train.volume.max_per_session",
+    "version": 1,
+    "domain": "training",
+    "statement": "About 10 sets per muscle group per session at most; past that, returns diminish (1 session per ~6 weekly sets).",
+    "params": {
+      "default": 10,
+      "setsPerSession": 6
+    },
+    "evidenceGrade": "unrated",
+    "sources": [
+      {
+        "label": "Butters University Module 3 (training-methodology.js)"
+      }
+    ],
+    "moduleRef": "BU-M3",
+    "lastReviewed": null,
+    "verified": false
+  },
+  {
+    "id": "train.progression.scheme",
+    "version": 1,
+    "domain": "training",
+    "statement": "Double progression: add reps within the range at the target proximity to failure, then add the smallest load increment.",
+    "params": {
+      "scheme": "double_progression",
+      "repRange": [
+        6,
+        12
+      ],
+      "rir": [
+        3,
+        0
+      ]
+    },
+    "evidenceGrade": "unrated",
+    "sources": [
+      {
+        "label": "Butters University Module 7 (training-methodology.js)"
+      }
+    ],
+    "moduleRef": "BU-M7",
+    "lastReviewed": null,
+    "verified": false
+  },
+  {
+    "id": "train.deload.policy",
+    "version": 1,
+    "domain": "training",
+    "statement": "Deloads are reactive and per exercise: deload an exercise only when its performance unexpectedly drops (>2.5% strength loss at the same exercise with no other explanation). Scheduled every-4th-week deloads are not recommended.",
+    "params": {
+      "mode": "reactive",
+      "scope": "exercise",
+      "triggerStrengthLossPct": 2.5
+    },
+    "evidenceGrade": "unrated",
+    "sources": [
+      {
+        "label": "Butters University Module 7 (training-methodology.js)"
+      }
+    ],
+    "moduleRef": "BU-M7",
+    "lastReviewed": null,
+    "verified": false
+  }
+]

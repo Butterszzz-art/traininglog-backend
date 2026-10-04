@@ -1,0 +1,38 @@
+[
+  {
+    "id": "safety.deficit.max",
+    "version": 1,
+    "domain": "safety",
+    "statement": "Flag a rest-day target more than 25% below maintenance, or below BMR.",
+    "params": { "maxDeficitFraction": 0.25, "floor": "bmr" },
+    "evidenceGrade": "unrated",
+    "sources": [{ "label": "ClientIntake calculations.js (genereerRodeVlaggen)" }],
+    "moduleRef": null,
+    "lastReviewed": null,
+    "verified": false
+  },
+  {
+    "id": "safety.injury.conflicts",
+    "version": 1,
+    "domain": "safety",
+    "statement": "Flag standard exercises that load a reported injury site, plus the client's own avoid list.",
+    "params": { "formula": "detecteerBlessureConflicten" },
+    "evidenceGrade": "unrated",
+    "sources": [{ "label": "ClientIntake calculations.js (detecteerBlessureConflicten)" }],
+    "moduleRef": null,
+    "lastReviewed": null,
+    "verified": false
+  },
+  {
+    "id": "safety.sleep.min_hours",
+    "version": 1,
+    "domain": "recovery",
+    "statement": "Flag under 6 hours of sleep: it can limit recovery and progress.",
+    "params": { "default": 6 },
+    "evidenceGrade": "unrated",
+    "sources": [{ "label": "ClientIntake calculations.js (genereerRodeVlaggen)" }],
+    "moduleRef": null,
+    "lastReviewed": null,
+    "verified": false
+  }
+]
