@@ -1,12 +1,17 @@
-// Pure calculation functions for the client-intake feature.
-// Ported from the standalone ClientIntake app (calculations.js there is ES
-// modules with no DOM access) — same functions, same field names, CommonJS
-// exports so server.js can require() it directly. No behavior changes.
+// GENERATED from ClientIntake/calculations.js by
+// scripts/sync-intake-calculations.js — do not edit by hand.
+// ClientIntake is the source of truth for these calculations.
+
+// Pure calculation functions for the PT client-intake app.
+// No DOM access, no side effects — input in, output out.
+// Reused as-is by app.js today; intended to be portable to a backend or the
+// companion fitness app later without rewriting.
 
 const STANDAARD_PAL = {
   sedentair: 1.2,
   'licht actief': 1.375,
   actief: 1.55,
+  'erg actief': 1.725,
 };
 
 const STANDAARD_TEF = 1.1;
@@ -28,7 +33,7 @@ const VET_BEREIK_PERCENTAGE_REE = { min: 0.2, max: 0.4 };
 // Cutting/bulking ranges as given in Module 14. "Onderhoud" and
 // "krachttoename" aren't defined numerically in that module (only vetverlies
 // and spieropbouw are) — those two are a reasonable judgment call, not a
-// cited figure.
+// cited figure; see README.
 const ENERGIEBALANS_BEREIK = {
   vetverlies: { type: 'factor', min: 0.70, max: 0.90 }, // Module 14: 10-30% tekort
   onderhoud: { type: 'factor', min: 0.97, max: 1.03 },
@@ -41,7 +46,7 @@ const POST_TRAINING_BOOST_ENKELE_MAALTIJD = 2.0; // Module 11: "100% meer" bij 1
 
 const STANDAARD_OEFENINGEN_GEVOELIGHEID = {
   knie: ['squat', 'front squat', 'lunges', 'leg press', 'leg extension', 'bulgarian split squat'],
-  onderrug: ['deadlift', 'good morning', 'bent-over row', 'romanian deadlift'],
+  'onderrug': ['deadlift', 'good morning', 'bent-over row', 'romanian deadlift'],
   rug: ['deadlift', 'good morning', 'bent-over row', 'romanian deadlift'],
   schouder: ['overhead press', 'bench press', 'upright row', 'lateral raise'],
   pols: ['bench press', 'overhead press', 'front squat'],
@@ -112,6 +117,71 @@ function werkcapaciteit(oudeSet, nieuweSet) {
   return ((nieuweSet - oudeSet) / oudeSet) * 100;
 }
 
+// ---------- Training Volume Calculator (Menno Henselmans model) ----------
+// trainingsstatus: 1 (beginner) - 3 (gevorderd/elite). vrouw: 0/1.
+// herstelfactor: 0.5-1.2. energiebalansfactor: vermenigvuldiger (bv. lager
+// tijdens een dieetfase). trainingsfrequentie: keer/week dat de spiergroep
+// wordt getraind — boven de 3x/week telt effectief nog maar 2.5x mee.
+function trainingsvolumeAdvies(trainingsstatus, vrouw, herstelfactor, energiebalansfactor, trainingsfrequentie) {
+  const statusGeklemd = Math.max(1, Math.min(3, trainingsstatus));
+  const herstelGeklemd = Math.max(0.5, Math.min(1.2, herstelfactor));
+  const effectieveFrequentie = trainingsfrequentie < 3 ? trainingsfrequentie : 2.5;
+  const optimaalVolume = (effectieveFrequentie * 5) * herstelGeklemd * energiebalansfactor
+    * Math.sqrt(statusGeklemd) + (vrouw ? 3 : 0);
+  return round(optimaalVolume, 1);
+}
+
+// ---------- 1RM Calculator — three subcalculators (Menno Henselmans) ------
+// Each returns { epley1RM, tabel } where tabel is the full loading table
+// across the standard percentage set, not just the 1RM itself.
+const RM_BELASTING_PERCENTAGES = [0.90, 0.85, 0.80, 0.75, 0.70, 0.65, 0.60, 0.50, 0.30];
+
+// A) Free weights & machine exercises.
+function rm1VrijGewicht(gewicht, herhalingen) {
+  const epley1RM = gewicht * (1 + herhalingen / 30);
+  const tabel = RM_BELASTING_PERCENTAGES.map((percentage) => ({
+    percentage,
+    gewicht: round(percentage * epley1RM, 1),
+  }));
+  return { epley1RM: round(epley1RM, 1), tabel };
+}
+
+// B) Bodyweight exercises (chin-up, dip, ...) — the source spreadsheet's
+// assumption is that 93.48% of bodyweight loads the exercise.
+const BODYWEIGHT_FACTOR = 0.9348;
+function rm1Bodyweight(lichaamsgewicht, externGewicht, herhalingen) {
+  const totaalGewicht = BODYWEIGHT_FACTOR * lichaamsgewicht + externGewicht;
+  const epley1RM = totaalGewicht * (1 + herhalingen / 30);
+  const tabel = RM_BELASTING_PERCENTAGES.map((percentage) => ({
+    percentage,
+    externGewicht: round(percentage * epley1RM - BODYWEIGHT_FACTOR * lichaamsgewicht, 1),
+  }));
+  return { epley1RM: round(epley1RM, 1), tabel };
+}
+
+// C) Push-ups — same shape as B, but only 75% of bodyweight loads the
+// exercise (the feet take the rest of the weight).
+const PUSHUP_FACTOR = 0.75;
+function rm1PushUp(lichaamsgewicht, externGewicht, herhalingen) {
+  const totaalGewicht = PUSHUP_FACTOR * lichaamsgewicht + externGewicht;
+  const epley1RM = totaalGewicht * (1 + herhalingen / 30);
+  const tabel = RM_BELASTING_PERCENTAGES.map((percentage) => ({
+    percentage,
+    externGewicht: round(percentage * epley1RM - PUSHUP_FACTOR * lichaamsgewicht, 1),
+  }));
+  return { epley1RM: round(epley1RM, 1), tabel };
+}
+
+// ---------- Werkcapaciteit / rustinterval reference data ------------------
+// Pure aggregation over data/werkcapaciteit-referentie.json — used for the
+// optional per-client rest-interval suggestion (Task 4).
+function gemiddeldeVermoeidheidPerGroep(data, group) {
+  const relevant = (data ?? []).filter((r) => r.group === group && r.fatigue_pct != null);
+  if (!relevant.length) return null;
+  const gemiddelde = relevant.reduce((sum, r) => sum + r.fatigue_pct, 0) / relevant.length;
+  return { gemiddelde: round(gemiddelde, 1), n: relevant.length };
+}
+
 function frameSizeCheck(enkelomtrek) {
   const afwijking = enkelomtrek - 21.9;
   return {
@@ -123,8 +193,10 @@ function frameSizeCheck(enkelomtrek) {
 
 // Splits macro totals over `aantalMaaltijden` meals. Meals in the second
 // half of the day (post-training) get `postTrainingMultiplier`× the protein
-// weight of meals in the first half. Fat and carbs are spread evenly across
-// all meals either way.
+// weight of meals in the first half. Module 11 gives 1.5x ("50% meer") as
+// the normal case, and 2.0x ("100% meer") specifically when there's only
+// one meal between training and bed — this is a coach choice, not fixed.
+// Fat and carbs are spread evenly across all meals either way.
 function verdeelMaaltijden(totalen, aantalMaaltijden, postTrainingMultiplier = POST_TRAINING_BOOST_STANDAARD) {
   const n = Math.max(2, Math.min(6, aantalMaaltijden));
   const preCount = Math.floor(n / 2);
@@ -166,7 +238,10 @@ function vetBereik(ree) {
   };
 }
 
-// Personalized calorie-target range for the given goal category.
+// Personalized calorie-target range for the given goal category. Cutting is
+// expressed as a factor of maintenance (Module 14's 10-30% tekort); the bulk
+// goals are expressed as a flat kcal surplus on top of maintenance, since
+// that's how Module 14 frames them (not a percentage).
 function beoogdeInnameBereik(onderhoudPerDag, doelCategorie) {
   const bereik = ENERGIEBALANS_BEREIK[doelCategorie] ?? ENERGIEBALANS_BEREIK.onderhoud;
   if (bereik.type === 'surplusKcal') {
@@ -250,7 +325,9 @@ function genereerRodeVlaggen(intake, calculations) {
     });
   }
 
-  if (intake.lifestyle?.stressLevel === 'hoog') {
+  // 'hoog' is the pre-Task-1 value (kept so older stored intakes still flag
+  // correctly); 'veel_stress' is the current 4-level scale's top option.
+  if (intake.lifestyle?.stressLevel === 'hoog' || intake.lifestyle?.stressLevel === 'veel_stress') {
     vlaggen.push({
       niveau: 'oranje',
       bericht: 'Hoog stressniveau gerapporteerd — houd rekening met verminderd herstelvermogen.',
@@ -275,7 +352,7 @@ function genereerRodeVlaggen(intake, calculations) {
 }
 
 // Orchestrator: composes every calculation above into the `calculations`
-// object stored alongside each lead. `instellingen` overrides all defaults.
+// object described in README.md. `instellingen` overrides all defaults.
 function berekenClient(intake, instellingen = {}) {
   const { gewicht, vetpercentage } = intake.persoonsgegevens;
 
@@ -391,6 +468,12 @@ module.exports = {
   geschat1RM,
   repTargetGewicht,
   werkcapaciteit,
+  trainingsvolumeAdvies,
+  RM_BELASTING_PERCENTAGES,
+  rm1VrijGewicht,
+  rm1Bodyweight,
+  rm1PushUp,
+  gemiddeldeVermoeidheidPerGroep,
   frameSizeCheck,
   verdeelMaaltijden,
   eiwitBereik,

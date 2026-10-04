@@ -1,0 +1,1621 @@
+{
+  "berekenClient": [
+    {
+      "args": [
+        {
+          "persoonsgegevens": {
+            "naam": "Test",
+            "email": "",
+            "leeftijd": 30,
+            "lengte": 180,
+            "gewicht": 84,
+            "vetpercentage": 18,
+            "geslacht": "man",
+            "trainingservaring": 3
+          },
+          "huidigeKracht": [
+            {
+              "oefening": "Bench press",
+              "kg": 90,
+              "herhalingen": 5,
+              "sets": 3
+            },
+            {
+              "oefening": "Squat",
+              "kg": 0,
+              "herhalingen": 0,
+              "sets": 0
+            }
+          ],
+          "doel": {
+            "categorie": "vetverlies"
+          },
+          "trainingsfrequentie": {
+            "huidig": 4,
+            "trainingsmomenten": []
+          },
+          "blessures": {
+            "tekst": "",
+            "vermijdenOefeningen": []
+          },
+          "peds": {
+            "gebruikt": false
+          },
+          "lifestyle": {
+            "activityLevel": "sedentair",
+            "stressLevel": "gemiddeld",
+            "slaap": {
+              "uren": 7,
+              "kwaliteit": "goed"
+            }
+          },
+          "vetpercentageMeting": {
+            "huidplooimeter": true
+          },
+          "genen": {
+            "enkelomtrek": 22.5
+          }
+        }
+      ],
+      "result": {
+        "vetvrijeMassa": 68.9,
+        "bmr": 1858,
+        "ee": 503,
+        "ree": 2452,
+        "totaalTrainingsdag": 3005,
+        "onderhoudPerDag": 2768,
+        "beoogdeInnameRustdag": 2215,
+        "beoogdeInnameTrainingsdag": 2717,
+        "macros": {
+          "eiwit": 151.2,
+          "vet": 109,
+          "koolhydratenRustdag": 157.2,
+          "koolhydratenTrainingsdag": 282.9
+        },
+        "bereiken": {
+          "eiwit": {
+            "min": 134.4,
+            "praktisch": 151.2,
+            "maxSlank": 201.6
+          },
+          "vet": {
+            "min": 54.5,
+            "max": 109
+          },
+          "beoogdeInname": {
+            "min": 1938,
+            "max": 2491
+          }
+        },
+        "maaltijdVerdeling": {
+          "rustdag": [
+            {
+              "maaltijd": 1,
+              "postTraining": false,
+              "eiwit": 30.2,
+              "vet": 27.2,
+              "koolhydraten": 39.3,
+              "kcal": 523
+            },
+            {
+              "maaltijd": 2,
+              "postTraining": false,
+              "eiwit": 30.2,
+              "vet": 27.2,
+              "koolhydraten": 39.3,
+              "kcal": 523
+            },
+            {
+              "maaltijd": 3,
+              "postTraining": true,
+              "eiwit": 45.4,
+              "vet": 27.2,
+              "koolhydraten": 39.3,
+              "kcal": 584
+            },
+            {
+              "maaltijd": 4,
+              "postTraining": true,
+              "eiwit": 45.4,
+              "vet": 27.2,
+              "koolhydraten": 39.3,
+              "kcal": 584
+            }
+          ],
+          "trainingsdag": [
+            {
+              "maaltijd": 1,
+              "postTraining": false,
+              "eiwit": 30.2,
+              "vet": 27.2,
+              "koolhydraten": 70.7,
+              "kcal": 649
+            },
+            {
+              "maaltijd": 2,
+              "postTraining": false,
+              "eiwit": 30.2,
+              "vet": 27.2,
+              "koolhydraten": 70.7,
+              "kcal": 649
+            },
+            {
+              "maaltijd": 3,
+              "postTraining": true,
+              "eiwit": 45.4,
+              "vet": 27.2,
+              "koolhydraten": 70.7,
+              "kcal": 710
+            },
+            {
+              "maaltijd": 4,
+              "postTraining": true,
+              "eiwit": 45.4,
+              "vet": 27.2,
+              "koolhydraten": 70.7,
+              "kcal": 710
+            }
+          ]
+        },
+        "frameSize": {
+          "enkelomtrek": 22.5,
+          "afwijking": 0.6,
+          "binnenNorm": true
+        },
+        "rm": [
+          {
+            "oefening": "Bench press",
+            "kg": 90,
+            "herhalingen": 5,
+            "sets": 3,
+            "geschat1RM": 105
+          }
+        ],
+        "instellingenGebruikt": {
+          "trainingsdagenPerWeek": 4,
+          "trainingsduurMinuten": 60,
+          "MET": 5.7,
+          "pal": 1.2,
+          "tef": 1.1,
+          "energiebalansFactor": 0.8,
+          "eiwitFactor": 1.8,
+          "percentageVetVanREE": 0.4,
+          "aantalMaaltijden": 4,
+          "postTrainingBoost": 1.5
+        },
+        "advies": {
+          "splitsdagen": {
+            "naam": "Upper / Lower",
+            "dagen": [
+              "Upper A",
+              "Lower A",
+              "Upper B",
+              "Lower B"
+            ]
+          },
+          "blessureConflicten": []
+        },
+        "rodeVlaggen": []
+      }
+    },
+    {
+      "args": [
+        {
+          "persoonsgegevens": {
+            "naam": "Test",
+            "email": "",
+            "leeftijd": 30,
+            "lengte": 180,
+            "gewicht": 84,
+            "vetpercentage": 18,
+            "geslacht": "man",
+            "trainingservaring": 3
+          },
+          "huidigeKracht": [
+            {
+              "oefening": "Bench press",
+              "kg": 90,
+              "herhalingen": 5,
+              "sets": 3
+            },
+            {
+              "oefening": "Squat",
+              "kg": 0,
+              "herhalingen": 0,
+              "sets": 0
+            }
+          ],
+          "doel": {
+            "categorie": "spieropbouw"
+          },
+          "trainingsfrequentie": {
+            "huidig": 4,
+            "trainingsmomenten": []
+          },
+          "blessures": {
+            "tekst": "",
+            "vermijdenOefeningen": []
+          },
+          "peds": {
+            "gebruikt": false
+          },
+          "lifestyle": {
+            "activityLevel": "licht actief",
+            "stressLevel": "hoog",
+            "slaap": {
+              "uren": 5
+            }
+          },
+          "vetpercentageMeting": {
+            "huidplooimeter": true
+          },
+          "genen": {
+            "enkelomtrek": 22.5
+          }
+        }
+      ],
+      "result": {
+        "vetvrijeMassa": 68.9,
+        "bmr": 1858,
+        "ee": 503,
+        "ree": 2810,
+        "totaalTrainingsdag": 3363,
+        "onderhoudPerDag": 3126,
+        "beoogdeInnameRustdag": 3439,
+        "beoogdeInnameTrainingsdag": 3941,
+        "macros": {
+          "eiwit": 151.2,
+          "vet": 124.9,
+          "koolhydratenRustdag": 427.4,
+          "koolhydratenTrainingsdag": 553.1
+        },
+        "bereiken": {
+          "eiwit": {
+            "min": 134.4,
+            "praktisch": 151.2,
+            "maxSlank": 201.6
+          },
+          "vet": {
+            "min": 62.4,
+            "max": 124.9
+          },
+          "beoogdeInname": {
+            "min": 3326,
+            "max": 3626
+          }
+        },
+        "maaltijdVerdeling": {
+          "rustdag": [
+            {
+              "maaltijd": 1,
+              "postTraining": false,
+              "eiwit": 30.2,
+              "vet": 31.2,
+              "koolhydraten": 106.9,
+              "kcal": 829
+            },
+            {
+              "maaltijd": 2,
+              "postTraining": false,
+              "eiwit": 30.2,
+              "vet": 31.2,
+              "koolhydraten": 106.9,
+              "kcal": 829
+            },
+            {
+              "maaltijd": 3,
+              "postTraining": true,
+              "eiwit": 45.4,
+              "vet": 31.2,
+              "koolhydraten": 106.9,
+              "kcal": 890
+            },
+            {
+              "maaltijd": 4,
+              "postTraining": true,
+              "eiwit": 45.4,
+              "vet": 31.2,
+              "koolhydraten": 106.9,
+              "kcal": 890
+            }
+          ],
+          "trainingsdag": [
+            {
+              "maaltijd": 1,
+              "postTraining": false,
+              "eiwit": 30.2,
+              "vet": 31.2,
+              "koolhydraten": 138.3,
+              "kcal": 955
+            },
+            {
+              "maaltijd": 2,
+              "postTraining": false,
+              "eiwit": 30.2,
+              "vet": 31.2,
+              "koolhydraten": 138.3,
+              "kcal": 955
+            },
+            {
+              "maaltijd": 3,
+              "postTraining": true,
+              "eiwit": 45.4,
+              "vet": 31.2,
+              "koolhydraten": 138.3,
+              "kcal": 1016
+            },
+            {
+              "maaltijd": 4,
+              "postTraining": true,
+              "eiwit": 45.4,
+              "vet": 31.2,
+              "koolhydraten": 138.3,
+              "kcal": 1016
+            }
+          ]
+        },
+        "frameSize": {
+          "enkelomtrek": 22.5,
+          "afwijking": 0.6,
+          "binnenNorm": true
+        },
+        "rm": [
+          {
+            "oefening": "Bench press",
+            "kg": 90,
+            "herhalingen": 5,
+            "sets": 3,
+            "geschat1RM": 105
+          }
+        ],
+        "instellingenGebruikt": {
+          "trainingsdagenPerWeek": 4,
+          "trainingsduurMinuten": 60,
+          "MET": 5.7,
+          "pal": 1.375,
+          "tef": 1.1,
+          "energiebalansFactor": 1.1,
+          "eiwitFactor": 1.8,
+          "percentageVetVanREE": 0.4,
+          "aantalMaaltijden": 4,
+          "postTrainingBoost": 1.5
+        },
+        "advies": {
+          "splitsdagen": {
+            "naam": "Upper / Lower",
+            "dagen": [
+              "Upper A",
+              "Lower A",
+              "Upper B",
+              "Lower B"
+            ]
+          },
+          "blessureConflicten": []
+        },
+        "rodeVlaggen": [
+          {
+            "niveau": "oranje",
+            "bericht": "Minder dan 6 uur slaap gerapporteerd — kan herstel en trainingsvoortgang limiteren."
+          },
+          {
+            "niveau": "oranje",
+            "bericht": "Hoog stressniveau gerapporteerd — houd rekening met verminderd herstelvermogen."
+          }
+        ]
+      }
+    },
+    {
+      "args": [
+        {
+          "persoonsgegevens": {
+            "naam": "Test",
+            "email": "",
+            "leeftijd": 30,
+            "lengte": 180,
+            "gewicht": 84,
+            "vetpercentage": 18,
+            "geslacht": "man",
+            "trainingservaring": 3
+          },
+          "huidigeKracht": [
+            {
+              "oefening": "Bench press",
+              "kg": 90,
+              "herhalingen": 5,
+              "sets": 3
+            },
+            {
+              "oefening": "Squat",
+              "kg": 0,
+              "herhalingen": 0,
+              "sets": 0
+            }
+          ],
+          "doel": {
+            "categorie": "krachttoename"
+          },
+          "trainingsfrequentie": {
+            "huidig": 4,
+            "trainingsmomenten": []
+          },
+          "blessures": {
+            "tekst": "",
+            "vermijdenOefeningen": []
+          },
+          "peds": {
+            "gebruikt": false
+          },
+          "lifestyle": {
+            "activityLevel": "actief",
+            "stressLevel": "veel_stress"
+          },
+          "vetpercentageMeting": {
+            "huidplooimeter": true
+          },
+          "genen": {
+            "enkelomtrek": 22.5
+          }
+        }
+      ],
+      "result": {
+        "vetvrijeMassa": 68.9,
+        "bmr": 1858,
+        "ee": 503,
+        "ree": 3168,
+        "totaalTrainingsdag": 3721,
+        "onderhoudPerDag": 3484,
+        "beoogdeInnameRustdag": 3658,
+        "beoogdeInnameTrainingsdag": 4160,
+        "macros": {
+          "eiwit": 151.2,
+          "vet": 140.8,
+          "koolhydratenRustdag": 446.5,
+          "koolhydratenTrainingsdag": 572.2
+        },
+        "bereiken": {
+          "eiwit": {
+            "min": 134.4,
+            "praktisch": 151.2,
+            "maxSlank": 201.6
+          },
+          "vet": {
+            "min": 70.4,
+            "max": 140.8
+          },
+          "beoogdeInname": {
+            "min": 3584,
+            "max": 3784
+          }
+        },
+        "maaltijdVerdeling": {
+          "rustdag": [
+            {
+              "maaltijd": 1,
+              "postTraining": false,
+              "eiwit": 30.2,
+              "vet": 35.2,
+              "koolhydraten": 111.6,
+              "kcal": 884
+            },
+            {
+              "maaltijd": 2,
+              "postTraining": false,
+              "eiwit": 30.2,
+              "vet": 35.2,
+              "koolhydraten": 111.6,
+              "kcal": 884
+            },
+            {
+              "maaltijd": 3,
+              "postTraining": true,
+              "eiwit": 45.4,
+              "vet": 35.2,
+              "koolhydraten": 111.6,
+              "kcal": 945
+            },
+            {
+              "maaltijd": 4,
+              "postTraining": true,
+              "eiwit": 45.4,
+              "vet": 35.2,
+              "koolhydraten": 111.6,
+              "kcal": 945
+            }
+          ],
+          "trainingsdag": [
+            {
+              "maaltijd": 1,
+              "postTraining": false,
+              "eiwit": 30.2,
+              "vet": 35.2,
+              "koolhydraten": 143,
+              "kcal": 1010
+            },
+            {
+              "maaltijd": 2,
+              "postTraining": false,
+              "eiwit": 30.2,
+              "vet": 35.2,
+              "koolhydraten": 143,
+              "kcal": 1010
+            },
+            {
+              "maaltijd": 3,
+              "postTraining": true,
+              "eiwit": 45.4,
+              "vet": 35.2,
+              "koolhydraten": 143,
+              "kcal": 1070
+            },
+            {
+              "maaltijd": 4,
+              "postTraining": true,
+              "eiwit": 45.4,
+              "vet": 35.2,
+              "koolhydraten": 143,
+              "kcal": 1070
+            }
+          ]
+        },
+        "frameSize": {
+          "enkelomtrek": 22.5,
+          "afwijking": 0.6,
+          "binnenNorm": true
+        },
+        "rm": [
+          {
+            "oefening": "Bench press",
+            "kg": 90,
+            "herhalingen": 5,
+            "sets": 3,
+            "geschat1RM": 105
+          }
+        ],
+        "instellingenGebruikt": {
+          "trainingsdagenPerWeek": 4,
+          "trainingsduurMinuten": 60,
+          "MET": 5.7,
+          "pal": 1.55,
+          "tef": 1.1,
+          "energiebalansFactor": 1.05,
+          "eiwitFactor": 1.8,
+          "percentageVetVanREE": 0.4,
+          "aantalMaaltijden": 4,
+          "postTrainingBoost": 1.5
+        },
+        "advies": {
+          "splitsdagen": {
+            "naam": "Upper / Lower",
+            "dagen": [
+              "Upper A",
+              "Lower A",
+              "Upper B",
+              "Lower B"
+            ]
+          },
+          "blessureConflicten": []
+        },
+        "rodeVlaggen": [
+          {
+            "niveau": "oranje",
+            "bericht": "Hoog stressniveau gerapporteerd — houd rekening met verminderd herstelvermogen."
+          }
+        ]
+      }
+    },
+    {
+      "args": [
+        {
+          "persoonsgegevens": {
+            "naam": "Test",
+            "email": "",
+            "leeftijd": 30,
+            "lengte": 180,
+            "gewicht": 84,
+            "vetpercentage": 18,
+            "geslacht": "man",
+            "trainingservaring": 3
+          },
+          "huidigeKracht": [
+            {
+              "oefening": "Bench press",
+              "kg": 90,
+              "herhalingen": 5,
+              "sets": 3
+            },
+            {
+              "oefening": "Squat",
+              "kg": 0,
+              "herhalingen": 0,
+              "sets": 0
+            }
+          ],
+          "doel": {
+            "tekst": "",
+            "categorie": "onderhoud"
+          },
+          "trainingsfrequentie": {
+            "huidig": 4,
+            "trainingsmomenten": []
+          },
+          "blessures": {
+            "tekst": "",
+            "vermijdenOefeningen": []
+          },
+          "peds": {
+            "gebruikt": true
+          },
+          "lifestyle": {
+            "activityLevel": "erg actief",
+            "stressLevel": "stressvrij"
+          },
+          "vetpercentageMeting": {
+            "huidplooimeter": true
+          },
+          "genen": {
+            "enkelomtrek": 22.5
+          }
+        }
+      ],
+      "result": {
+        "vetvrijeMassa": 68.9,
+        "bmr": 1858,
+        "ee": 503,
+        "ree": 3525,
+        "totaalTrainingsdag": 4078,
+        "onderhoudPerDag": 3841,
+        "beoogdeInnameRustdag": 3841,
+        "beoogdeInnameTrainingsdag": 4344,
+        "macros": {
+          "eiwit": 151.2,
+          "vet": 156.7,
+          "koolhydratenRustdag": 456.6,
+          "koolhydratenTrainingsdag": 582.3
+        },
+        "bereiken": {
+          "eiwit": {
+            "min": 134.4,
+            "praktisch": 151.2,
+            "maxSlank": 201.6
+          },
+          "vet": {
+            "min": 78.3,
+            "max": 156.7
+          },
+          "beoogdeInname": {
+            "min": 3726,
+            "max": 3956
+          }
+        },
+        "maaltijdVerdeling": {
+          "rustdag": [
+            {
+              "maaltijd": 1,
+              "postTraining": false,
+              "eiwit": 30.2,
+              "vet": 39.2,
+              "koolhydraten": 114.1,
+              "kcal": 930
+            },
+            {
+              "maaltijd": 2,
+              "postTraining": false,
+              "eiwit": 30.2,
+              "vet": 39.2,
+              "koolhydraten": 114.1,
+              "kcal": 930
+            },
+            {
+              "maaltijd": 3,
+              "postTraining": true,
+              "eiwit": 45.4,
+              "vet": 39.2,
+              "koolhydraten": 114.1,
+              "kcal": 991
+            },
+            {
+              "maaltijd": 4,
+              "postTraining": true,
+              "eiwit": 45.4,
+              "vet": 39.2,
+              "koolhydraten": 114.1,
+              "kcal": 991
+            }
+          ],
+          "trainingsdag": [
+            {
+              "maaltijd": 1,
+              "postTraining": false,
+              "eiwit": 30.2,
+              "vet": 39.2,
+              "koolhydraten": 145.6,
+              "kcal": 1056
+            },
+            {
+              "maaltijd": 2,
+              "postTraining": false,
+              "eiwit": 30.2,
+              "vet": 39.2,
+              "koolhydraten": 145.6,
+              "kcal": 1056
+            },
+            {
+              "maaltijd": 3,
+              "postTraining": true,
+              "eiwit": 45.4,
+              "vet": 39.2,
+              "koolhydraten": 145.6,
+              "kcal": 1116
+            },
+            {
+              "maaltijd": 4,
+              "postTraining": true,
+              "eiwit": 45.4,
+              "vet": 39.2,
+              "koolhydraten": 145.6,
+              "kcal": 1116
+            }
+          ]
+        },
+        "frameSize": {
+          "enkelomtrek": 22.5,
+          "afwijking": 0.6,
+          "binnenNorm": true
+        },
+        "rm": [
+          {
+            "oefening": "Bench press",
+            "kg": 90,
+            "herhalingen": 5,
+            "sets": 3,
+            "geschat1RM": 105
+          }
+        ],
+        "instellingenGebruikt": {
+          "trainingsdagenPerWeek": 4,
+          "trainingsduurMinuten": 60,
+          "MET": 5.7,
+          "pal": 1.725,
+          "tef": 1.1,
+          "energiebalansFactor": 1,
+          "eiwitFactor": 1.8,
+          "percentageVetVanREE": 0.4,
+          "aantalMaaltijden": 4,
+          "postTrainingBoost": 1.5
+        },
+        "advies": {
+          "splitsdagen": {
+            "naam": "Upper / Lower",
+            "dagen": [
+              "Upper A",
+              "Lower A",
+              "Upper B",
+              "Lower B"
+            ]
+          },
+          "blessureConflicten": []
+        },
+        "rodeVlaggen": [
+          {
+            "niveau": "info",
+            "bericht": "Cliënt geeft PED-gebruik aan — houd hier rekening mee bij inschatting van herstel en trainingsvolume."
+          }
+        ]
+      }
+    },
+    {
+      "args": [
+        {
+          "persoonsgegevens": {
+            "naam": "Test",
+            "email": "",
+            "leeftijd": 30,
+            "lengte": 180,
+            "gewicht": 84,
+            "vetpercentage": 18,
+            "geslacht": "man",
+            "trainingservaring": 3
+          },
+          "huidigeKracht": [
+            {
+              "oefening": "Bench press",
+              "kg": 90,
+              "herhalingen": 5,
+              "sets": 3
+            },
+            {
+              "oefening": "Squat",
+              "kg": 0,
+              "herhalingen": 0,
+              "sets": 0
+            }
+          ],
+          "doel": {
+            "tekst": "",
+            "categorie": "onderhoud"
+          },
+          "trainingsfrequentie": {
+            "huidig": 4,
+            "trainingsmomenten": []
+          },
+          "blessures": {
+            "tekst": "Last van mijn knie en schouder",
+            "vermijdenOefeningen": [
+              "Deadlift"
+            ]
+          },
+          "peds": {
+            "gebruikt": false
+          },
+          "lifestyle": {
+            "activityLevel": "sedentair",
+            "stressLevel": "gemiddeld",
+            "slaap": {
+              "uren": 7,
+              "kwaliteit": "goed"
+            }
+          },
+          "vetpercentageMeting": {
+            "huidplooimeter": false
+          },
+          "genen": {
+            "enkelomtrek": 22.5
+          }
+        }
+      ],
+      "result": {
+        "vetvrijeMassa": 68.9,
+        "bmr": 1858,
+        "ee": 503,
+        "ree": 2452,
+        "totaalTrainingsdag": 3005,
+        "onderhoudPerDag": 2768,
+        "beoogdeInnameRustdag": 2768,
+        "beoogdeInnameTrainingsdag": 3271,
+        "macros": {
+          "eiwit": 151.2,
+          "vet": 109,
+          "koolhydratenRustdag": 295.6,
+          "koolhydratenTrainingsdag": 421.3
+        },
+        "bereiken": {
+          "eiwit": {
+            "min": 134.4,
+            "praktisch": 151.2,
+            "maxSlank": 201.6
+          },
+          "vet": {
+            "min": 54.5,
+            "max": 109
+          },
+          "beoogdeInname": {
+            "min": 2685,
+            "max": 2851
+          }
+        },
+        "maaltijdVerdeling": {
+          "rustdag": [
+            {
+              "maaltijd": 1,
+              "postTraining": false,
+              "eiwit": 30.2,
+              "vet": 27.2,
+              "koolhydraten": 73.9,
+              "kcal": 662
+            },
+            {
+              "maaltijd": 2,
+              "postTraining": false,
+              "eiwit": 30.2,
+              "vet": 27.2,
+              "koolhydraten": 73.9,
+              "kcal": 662
+            },
+            {
+              "maaltijd": 3,
+              "postTraining": true,
+              "eiwit": 45.4,
+              "vet": 27.2,
+              "koolhydraten": 73.9,
+              "kcal": 722
+            },
+            {
+              "maaltijd": 4,
+              "postTraining": true,
+              "eiwit": 45.4,
+              "vet": 27.2,
+              "koolhydraten": 73.9,
+              "kcal": 722
+            }
+          ],
+          "trainingsdag": [
+            {
+              "maaltijd": 1,
+              "postTraining": false,
+              "eiwit": 30.2,
+              "vet": 27.2,
+              "koolhydraten": 105.3,
+              "kcal": 788
+            },
+            {
+              "maaltijd": 2,
+              "postTraining": false,
+              "eiwit": 30.2,
+              "vet": 27.2,
+              "koolhydraten": 105.3,
+              "kcal": 788
+            },
+            {
+              "maaltijd": 3,
+              "postTraining": true,
+              "eiwit": 45.4,
+              "vet": 27.2,
+              "koolhydraten": 105.3,
+              "kcal": 848
+            },
+            {
+              "maaltijd": 4,
+              "postTraining": true,
+              "eiwit": 45.4,
+              "vet": 27.2,
+              "koolhydraten": 105.3,
+              "kcal": 848
+            }
+          ]
+        },
+        "frameSize": {
+          "enkelomtrek": 22.5,
+          "afwijking": 0.6,
+          "binnenNorm": true
+        },
+        "rm": [
+          {
+            "oefening": "Bench press",
+            "kg": 90,
+            "herhalingen": 5,
+            "sets": 3,
+            "geschat1RM": 105
+          }
+        ],
+        "instellingenGebruikt": {
+          "trainingsdagenPerWeek": 4,
+          "trainingsduurMinuten": 60,
+          "MET": 5.7,
+          "pal": 1.2,
+          "tef": 1.1,
+          "energiebalansFactor": 1,
+          "eiwitFactor": 1.8,
+          "percentageVetVanREE": 0.4,
+          "aantalMaaltijden": 4,
+          "postTrainingBoost": 1.5
+        },
+        "advies": {
+          "splitsdagen": {
+            "naam": "Upper / Lower",
+            "dagen": [
+              "Upper A",
+              "Lower A",
+              "Upper B",
+              "Lower B"
+            ]
+          },
+          "blessureConflicten": [
+            {
+              "oefening": "deadlift",
+              "reden": "Staat op de expliciete vermijdenlijst van de cliënt"
+            },
+            {
+              "oefening": "squat",
+              "reden": "Mogelijk risicovol bij gemelde klacht: \"knie\""
+            },
+            {
+              "oefening": "front squat",
+              "reden": "Mogelijk risicovol bij gemelde klacht: \"knie\""
+            },
+            {
+              "oefening": "lunges",
+              "reden": "Mogelijk risicovol bij gemelde klacht: \"knie\""
+            },
+            {
+              "oefening": "leg press",
+              "reden": "Mogelijk risicovol bij gemelde klacht: \"knie\""
+            },
+            {
+              "oefening": "leg extension",
+              "reden": "Mogelijk risicovol bij gemelde klacht: \"knie\""
+            },
+            {
+              "oefening": "bulgarian split squat",
+              "reden": "Mogelijk risicovol bij gemelde klacht: \"knie\""
+            },
+            {
+              "oefening": "overhead press",
+              "reden": "Mogelijk risicovol bij gemelde klacht: \"schouder\""
+            },
+            {
+              "oefening": "bench press",
+              "reden": "Mogelijk risicovol bij gemelde klacht: \"schouder\""
+            },
+            {
+              "oefening": "upright row",
+              "reden": "Mogelijk risicovol bij gemelde klacht: \"schouder\""
+            },
+            {
+              "oefening": "lateral raise",
+              "reden": "Mogelijk risicovol bij gemelde klacht: \"schouder\""
+            }
+          ]
+        },
+        "rodeVlaggen": [
+          {
+            "niveau": "oranje",
+            "bericht": "Let op bij \"deadlift\": Staat op de expliciete vermijdenlijst van de cliënt."
+          },
+          {
+            "niveau": "oranje",
+            "bericht": "Let op bij \"squat\": Mogelijk risicovol bij gemelde klacht: \"knie\"."
+          },
+          {
+            "niveau": "oranje",
+            "bericht": "Let op bij \"front squat\": Mogelijk risicovol bij gemelde klacht: \"knie\"."
+          },
+          {
+            "niveau": "oranje",
+            "bericht": "Let op bij \"lunges\": Mogelijk risicovol bij gemelde klacht: \"knie\"."
+          },
+          {
+            "niveau": "oranje",
+            "bericht": "Let op bij \"leg press\": Mogelijk risicovol bij gemelde klacht: \"knie\"."
+          },
+          {
+            "niveau": "oranje",
+            "bericht": "Let op bij \"leg extension\": Mogelijk risicovol bij gemelde klacht: \"knie\"."
+          },
+          {
+            "niveau": "oranje",
+            "bericht": "Let op bij \"bulgarian split squat\": Mogelijk risicovol bij gemelde klacht: \"knie\"."
+          },
+          {
+            "niveau": "oranje",
+            "bericht": "Let op bij \"overhead press\": Mogelijk risicovol bij gemelde klacht: \"schouder\"."
+          },
+          {
+            "niveau": "oranje",
+            "bericht": "Let op bij \"bench press\": Mogelijk risicovol bij gemelde klacht: \"schouder\"."
+          },
+          {
+            "niveau": "oranje",
+            "bericht": "Let op bij \"upright row\": Mogelijk risicovol bij gemelde klacht: \"schouder\"."
+          },
+          {
+            "niveau": "oranje",
+            "bericht": "Let op bij \"lateral raise\": Mogelijk risicovol bij gemelde klacht: \"schouder\"."
+          },
+          {
+            "niveau": "info",
+            "bericht": "Vetpercentage is niet met een huidplooimeter gemeten — beschouw als schatting bij het volgen van voortgang."
+          }
+        ]
+      }
+    },
+    {
+      "args": [
+        {
+          "persoonsgegevens": {
+            "naam": "Test",
+            "email": "",
+            "leeftijd": 30,
+            "lengte": 180,
+            "gewicht": 84,
+            "vetpercentage": 18,
+            "geslacht": "man",
+            "trainingservaring": 3
+          },
+          "huidigeKracht": [
+            {
+              "oefening": "Bench press",
+              "kg": 90,
+              "herhalingen": 5,
+              "sets": 3
+            },
+            {
+              "oefening": "Squat",
+              "kg": 0,
+              "herhalingen": 0,
+              "sets": 0
+            }
+          ],
+          "doel": {
+            "categorie": "vetverlies"
+          },
+          "trainingsfrequentie": {
+            "huidig": 4,
+            "trainingsmomenten": []
+          },
+          "blessures": {
+            "tekst": "",
+            "vermijdenOefeningen": []
+          },
+          "peds": {
+            "gebruikt": false
+          },
+          "lifestyle": {
+            "activityLevel": "sedentair",
+            "stressLevel": "gemiddeld",
+            "slaap": {
+              "uren": 7,
+              "kwaliteit": "goed"
+            }
+          },
+          "vetpercentageMeting": {
+            "huidplooimeter": true
+          },
+          "genen": {
+            "enkelomtrek": 22.5
+          }
+        },
+        {
+          "energiebalansFactor": 0.7,
+          "eiwitFactor": 2.2,
+          "aantalMaaltijden": 3,
+          "trainingsdagenPerWeek": 5
+        }
+      ],
+      "result": {
+        "vetvrijeMassa": 68.9,
+        "bmr": 1858,
+        "ee": 503,
+        "ree": 2452,
+        "totaalTrainingsdag": 3005,
+        "onderhoudPerDag": 2847,
+        "beoogdeInnameRustdag": 1993,
+        "beoogdeInnameTrainingsdag": 2496,
+        "macros": {
+          "eiwit": 184.8,
+          "vet": 109,
+          "koolhydratenRustdag": 68.2,
+          "koolhydratenTrainingsdag": 193.9
+        },
+        "bereiken": {
+          "eiwit": {
+            "min": 134.4,
+            "praktisch": 151.2,
+            "maxSlank": 201.6
+          },
+          "vet": {
+            "min": 54.5,
+            "max": 109
+          },
+          "beoogdeInname": {
+            "min": 1993,
+            "max": 2563
+          }
+        },
+        "maaltijdVerdeling": {
+          "rustdag": [
+            {
+              "maaltijd": 1,
+              "postTraining": false,
+              "eiwit": 46.2,
+              "vet": 36.3,
+              "koolhydraten": 22.7,
+              "kcal": 603
+            },
+            {
+              "maaltijd": 2,
+              "postTraining": true,
+              "eiwit": 69.3,
+              "vet": 36.3,
+              "koolhydraten": 22.7,
+              "kcal": 695
+            },
+            {
+              "maaltijd": 3,
+              "postTraining": true,
+              "eiwit": 69.3,
+              "vet": 36.3,
+              "koolhydraten": 22.7,
+              "kcal": 695
+            }
+          ],
+          "trainingsdag": [
+            {
+              "maaltijd": 1,
+              "postTraining": false,
+              "eiwit": 46.2,
+              "vet": 36.3,
+              "koolhydraten": 64.6,
+              "kcal": 770
+            },
+            {
+              "maaltijd": 2,
+              "postTraining": true,
+              "eiwit": 69.3,
+              "vet": 36.3,
+              "koolhydraten": 64.6,
+              "kcal": 863
+            },
+            {
+              "maaltijd": 3,
+              "postTraining": true,
+              "eiwit": 69.3,
+              "vet": 36.3,
+              "koolhydraten": 64.6,
+              "kcal": 863
+            }
+          ]
+        },
+        "frameSize": {
+          "enkelomtrek": 22.5,
+          "afwijking": 0.6,
+          "binnenNorm": true
+        },
+        "rm": [
+          {
+            "oefening": "Bench press",
+            "kg": 90,
+            "herhalingen": 5,
+            "sets": 3,
+            "geschat1RM": 105
+          }
+        ],
+        "instellingenGebruikt": {
+          "trainingsdagenPerWeek": 5,
+          "trainingsduurMinuten": 60,
+          "MET": 5.7,
+          "pal": 1.2,
+          "tef": 1.1,
+          "energiebalansFactor": 0.7,
+          "eiwitFactor": 2.2,
+          "percentageVetVanREE": 0.4,
+          "aantalMaaltijden": 3,
+          "postTrainingBoost": 1.5
+        },
+        "advies": {
+          "splitsdagen": {
+            "naam": "Push / Pull / Legs / Upper / Lower",
+            "dagen": [
+              "Push",
+              "Pull",
+              "Legs",
+              "Upper",
+              "Lower"
+            ]
+          },
+          "blessureConflicten": []
+        },
+        "rodeVlaggen": [
+          {
+            "niveau": "rood",
+            "bericht": "Beoogde inname op rustdagen ligt meer dan 25% onder onderhoud — mogelijk te agressief tekort."
+          }
+        ]
+      }
+    }
+  ],
+  "trainingsvolumeAdvies": [
+    {
+      "args": [
+        1,
+        0,
+        1,
+        1,
+        2
+      ],
+      "result": 10
+    },
+    {
+      "args": [
+        2,
+        1,
+        0.9,
+        0.8,
+        3
+      ],
+      "result": 15.7
+    },
+    {
+      "args": [
+        3,
+        0,
+        1.2,
+        1.1,
+        4
+      ],
+      "result": 28.6
+    },
+    {
+      "args": [
+        0,
+        0,
+        2,
+        1,
+        1
+      ],
+      "result": 6
+    }
+  ],
+  "rm1VrijGewicht": [
+    {
+      "args": [
+        100,
+        5
+      ],
+      "result": {
+        "epley1RM": 116.7,
+        "tabel": [
+          {
+            "percentage": 0.9,
+            "gewicht": 105
+          },
+          {
+            "percentage": 0.85,
+            "gewicht": 99.2
+          },
+          {
+            "percentage": 0.8,
+            "gewicht": 93.3
+          },
+          {
+            "percentage": 0.75,
+            "gewicht": 87.5
+          },
+          {
+            "percentage": 0.7,
+            "gewicht": 81.7
+          },
+          {
+            "percentage": 0.65,
+            "gewicht": 75.8
+          },
+          {
+            "percentage": 0.6,
+            "gewicht": 70
+          },
+          {
+            "percentage": 0.5,
+            "gewicht": 58.3
+          },
+          {
+            "percentage": 0.3,
+            "gewicht": 35
+          }
+        ]
+      }
+    },
+    {
+      "args": [
+        60,
+        12
+      ],
+      "result": {
+        "epley1RM": 84,
+        "tabel": [
+          {
+            "percentage": 0.9,
+            "gewicht": 75.6
+          },
+          {
+            "percentage": 0.85,
+            "gewicht": 71.4
+          },
+          {
+            "percentage": 0.8,
+            "gewicht": 67.2
+          },
+          {
+            "percentage": 0.75,
+            "gewicht": 63
+          },
+          {
+            "percentage": 0.7,
+            "gewicht": 58.8
+          },
+          {
+            "percentage": 0.65,
+            "gewicht": 54.6
+          },
+          {
+            "percentage": 0.6,
+            "gewicht": 50.4
+          },
+          {
+            "percentage": 0.5,
+            "gewicht": 42
+          },
+          {
+            "percentage": 0.3,
+            "gewicht": 25.2
+          }
+        ]
+      }
+    }
+  ],
+  "rm1Bodyweight": [
+    {
+      "args": [
+        80,
+        10,
+        6
+      ],
+      "result": {
+        "epley1RM": 101.7,
+        "tabel": [
+          {
+            "percentage": 0.9,
+            "externGewicht": 16.8
+          },
+          {
+            "percentage": 0.85,
+            "externGewicht": 11.7
+          },
+          {
+            "percentage": 0.8,
+            "externGewicht": 6.6
+          },
+          {
+            "percentage": 0.75,
+            "externGewicht": 1.5
+          },
+          {
+            "percentage": 0.7,
+            "externGewicht": -3.6
+          },
+          {
+            "percentage": 0.65,
+            "externGewicht": -8.7
+          },
+          {
+            "percentage": 0.6,
+            "externGewicht": -13.7
+          },
+          {
+            "percentage": 0.5,
+            "externGewicht": -23.9
+          },
+          {
+            "percentage": 0.3,
+            "externGewicht": -44.3
+          }
+        ]
+      }
+    }
+  ],
+  "rm1PushUp": [
+    {
+      "args": [
+        80,
+        0,
+        20
+      ],
+      "result": {
+        "epley1RM": 100,
+        "tabel": [
+          {
+            "percentage": 0.9,
+            "externGewicht": 30
+          },
+          {
+            "percentage": 0.85,
+            "externGewicht": 25
+          },
+          {
+            "percentage": 0.8,
+            "externGewicht": 20
+          },
+          {
+            "percentage": 0.75,
+            "externGewicht": 15
+          },
+          {
+            "percentage": 0.7,
+            "externGewicht": 10
+          },
+          {
+            "percentage": 0.65,
+            "externGewicht": 5
+          },
+          {
+            "percentage": 0.6,
+            "externGewicht": 0
+          },
+          {
+            "percentage": 0.5,
+            "externGewicht": -10
+          },
+          {
+            "percentage": 0.3,
+            "externGewicht": -30
+          }
+        ]
+      }
+    }
+  ],
+  "bepaalSplitsdagen": [
+    {
+      "args": [
+        1
+      ],
+      "result": {
+        "naam": "Full Body",
+        "dagen": [
+          "Full Body"
+        ]
+      }
+    },
+    {
+      "args": [
+        3
+      ],
+      "result": {
+        "naam": "Full Body (3x)",
+        "dagen": [
+          "Full Body A",
+          "Full Body B",
+          "Full Body C"
+        ]
+      }
+    },
+    {
+      "args": [
+        4
+      ],
+      "result": {
+        "naam": "Upper / Lower",
+        "dagen": [
+          "Upper A",
+          "Lower A",
+          "Upper B",
+          "Lower B"
+        ]
+      }
+    },
+    {
+      "args": [
+        5
+      ],
+      "result": {
+        "naam": "Push / Pull / Legs / Upper / Lower",
+        "dagen": [
+          "Push",
+          "Pull",
+          "Legs",
+          "Upper",
+          "Lower"
+        ]
+      }
+    },
+    {
+      "args": [
+        6
+      ],
+      "result": {
+        "naam": "Push / Pull / Legs (2x)",
+        "dagen": [
+          "Push A",
+          "Pull A",
+          "Legs A",
+          "Push B",
+          "Pull B",
+          "Legs B"
+        ]
+      }
+    },
+    {
+      "args": [
+        8
+      ],
+      "result": {
+        "naam": "Push / Pull / Legs (2x)",
+        "dagen": [
+          "Push A",
+          "Pull A",
+          "Legs A",
+          "Push B",
+          "Pull B",
+          "Legs B"
+        ]
+      }
+    }
+  ]
+}
