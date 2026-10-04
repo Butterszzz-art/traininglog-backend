@@ -7,7 +7,7 @@
 //   users/{clientUid}/plans/{planId}    published copies the client can read
 //
 // Coach routes (mounted at /api/coach/plans, coach plan required):
-//   GET    /meta                 registry version, packages, tiers
+//   GET    /meta                 registry version, packages, tiers, Butters University status
 //   POST   /preview              { clientUid?, leadId | intake, instellingen?, packageId, startDate, tier }
 //                                → generated plan, NOT saved
 //   POST   /                     same body + clientUid → saves a draft
@@ -37,6 +37,7 @@ function summarize(plan) {
     endDate: plan.phases.at(-1)?.plannedEnd || null,
     phases: plan.phases.map(p => ({ phaseId: p.phaseId, type: p.type, plannedStart: p.plannedStart, plannedEnd: p.plannedEnd })),
     unverifiedRules: plan.unverifiedRules?.length || 0,
+    buConflicts: plan.butters?.conflicts?.length || 0,
     generatedAt: plan.approval?.generatedAt || null,
     publishedAt: plan.approval?.publishedAt || null,
   };
@@ -55,9 +56,10 @@ function assignmentFields(plan) {
 }
 
 // What the client gets: their phases, targets and guidance. The override log,
-// rule provenance, red flags and the unverified-rule list stay coach-side.
+// rule provenance, red flags, the unverified-rule list and the Butters
+// University review stay coach-side.
 function clientView(plan) {
-  const { overrides, unverifiedRules, inputsSnapshot, injuryConflicts, ...rest } = plan;
+  const { overrides, unverifiedRules, butters, inputsSnapshot, injuryConflicts, ...rest } = plan;
   return {
     ...rest,
     phases: plan.phases.map(({ redFlags, ...phase }) => {
@@ -129,7 +131,7 @@ function createCoachPlansRouter({ db, FieldValue, registry, sendError, sendSucce
       id: r.id.slice(4), name: r.params.name, blockWeeks: r.params.blockWeeks, phases: r.params.phases,
     }));
     const tiers = registry.params('pkg.tier.adjustment_caps').caps;
-    return sendSuccess(res, 200, { registryVersion: registry.version, packages, tiers });
+    return sendSuccess(res, 200, { registryVersion: registry.version, packages, tiers, butters: registry.buttersSummary() });
   });
 
   router.post('/preview', async (req, res) => {

@@ -7,7 +7,16 @@
     "params": { "formula": "katchMcArdleBMR" },
     "evidenceGrade": "unrated",
     "sources": [{ "label": "ClientIntake calculations.js (katchMcArdleBMR)" }],
-    "moduleRef": null,
+    "moduleRef": "BU: Energy balance",
+    "bu": {
+      "section": "Module: Energy balance",
+      "status": "partial",
+      "quotes": [
+        "the PTC recommends the Cunningham (1991) equation (BMR = 370 + 21.6 × FFM in kg, also known as Katch-McArdle)",
+        "Cunningham is a poor default for higher-body-fat, untrained people"
+      ],
+      "note": "BU backs Cunningham/Katch for lean, trained clients; for untrained or higher-body-fat clients it calls it a poor default, and for very lean, muscular athletes it prefers Tinsley (24.8 × BW + 10). ClientIntake always uses Katch."
+    },
     "lastReviewed": null,
     "verified": false
   },
@@ -19,7 +28,16 @@
     "params": { "values": { "sedentair": 1.2, "licht actief": 1.375, "actief": 1.55, "erg actief": 1.725 }, "fallback": "sedentair" },
     "evidenceGrade": "unrated",
     "sources": [{ "label": "ClientIntake calculations.js (STANDAARD_PAL)" }],
-    "moduleRef": null,
+    "moduleRef": "BU: Energy balance",
+    "bu": {
+      "section": "Module: Energy balance",
+      "status": "conflict",
+      "quotes": [
+        "sedentary 1.00, light 1.11–1.12, active 1.25–1.27, very active 1.45–1.48, sex-specific",
+        "explicitly excluding resistance training from that multiplier"
+      ],
+      "note": "BU PAL values leave out resistance training (that is costed separately) and run 1.00–1.48. ClientIntake uses 1.2–1.725, which double-counts training on top of the training-day expenditure."
+    },
     "lastReviewed": null,
     "verified": false
   },
@@ -31,7 +49,16 @@
     "params": { "default": 1.1 },
     "evidenceGrade": "unrated",
     "sources": [{ "label": "ClientIntake calculations.js (STANDAARD_TEF)" }],
-    "moduleRef": null,
+    "moduleRef": "BU: Energy balance",
+    "bu": {
+      "section": "Module: Energy balance",
+      "status": "match",
+      "quotes": [
+        "the thermic effect of food (TEF) is layered on as a multiplier (BMR × TEF = REE), typically 10% as a population average",
+        "BMR × PAL × TEF ≈ non-training-day TDEE, or ((BMR × PAL) + RTEE) × TEF on training days"
+      ],
+      "note": "Same multiplier and the same rest-day/training-day structure as ClientIntake."
+    },
     "lastReviewed": null,
     "verified": false
   },
@@ -43,7 +70,15 @@
     "params": { "MET": 5.7, "minutes": 60 },
     "evidenceGrade": "unrated",
     "sources": [{ "label": "ClientIntake calculations.js (energieverbruikTrainingsdag)" }],
-    "moduleRef": null,
+    "moduleRef": "BU: Energy balance",
+    "bu": {
+      "section": "Module: Energy balance",
+      "status": "match",
+      "quotes": [
+        "0.1 kcal/kg/min of active training time, roughly 300–500 kcal per session"
+      ],
+      "note": "MET 5.7 over 60 minutes is about 0.1 kcal/kg/min, the BU figure."
+    },
     "lastReviewed": null,
     "verified": false
   },
@@ -62,8 +97,17 @@
       ]
     },
     "evidenceGrade": "unrated",
-    "sources": [{ "label": "ClientIntake calculations.js (STANDAARD_ENERGIEBALANS_FACTOR, ENERGIEBALANS_BEREIK)" }, { "label": "Butters University Module 14" }],
-    "moduleRef": "BU-M14",
+    "sources": [{ "label": "ClientIntake calculations.js (STANDAARD_ENERGIEBALANS_FACTOR, ENERGIEBALANS_BEREIK)" }, { "label": "Butters University README — Energy balance" }],
+    "moduleRef": "BU: Energy balance",
+    "bu": {
+      "section": "Module: Energy balance",
+      "status": "conflict",
+      "quotes": [
+        "scaled by training status (beginners 5–15% surplus targeting 0.5–1%/week bodyweight gain; intermediate 2–7% targeting 0.2–0.5%/week; advanced 1–3%",
+        "For cutting rate, the PTC scales the weekly rate of loss and the size of the deficit inversely with leanness"
+      ],
+      "note": "BU scales the surplus by training status (beginner 5–15%, intermediate 2–7%, advanced 1–3%) and the deficit by leanness (about 2.5–7.5% near contest leanness up to 30–50% at high body fat). ClientIntake uses a fixed factor per goal: 0.8 cut, 1.0 maintain, 1.1 build."
+    },
     "lastReviewed": null,
     "verified": false
   },
@@ -74,8 +118,18 @@
     "statement": "Protein 1.6–2.4 g/kg bodyweight per day; 1.8 g/kg practical default; not raised during a deficit.",
     "params": { "unit": "g/kg/day", "min": 1.6, "default": 1.8, "max": 2.4 },
     "evidenceGrade": "unrated",
-    "sources": [{ "label": "ClientIntake calculations.js (EIWIT_BEREIK_G_PER_KG)" }, { "label": "Butters University Module 11" }],
-    "moduleRef": "BU-M11",
+    "sources": [{ "label": "ClientIntake calculations.js (EIWIT_BEREIK_G_PER_KG)" }, { "label": "Butters University README — Protein" }],
+    "moduleRef": "BU: Protein",
+    "bu": {
+      "section": "Module: Protein",
+      "status": "match",
+      "quotes": [
+        "never found a significant hypertrophy/strength benefit above 1.6 g/kg/day",
+        "the PTC still recommends 1.8 g/kg for advanced lifters",
+        "implies needs of 2.4+ g/kg"
+      ],
+      "note": "Matches: no added benefit above 1.6 g/kg, default 1.8 g/kg, 2.4+ g/kg for steroid users."
+    },
     "lastReviewed": null,
     "verified": false
   },
@@ -86,8 +140,17 @@
     "statement": "Fat 20–40% of rest-day energy expenditure (REE); 40% default.",
     "params": { "unit": "fraction of REE", "min": 0.2, "default": 0.4, "max": 0.4 },
     "evidenceGrade": "unrated",
-    "sources": [{ "label": "ClientIntake calculations.js (VET_BEREIK_PERCENTAGE_REE)" }, { "label": "Butters University Module 13" }],
-    "moduleRef": "BU-M13",
+    "sources": [{ "label": "ClientIntake calculations.js (VET_BEREIK_PERCENTAGE_REE)" }, { "label": "Butters University README — Fats" }],
+    "moduleRef": "BU: Fats",
+    "bu": {
+      "section": "Module: Fats",
+      "status": "partial",
+      "quotes": [
+        "the PTC recommends women target the higher end (closer to 40% of REE) of the 20-40% fat-intake range",
+        "treat 20-40% of calories from fat as a reasonable target"
+      ],
+      "note": "The 20–40% range matches. BU puts the high end (40%) on women specifically, and states the basis both as REE and as calories. ClientIntake defaults everyone to 40% of REE."
+    },
     "lastReviewed": null,
     "verified": false
   },
@@ -99,7 +162,15 @@
     "params": { "min": 2, "default": 4, "max": 6 },
     "evidenceGrade": "unrated",
     "sources": [{ "label": "ClientIntake calculations.js (berekenClient aantalMaaltijden)" }],
-    "moduleRef": null,
+    "moduleRef": "BU: Protein",
+    "bu": {
+      "section": "Module: Protein",
+      "status": "match",
+      "quotes": [
+        "the PTC's recommendation is 3-5 meals/day as a practical default"
+      ],
+      "note": "Default 4 within 3–5. The ad libitum module allows 2–5, and up to 6 in a bulk."
+    },
     "lastReviewed": null,
     "verified": false
   },
@@ -110,8 +181,16 @@
     "statement": "Post-training meals get 50% more protein; 100% more when only one meal sits between training and bed.",
     "params": { "default": 1.5, "conditions": [{ "when": { "singleMealAfterTraining": true }, "default": 2.0 }] },
     "evidenceGrade": "unrated",
-    "sources": [{ "label": "ClientIntake calculations.js (POST_TRAINING_BOOST_*)" }, { "label": "Butters University Module 11" }],
-    "moduleRef": "BU-M11",
+    "sources": [{ "label": "ClientIntake calculations.js (POST_TRAINING_BOOST_*)" }, { "label": "Butters University README — Protein" }],
+    "moduleRef": "BU: Protein",
+    "bu": {
+      "section": "Module: Protein",
+      "status": "match",
+      "quotes": [
+        "roughly 50-100% more per meal than pre-training meals"
+      ],
+      "note": "×1.5 (×2.0 with a single post-training meal) is 50–100% more."
+    },
     "lastReviewed": null,
     "verified": false
   }

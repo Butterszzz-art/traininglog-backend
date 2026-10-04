@@ -9,6 +9,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { validateBu, summarize } = require('./butters');
 
 const RULES_DIR = path.join(__dirname, '..', '..', 'rules');
 const DOMAINS = new Set(['nutrition', 'training', 'recovery', 'safety', 'package', 'coaching']);
@@ -31,6 +32,7 @@ function validateRule(rule) {
     errors.push(`${where}: params need min <= default <= max`);
   }
   if (p.conditions !== undefined && !Array.isArray(p.conditions)) errors.push(`${where}: params.conditions must be an array`);
+  errors.push(...validateBu(rule));
   return errors;
 }
 
@@ -47,7 +49,7 @@ function loadRegistry(dir = RULES_DIR) {
     }
   }
   if (errors.length) throw new Error(`Invalid rule registry:\n${errors.join('\n')}`);
-  return { version: meta.version, rules };
+  return { version: meta.version, butters: meta.buttersUniversity || null, rules };
 }
 
 function matches(when, context) {
@@ -55,7 +57,7 @@ function matches(when, context) {
 }
 
 function createRegistry(loaded = loadRegistry()) {
-  const { version, rules } = loaded;
+  const { version, butters = null, rules } = loaded;
 
   function get(id) {
     const rule = rules.get(id);
@@ -87,7 +89,13 @@ function createRegistry(loaded = loadRegistry()) {
     return cite(id, p.default);
   }
 
-  return { version, get, params, resolve, cite, all: () => [...rules.values()] };
+  // Where the rules stand against Butters University: the pinned BU source
+  // plus rule ids grouped by status (match, partial, conflict, ...).
+  function buttersSummary() {
+    return { source: butters, ...summarize([...rules.values()]) };
+  }
+
+  return { version, butters, get, params, resolve, cite, buttersSummary, all: () => [...rules.values()] };
 }
 
 module.exports = { loadRegistry, createRegistry, validateRule, RULES_DIR };

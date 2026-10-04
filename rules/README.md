@@ -19,10 +19,11 @@ be traced back to the rule (and the evidence) that produced it.
   "params": { "min": 1.6, "default": 1.8, "max": 2.4,
               "conditions": [{ "when": { "goal": "vetverlies" }, "default": 1.8 }] },
   "evidenceGrade": "unrated",           // A | B | C | D | unrated | n/a
-  "sources": [{ "label": "Butters University Module 11" }, { "doi": "…" }],
-  "moduleRef": "BU-M11",
+  "sources": [{ "label": "Butters University README — Protein" }, { "doi": "…" }],
+  "moduleRef": "BU: Protein",
+  "bu": { "section": "Module: Protein", "status": "match", "quotes": ["…"], "note": "…" },
   "lastReviewed": null,                 // YYYY-MM-DD
-  "verified": false                     // true only after review against Butters University
+  "verified": false                     // true only after a person has reviewed it
 }
 ```
 
@@ -43,13 +44,50 @@ invalid, only the plan routes are disabled.
 
 Plans that were already generated keep the `ruleVersion` they were made with.
 
-## Butters University (to do)
+## Butters University
 
-Every rule except the package rules is `verified: false`. The seed values
-come from ClientIntake's constants and the module texts in
-`src/knowledge/`. Connecting Butters University should:
-- supply or confirm each rule's statement, params, evidence grade and sources;
-- set `verified` and `lastReviewed`.
+Butters University (BU) is the evidence behind the rules. It is the GitHub
+repo `Butterszzz-art/butters-university`, and its content is `README.md`.
+Each rule that rests on evidence carries a `bu` block:
 
-That connection is not built yet. The coach dashboard shows how many of a
-plan's rules are still unverified.
+```jsonc
+"moduleRef": "BU: Protein",
+"bu": {
+  "section": "Module: Protein",         // README heading, matched exactly (case/spacing aside)
+  "status": "match",                    // match | partial | conflict | not_covered | unreviewed
+  "quotes": ["the PTC still recommends 1.8 g/kg for advanced lifters"],
+  "note": "Why the status is what it is."
+}
+```
+
+`registry.json` → `buttersUniversity.commit` pins the BU commit the quotes
+were checked at. Package rules have no `bu` block: they are business
+decisions, not evidence.
+
+- **match**: BU says what the rule does.
+- **partial**: BU agrees in part. The note says where it differs or says nothing.
+- **conflict**: BU says something different. Every plan that uses the rule lists
+  it under `butters.conflicts`, and the coach sees it before approving.
+- **not_covered** / **unreviewed**: BU has no position on it, or nobody has
+  checked it yet.
+
+The `bu` status records how the rule compares with BU. It does not change
+`verified`. A person sets `verified: true` and `lastReviewed` after deciding
+the rule is right. For a conflict, that usually means changing ClientIntake
+first (see above).
+
+### Checking against BU
+
+```sh
+git clone https://github.com/Butterszzz-art/butters-university ../butters-university
+node scripts/sync-butters-university.js ../butters-university          # report
+node scripts/sync-butters-university.js ../butters-university --pin    # record BU's commit
+BU_README=../butters-university/README.md node scripts/test-butters-university.js
+```
+
+The report lists every rule by status, with the README line of its section.
+It exits 1 when a cited section or quote has disappeared, which means BU
+changed under that rule. When that happens, re-read the section and update the
+rule's quotes, status and note (and its params, through ClientIntake, if the
+evidence moved). Pin once the report is clean. `--pin` refuses to pin while
+anything is missing.

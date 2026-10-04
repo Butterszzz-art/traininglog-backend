@@ -21,7 +21,16 @@
         "label": "Menno Henselmans volume model"
       }
     ],
-    "moduleRef": "BU-M3",
+    "moduleRef": "BU: Training intensity, volume & frequency",
+    "bu": {
+      "section": "Training intensity, volume & frequency",
+      "status": "match",
+      "quotes": [
+        "volume 10–30 sets/week/muscle depending on recovery capacity",
+        "Anchor around 10–15 direct sets/week/muscle if intermediate, and move up cautiously"
+      ],
+      "note": "Same 10–30 range scaled by recovery. BU adds that sets should be counted as direct, with indirect sets at about half, and that older clients do better on lower volume."
+    },
     "lastReviewed": null,
     "verified": false
   },
@@ -43,7 +52,13 @@
     },
     "evidenceGrade": "unrated",
     "sources": [],
-    "moduleRef": null,
+    "moduleRef": "BU: Training intensity, volume & frequency",
+    "bu": {
+      "section": "Training intensity, volume & frequency",
+      "status": "not_covered",
+      "quotes": [],
+      "note": "BU does not define training-status cut-offs by years of experience."
+    },
     "lastReviewed": null,
     "verified": false
   },
@@ -69,7 +84,16 @@
         "label": "ClientIntake calculations.js (bepaalSplitsdagen)"
       }
     ],
-    "moduleRef": "BU-M20",
+    "moduleRef": "BU: Training intensity, volume & frequency",
+    "bu": {
+      "section": "Training intensity, volume & frequency",
+      "status": "match",
+      "quotes": [
+        "frequency at least once/week per 6 sets of volume per muscle",
+        "Twice weekly per muscle is a safe, well-supported default"
+      ],
+      "note": "Matches the 6-sets-per-session frequency rule and the twice-weekly default."
+    },
     "lastReviewed": null,
     "verified": false
   },
@@ -85,10 +109,18 @@
     "evidenceGrade": "unrated",
     "sources": [
       {
-        "label": "Butters University Module 3 (training-methodology.js)"
+        "label": "Butters University README — Training intensity, volume & frequency; seed text from src/knowledge/training-methodology.js"
       }
     ],
-    "moduleRef": "BU-M3",
+    "moduleRef": "BU: Training intensity, volume & frequency",
+    "bu": {
+      "section": "Training intensity, volume & frequency",
+      "status": "partial",
+      "quotes": [
+        "frequency at least once/week per 6 sets of volume per muscle"
+      ],
+      "note": "The 6 sets per session matches. BU gives no hard cap of 10 sets per muscle per session; its worked example stays at 7 or fewer."
+    },
     "lastReviewed": null,
     "verified": false
   },
@@ -111,10 +143,18 @@
     "evidenceGrade": "unrated",
     "sources": [
       {
-        "label": "Butters University Module 7 (training-methodology.js)"
+        "label": "Butters University README — Exercise execution / technique; seed text from src/knowledge/training-methodology.js"
       }
     ],
-    "moduleRef": "BU-M7",
+    "moduleRef": "BU: Exercise execution / technique",
+    "bu": {
+      "section": "Exercise execution / technique",
+      "status": "partial",
+      "quotes": [
+        "Leave 1–3 reps in reserve on most sets; save all-out failure for the last set of an exercise, if at all"
+      ],
+      "note": "BU agrees on reps in reserve but limits 0 RIR to the last set. It treats load as open across 30–90% 1RM, so the 6–12 rep range is a coaching choice, not a BU rule."
+    },
     "lastReviewed": null,
     "verified": false
   },
@@ -131,10 +171,18 @@
     "evidenceGrade": "unrated",
     "sources": [
       {
-        "label": "Butters University Module 7 (training-methodology.js)"
+        "label": "Butters University README — Periodization; seed text from src/knowledge/training-methodology.js"
       }
     ],
-    "moduleRef": "BU-M7",
+    "moduleRef": "BU: Periodization",
+    "bu": {
+      "section": "Periodization",
+      "status": "match",
+      "quotes": [
+        "Trigger a deload based on evidence of accumulated fatigue (stalled lifts, rising soreness, poor sleep/recovery), not a fixed calendar date"
+      ],
+      "note": "Matches: deloads react to fatigue and are not put on a calendar."
+    },
     "lastReviewed": null,
     "verified": false
   }

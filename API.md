@@ -246,12 +246,16 @@ in a plan records the rule that produced it. See `src/routes/plans.js` and
 Coach routes need a Bearer token and the coach plan.
 
 ### `GET /api/coach/plans/meta`
-Returns the registry version, the packages with their phase layouts, and the
-tier adjustment caps.
+Returns the registry version, the packages with their phase layouts, the
+tier adjustment caps, and `butters`: the pinned Butters University commit
+plus rule ids grouped by BU status (`match`, `partial`, `conflict`,
+`not_covered`, `unreviewed`). See `rules/README.md`.
 
 ### `POST /api/coach/plans/preview`
 Body: `{ leadId | intake, instellingen?, packageId, startDate: "YYYY-MM-DD", tier: "basis"|"medium"|"premium", clientUid? }`.
-Returns `{ plan }` **without saving it**.
+Returns `{ plan }` **without saving it**. `plan.butters` lists the rules
+behind the plan that conflict with or only partly match Butters University,
+so the coach can review them before approving. It stays coach-side.
 
 ### `POST /api/coach/plans`
 Same body. `clientUid` is required and must be on your roster. Saves a draft
@@ -271,7 +275,7 @@ Body: `{ changes: [{ path: "phases[0].nutrition.restDay.kcal", value: 2300, reas
 
 ### `POST /api/coach/plans/:planId/approve` · `POST /api/coach/plans/:planId/publish`
 Draft → approved → published. Publishing does three things:
-- copies a client view of the plan to `users/{clientUid}/plans`, without the override log, provenance or red flags
+- copies a client view of the plan to `users/{clientUid}/plans`, without the override log, provenance, red flags or the Butters University review
 - marks the client's previous plan from this coach as superseded
 - updates the coach-assignment summary fields and notifies the client
 

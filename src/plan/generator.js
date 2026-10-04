@@ -192,6 +192,12 @@ function generatePlan({ intake, instellingen = {}, packageId, startDate, tier, c
     },
     ruleVersion: `pocketcoach-rules@${registry.version}`,
     unverifiedRules: allRules.filter(r => !r.verified).map(r => r.id),
+    // How the rules behind this plan stand against Butters University.
+    butters: {
+      source: registry.butters || null,
+      conflicts: allRules.filter(r => r.bu?.status === 'conflict').map(r => ({ ruleId: r.id, note: r.bu.note || '' })),
+      partial: allRules.filter(r => r.bu?.status === 'partial').map(r => r.id),
+    },
     inputsSnapshot: {
       gewicht: intake.persoonsgegevens.gewicht,
       vetpercentage: intake.persoonsgegevens.vetpercentage,

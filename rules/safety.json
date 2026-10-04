@@ -7,7 +7,15 @@
     "params": { "maxDeficitFraction": 0.25, "floor": "bmr" },
     "evidenceGrade": "unrated",
     "sources": [{ "label": "ClientIntake calculations.js (genereerRodeVlaggen)" }],
-    "moduleRef": null,
+    "moduleRef": "BU: Energy balance",
+    "bu": {
+      "section": "Module: Energy balance",
+      "status": "conflict",
+      "quotes": [
+        "up to 1.5%/week and 30–50% deficit at higher body-fat levels"
+      ],
+      "note": "BU allows deficits of 30–50% at higher body fat (and up to 30% early in a lean prep). The 25% safety cap is stricter. That may be intended as a safety margin, but BU does not state it."
+    },
     "lastReviewed": null,
     "verified": false
   },
@@ -19,7 +27,13 @@
     "params": { "formula": "detecteerBlessureConflicten" },
     "evidenceGrade": "unrated",
     "sources": [{ "label": "ClientIntake calculations.js (detecteerBlessureConflicten)" }],
-    "moduleRef": null,
+    "moduleRef": "BU: Training around tendon injuries & joint pain",
+    "bu": {
+      "section": "Module: Training around tendon injuries & joint pain — keeping hypertrophy productivity high",
+      "status": "unreviewed",
+      "quotes": [],
+      "note": "This module covers training around injuries. The conflict detection has not been checked against it yet."
+    },
     "lastReviewed": null,
     "verified": false
   },
@@ -31,7 +45,15 @@
     "params": { "default": 6 },
     "evidenceGrade": "unrated",
     "sources": [{ "label": "ClientIntake calculations.js (genereerRodeVlaggen)" }],
-    "moduleRef": null,
+    "moduleRef": "BU: Ad libitum dieting",
+    "bu": {
+      "section": "Module: Ad libitum dieting",
+      "status": "partial",
+      "quotes": [
+        "4 nights of 4-7 hours of sleep (vs. 8) raises appetite by 20-22%"
+      ],
+      "note": "BU puts the harm below about 7 hours, compared with 8. The 6-hour flag is looser."
+    },
     "lastReviewed": null,
     "verified": false
   }
