@@ -75,8 +75,8 @@ check('every non-package rule points at Butters University', evidenceRules.every
 check('the BU commit is pinned', /^[0-9a-f]{40}$/.test(registry.butters?.commit || '') && registry.butters.repo === 'Butterszzz-art/butters-university');
 check('no rule marks itself verified on the strength of the connector', evidenceRules.every(r => r.verified === false));
 const summary = registry.buttersSummary();
-check('the summary groups rules by BU status', summary.partial.includes('nutr.bmr.method') && summary.match.includes('nutr.protein.g_per_kg'));
-check('no rule conflicts with Butters University', summary.conflict.length === 0);
+check('the summary groups rules by BU status', summary.match.includes('nutr.bmr.method') && summary.not_covered.includes('train.status.from_experience'));
+check('no rule conflicts with or only partly matches Butters University', summary.conflict.length === 0 && summary.partial.length === 0);
 
 // ── Plans carry the review; clients never see it ────────────────────────────
 const intake = {
@@ -87,7 +87,7 @@ const intake = {
   lifestyle: { activityLevel: 'actief', stressLevel: 'gemiddeld', slaap: { uren: 7 } },
 };
 const plan = generatePlan({ intake, packageId: 'cut_cycle_32', startDate: '2026-10-12', tier: 'medium', registry, now: new Date('2026-10-04T08:00:00Z') });
-check('a plan lists partial matches among the rules it used', plan.butters.partial.includes('nutr.bmr.method') && plan.butters.conflicts.length === 0);
+check('a plan built on matching rules lists no conflicts or partial matches', plan.butters.partial.length === 0 && plan.butters.conflicts.length === 0);
 // A registry where one rule conflicts with BU: the plan must surface it.
 const loaded = loadRegistry();
 const rules = new Map(loaded.rules);

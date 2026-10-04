@@ -34,6 +34,28 @@ const STANDAARD_TEF = 1.1;
 // aggressive they want to be), not be picked automatically.
 const EIWIT_BEREIK_G_PER_KG = { min: 1.6, praktisch: 1.8, maxSlank: 2.4 };
 const VET_BEREIK_PERCENTAGE_REE = { min: 0.2, max: 0.4 };
+// Fat default within 20–40% of REE (Butters University, "Module: Fats"):
+// women at the high end (estrogen benefits, risks of low-fat diets for
+// women). BU sets no point for men; the middle of the range is used.
+const VET_PERCENTAGE_REE_PER_GESLACHT = { man: 0.3, vrouw: 0.4, anders: 0.35 };
+
+// BMR formula choice (Butters University, "Module: Energy balance"):
+// Cunningham/Katch from fat-free mass for lean or trained clients, Tinsley
+// (24.8 × BW + 10) for very lean, highly muscled clients. BU gives no
+// cut-offs; "very lean" uses these body-fat levels and "highly muscled" means
+// advanced training status (4+ years).
+const TINSLEY_MAX_VETPERCENTAGE = { man: 10, vrouw: 18, anders: 14 };
+// BU: Cunningham is a poor default for untrained clients with higher body
+// fat (it underestimated RMR by ~17% in a general clinic population). BU names
+// no better formula, so these clients get a flag to correct the estimate
+// against two or more weeks of weigh-ins. The body-fat levels are chosen so
+// BU's example (untrained woman, 30% body fat) is flagged; men sit 8 points
+// lower, the same offset as the deficit anchors.
+const CUNNINGHAM_ONBETROUWBAAR_VANAF_VETPERCENTAGE = { man: 22, vrouw: 30, anders: 26 };
+
+// Sleep below this many hours raises a flag (BU, "Module: Ad libitum
+// dieting": 4–7 h vs. 8 h of sleep raises appetite by 20–22%).
+const SLAAP_MINIMUM_UREN = 7;
 
 // Surplus by training status (BU: beginners 5–15%, intermediate 2–7%,
 // advanced 1–3%, the smallest surplus that keeps fat gain near zero). The
@@ -88,6 +110,10 @@ function vetvrijeMassa(gewicht, vetpct) {
 
 function katchMcArdleBMR(vvm) {
   return 370 + 21.6 * vvm;
+}
+
+function tinsleyRMR(gewicht) {
+  return 24.8 * gewicht + 10;
 }
 
 function energieverbruikTrainingsdag(gewicht, duurMinuten, MET = 5.7) {
@@ -298,6 +324,23 @@ function beoogdeInnameBereik(onderhoudPerDag, doelCategorie, persoon = {}) {
   return { min: round(onderhoudPerDag * b.min, 0), max: round(onderhoudPerDag * b.max, 0) };
 }
 
+// 'tinsley' for very lean, advanced clients; otherwise 'katchMcArdle'.
+function bmrMethodeVoorClient(persoon = {}) {
+  const g = geslachtSleutel(persoon.geslacht);
+  const zeerSlank = Number(persoon.vetpercentage) <= TINSLEY_MAX_VETPERCENTAGE[g];
+  return zeerSlank && trainingsstatusUitErvaring(persoon.trainingservaring) === 3 ? 'tinsley' : 'katchMcArdle';
+}
+
+function cunninghamOnbetrouwbaar(persoon = {}) {
+  const g = geslachtSleutel(persoon.geslacht);
+  return trainingsstatusUitErvaring(persoon.trainingservaring) === 1
+    && Number(persoon.vetpercentage) >= CUNNINGHAM_ONBETROUWBAAR_VANAF_VETPERCENTAGE[g];
+}
+
+function vetPercentageVoorClient(persoon = {}) {
+  return VET_PERCENTAGE_REE_PER_GESLACHT[geslachtSleutel(persoon.geslacht)];
+}
+
 function palVoorActiviteitsniveau(activityLevel, geslacht) {
   const tabel = STANDAARD_PAL_PER_GESLACHT[geslacht] ?? STANDAARD_PAL;
   return tabel[activityLevel] ?? tabel.sedentair;
@@ -370,10 +413,17 @@ function genereerRodeVlaggen(intake, calculations) {
     vlaggen.push({ niveau: 'oranje', bericht: `Let op bij "${c.oefening}": ${c.reden}.` });
   }
 
-  if (intake.lifestyle?.slaap?.uren != null && intake.lifestyle.slaap.uren < 6) {
+  if (intake.lifestyle?.slaap?.uren != null && intake.lifestyle.slaap.uren < SLAAP_MINIMUM_UREN) {
     vlaggen.push({
       niveau: 'oranje',
-      bericht: 'Minder dan 6 uur slaap gerapporteerd — kan herstel en trainingsvoortgang limiteren.',
+      bericht: `Minder dan ${SLAAP_MINIMUM_UREN} uur slaap gerapporteerd — kan eetlust, herstel en trainingsvoortgang beïnvloeden.`,
+    });
+  }
+
+  if (calculations.bmrMethode === 'katchMcArdle' && cunninghamOnbetrouwbaar(p)) {
+    vlaggen.push({
+      niveau: 'oranje',
+      bericht: 'BMR via Katch-McArdle is onbetrouwbaar bij een ongetrainde cliënt met een hoger vetpercentage (vaak ~15% te laag) — corrigeer de calorieën na 2+ weken weegdata.',
     });
   }
 
@@ -415,12 +465,13 @@ function berekenClient(intake, instellingen = {}) {
   const tef = instellingen.tef ?? STANDAARD_TEF;
   const energiebalansFactor = instellingen.energiebalansFactor ?? energiebalansFactorVoorDoel(intake.doel?.categorie, intake.persoonsgegevens);
   const eiwitFactor = instellingen.eiwitFactor ?? 1.8;
-  const percentageVetVanREE = instellingen.percentageVetVanREE ?? 0.4;
+  const percentageVetVanREE = instellingen.percentageVetVanREE ?? vetPercentageVoorClient(intake.persoonsgegevens);
+  const bmrMethode = instellingen.bmrMethode ?? bmrMethodeVoorClient(intake.persoonsgegevens);
   const aantalMaaltijden = instellingen.aantalMaaltijden ?? 4;
   const postTrainingBoost = instellingen.postTrainingBoost ?? POST_TRAINING_BOOST_STANDAARD;
 
   const vvm = vetvrijeMassa(gewicht, vetpercentage);
-  const bmr = katchMcArdleBMR(vvm);
+  const bmr = bmrMethode === 'tinsley' ? tinsleyRMR(gewicht) : katchMcArdleBMR(vvm);
   const ee = energieverbruikTrainingsdag(gewicht, trainingsduurMinuten, MET);
   const ree = energieverbruikRustdag(bmr, pal, tef);
   const totaalTrainingsdag = totaalEnergieTrainingsdag(ree, ee, tef);
@@ -460,6 +511,7 @@ function berekenClient(intake, instellingen = {}) {
   const calculations = {
     vetvrijeMassa: round(vvm),
     bmr: round(bmr, 0),
+    bmrMethode,
     ee: round(ee, 0),
     ree: round(ree, 0),
     totaalTrainingsdag: round(totaalTrainingsdag, 0),
@@ -485,6 +537,7 @@ function berekenClient(intake, instellingen = {}) {
       energiebalansFactor,
       eiwitFactor,
       percentageVetVanREE,
+      bmrMethode,
       aantalMaaltijden,
       postTrainingBoost,
     },
@@ -504,6 +557,10 @@ module.exports = {
   STANDAARD_TEF,
   EIWIT_BEREIK_G_PER_KG,
   VET_BEREIK_PERCENTAGE_REE,
+  VET_PERCENTAGE_REE_PER_GESLACHT,
+  TINSLEY_MAX_VETPERCENTAGE,
+  CUNNINGHAM_ONBETROUWBAAR_VANAF_VETPERCENTAGE,
+  SLAAP_MINIMUM_UREN,
   SURPLUS_PER_TRAININGSSTATUS,
   TRAININGSSTATUS_DREMPELS_JAREN,
   TEKORT_VETPERCENTAGE_ANKERS,
@@ -514,6 +571,7 @@ module.exports = {
   POST_TRAINING_BOOST_ENKELE_MAALTIJD,
   vetvrijeMassa,
   katchMcArdleBMR,
+  tinsleyRMR,
   energieverbruikTrainingsdag,
   energieverbruikRustdag,
   totaalEnergieTrainingsdag,
@@ -540,6 +598,9 @@ module.exports = {
   tekortBereik,
   energiebalansBereik,
   beoogdeInnameBereik,
+  bmrMethodeVoorClient,
+  cunninghamOnbetrouwbaar,
+  vetPercentageVoorClient,
   palVoorActiviteitsniveau,
   energiebalansFactorVoorDoel,
   bepaalSplitsdagen,

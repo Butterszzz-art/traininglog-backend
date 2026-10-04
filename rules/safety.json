@@ -39,20 +39,20 @@
   },
   {
     "id": "safety.sleep.min_hours",
-    "version": 1,
+    "version": 2,
     "domain": "recovery",
-    "statement": "Flag under 6 hours of sleep: it can limit recovery and progress.",
-    "params": { "default": 6 },
+    "statement": "Flag under 7 hours of sleep: short sleep raises appetite and can limit recovery and progress.",
+    "params": {"default": 7},
     "evidenceGrade": "unrated",
-    "sources": [{ "label": "ClientIntake calculations.js (genereerRodeVlaggen)" }],
+    "sources": [{"label": "ClientIntake calculations.js (SLAAP_MINIMUM_UREN)"}, {"label": "Butters University README — Ad libitum dieting"}],
     "moduleRef": "BU: Ad libitum dieting",
     "bu": {
       "section": "Module: Ad libitum dieting",
-      "status": "partial",
+      "status": "match",
       "quotes": [
         "4 nights of 4-7 hours of sleep (vs. 8) raises appetite by 20-22%"
       ],
-      "note": "BU puts the harm below about 7 hours, compared with 8. The 6-hour flag is looser."
+      "note": "BU: 4–7 hours vs. 8 raises appetite by 20–22%. The flag fires below 7."
     },
     "lastReviewed": null,
     "verified": false

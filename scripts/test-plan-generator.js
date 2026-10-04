@@ -46,6 +46,13 @@ check('fat range = ClientIntake VET_BEREIK_PERCENTAGE_REE', (() => {
   const p = registry.params('nutr.fat.pct_ree');
   return p.min === calc.VET_BEREIK_PERCENTAGE_REE.min && p.max === calc.VET_BEREIK_PERCENTAGE_REE.max;
 })());
+check('fat per sex = ClientIntake VET_PERCENTAGE_REE_PER_GESLACHT', JSON.stringify(registry.params('nutr.fat.pct_ree').bySex) === JSON.stringify(calc.VET_PERCENTAGE_REE_PER_GESLACHT));
+check('BMR formula cut-offs = ClientIntake constants', (() => {
+  const p = registry.params('nutr.bmr.method');
+  return JSON.stringify(p.tinsley.maxBodyFat) === JSON.stringify(calc.TINSLEY_MAX_VETPERCENTAGE)
+    && JSON.stringify(p.unreliableFrom.bodyFat) === JSON.stringify(calc.CUNNINGHAM_ONBETROUWBAAR_VANAF_VETPERCENTAGE);
+})());
+check('sleep flag = ClientIntake SLAAP_MINIMUM_UREN', registry.params('safety.sleep.min_hours').default === calc.SLAAP_MINIMUM_UREN);
 check('post-training boost = ClientIntake POST_TRAINING_BOOST_STANDAARD', registry.resolve('nutr.meals.post_training_protein').value === calc.POST_TRAINING_BOOST_STANDAARD);
 
 // ── Generator ───────────────────────────────────────────────────────────────
@@ -78,6 +85,8 @@ const direct = calc.berekenClient({ ...intake, doel: { categorie: 'vetverlies' }
 check('cut kcal = ClientIntake berekenClient (vetverlies, erg actief)', cut.phases[0].nutrition.restDay.kcal === direct.beoogdeInnameRustdag);
 check('PAL excludes training and is sex-specific (man, erg actief = 1.48)', cut.phases[0].nutrition.settingsUsed.pal === 1.48);
 check('cut deficit follows body fat (man, 18%)', cut.phases[0].nutrition.settingsUsed.energiebalansFactor === calc.energiebalansBereik('vetverlies', intake.persoonsgegevens).standaard);
+check('fat for a man = 30% of REE', cut.phases[0].nutrition.settingsUsed.percentageVetVanREE === 0.3);
+check('BMR method recorded (Katch-McArdle at 18%)', cut.phases[0].nutrition.settingsUsed.bmrMethode === 'katchMcArdle');
 check('protein = 1.8 g/kg', cut.phases[0].nutrition.restDay.proteinG === Math.round(84 * 1.8 * 10) / 10);
 check('maintain phase eats more than cut', cut.phases[1].nutrition.restDay.kcal > cut.phases[0].nutrition.restDay.kcal);
 check('kcal provenance cites the energy rule', cut.phases[0].nutrition.provenance.kcal.ruleId === 'nutr.energy.factor');

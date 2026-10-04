@@ -1,21 +1,22 @@
 [
   {
     "id": "nutr.bmr.method",
-    "version": 1,
+    "version": 2,
     "domain": "nutrition",
-    "statement": "Basal metabolic rate by Katch–McArdle from fat-free mass: 370 + 21.6 × FFM (kg).",
-    "params": { "formula": "katchMcArdleBMR" },
+    "statement": "Basal metabolic rate: Cunningham/Katch–McArdle from fat-free mass (370 + 21.6 × FFM kg) by default; Tinsley (24.8 × BW kg + 10) for very lean, advanced clients. Untrained clients with higher body fat get a flag to correct the estimate against weigh-ins.",
+    "params": {"formula": "bmrMethodeVoorClient", "default": "katchMcArdle", "tinsley": {"maxBodyFat": {"man": 10, "vrouw": 18, "anders": 14}, "trainingStatus": 3}, "unreliableFrom": {"bodyFat": {"man": 22, "vrouw": 30, "anders": 26}, "trainingStatus": 1}},
     "evidenceGrade": "unrated",
-    "sources": [{ "label": "ClientIntake calculations.js (katchMcArdleBMR)" }],
+    "sources": [{"label": "ClientIntake calculations.js (bmrMethodeVoorClient, katchMcArdleBMR, tinsleyRMR)"}, {"label": "Butters University README — Energy balance"}],
     "moduleRef": "BU: Energy balance",
     "bu": {
       "section": "Module: Energy balance",
-      "status": "partial",
+      "status": "match",
       "quotes": [
         "the PTC recommends the Cunningham (1991) equation (BMR = 370 + 21.6 × FFM in kg, also known as Katch-McArdle)",
+        "if you're very lean and highly muscled, prefer Tinsley (24.8 × BW(kg) + 10)",
         "Cunningham is a poor default for higher-body-fat, untrained people"
       ],
-      "note": "BU backs Cunningham/Katch for lean, trained clients; for untrained or higher-body-fat clients it calls it a poor default, and for very lean, muscular athletes it prefers Tinsley (24.8 × BW + 10). ClientIntake always uses Katch."
+      "note": "BU's formula choice. BU gives no cut-offs: 'very lean' uses the body-fat levels in params and 'highly muscled' means 4+ years of training; the 'unreliable' levels are set so BU's example (untrained woman, 30% body fat) is flagged. BU names no better formula for those clients, so they keep Katch–McArdle with a flag to correct it after 2+ weeks of weigh-ins (BU: treat any estimate as a starting point)."
     },
     "lastReviewed": null,
     "verified": false
@@ -148,21 +149,21 @@
   },
   {
     "id": "nutr.fat.pct_ree",
-    "version": 1,
+    "version": 2,
     "domain": "nutrition",
-    "statement": "Fat 20–40% of rest-day energy expenditure (REE); 40% default.",
-    "params": { "unit": "fraction of REE", "min": 0.2, "default": 0.4, "max": 0.4 },
+    "statement": "Fat 20–40% of rest-day energy expenditure (REE): women 40% (top of the range), men 30% (middle), anders 35%.",
+    "params": {"unit": "fraction of REE", "min": 0.2, "max": 0.4, "bySex": {"man": 0.3, "vrouw": 0.4, "anders": 0.35}},
     "evidenceGrade": "unrated",
-    "sources": [{ "label": "ClientIntake calculations.js (VET_BEREIK_PERCENTAGE_REE)" }, { "label": "Butters University README — Fats" }],
+    "sources": [{"label": "ClientIntake calculations.js (VET_BEREIK_PERCENTAGE_REE, VET_PERCENTAGE_REE_PER_GESLACHT)"}, {"label": "Butters University README — Fats"}],
     "moduleRef": "BU: Fats",
     "bu": {
       "section": "Module: Fats",
-      "status": "partial",
+      "status": "match",
       "quotes": [
         "the PTC recommends women target the higher end (closer to 40% of REE) of the 20-40% fat-intake range",
         "treat 20-40% of calories from fat as a reasonable target"
       ],
-      "note": "The 20–40% range matches. BU puts the high end (40%) on women specifically, and states the basis both as REE and as calories. ClientIntake defaults everyone to 40% of REE."
+      "note": "BU puts women at the top of the 20–40% range. It sets no point for men, so they get the middle. The basis is REE, as in BU's PTC section (the 'What this means for you' list says calories)."
     },
     "lastReviewed": null,
     "verified": false

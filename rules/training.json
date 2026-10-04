@@ -99,61 +99,40 @@
   },
   {
     "id": "train.volume.max_per_session",
-    "version": 1,
+    "version": 2,
     "domain": "training",
-    "statement": "About 10 sets per muscle group per session at most; past that, returns diminish (1 session per ~6 weekly sets).",
-    "params": {
-      "default": 10,
-      "setsPerSession": 6
-    },
+    "statement": "At least one session per week for every 6 weekly sets of a muscle: flag more than 6 sets per muscle per session.",
+    "params": {"default": 6, "setsPerSession": 6},
     "evidenceGrade": "unrated",
-    "sources": [
-      {
-        "label": "Butters University README — Training intensity, volume & frequency; seed text from src/knowledge/training-methodology.js"
-      }
-    ],
+    "sources": [{"label": "Butters University README — Training intensity, volume & frequency; seed text from src/knowledge/training-methodology.js"}],
     "moduleRef": "BU: Training intensity, volume & frequency",
     "bu": {
       "section": "Training intensity, volume & frequency",
-      "status": "partial",
+      "status": "match",
       "quotes": [
         "frequency at least once/week per 6 sets of volume per muscle"
       ],
-      "note": "The 6 sets per session matches. BU gives no hard cap of 10 sets per muscle per session; its worked example stays at 7 or fewer."
+      "note": "BU's frequency rule (once a week per 6 sets) read as a per-session limit of 6 sets. BU's worked example puts 7 direct-equivalent sets in one session and calls that comfortable, so the flag is advice, not a hard stop."
     },
     "lastReviewed": null,
     "verified": false
   },
   {
     "id": "train.progression.scheme",
-    "version": 1,
+    "version": 2,
     "domain": "training",
-    "statement": "Double progression: add reps within the range at the target proximity to failure, then add the smallest load increment.",
-    "params": {
-      "scheme": "double_progression",
-      "repRange": [
-        6,
-        12
-      ],
-      "rir": [
-        3,
-        0
-      ]
-    },
+    "statement": "Double progression in 6–12 reps: leave 1–3 reps in reserve on most sets, failure only on the last set of an exercise; add reps, then the smallest load increment.",
+    "params": {"scheme": "double_progression", "repRange": [6, 12], "rir": [3, 1], "failure": "last_set_only"},
     "evidenceGrade": "unrated",
-    "sources": [
-      {
-        "label": "Butters University README — Exercise execution / technique; seed text from src/knowledge/training-methodology.js"
-      }
-    ],
+    "sources": [{"label": "Butters University README — Exercise execution / technique; seed text from src/knowledge/training-methodology.js"}],
     "moduleRef": "BU: Exercise execution / technique",
     "bu": {
       "section": "Exercise execution / technique",
-      "status": "partial",
+      "status": "match",
       "quotes": [
         "Leave 1–3 reps in reserve on most sets; save all-out failure for the last set of an exercise, if at all"
       ],
-      "note": "BU agrees on reps in reserve but limits 0 RIR to the last set. It treats load as open across 30–90% 1RM, so the 6–12 rep range is a coaching choice, not a BU rule."
+      "note": "RIR as BU says. 6–12 reps is roughly 70–85% 1RM, inside the 30–90% band BU's training-volume module gives; BU leaves the exact load to feel, so the range is a coaching default the coach can change."
     },
     "lastReviewed": null,
     "verified": false

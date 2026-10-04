@@ -70,7 +70,7 @@ function generatePlan({ intake, instellingen = {}, packageId, startDate, tier, c
     MET: tee.MET,
     trainingsduurMinuten: tee.minutes,
     eiwitFactor: registry.resolve('nutr.protein.g_per_kg').value,
-    percentageVetVanREE: registry.resolve('nutr.fat.pct_ree').value,
+    percentageVetVanREE: calc.vetPercentageVoorClient(intake.persoonsgegevens),
     aantalMaaltijden: registry.resolve('nutr.meals.count').value,
     postTrainingBoost: registry.resolve('nutr.meals.post_training_protein').value,
   };
