@@ -65,6 +65,15 @@ service cloud.firestore {
     // POST /api/intake) on behalf of a prospect who has no account yet, so
     // there's no uid to check a write against — same reasoning as clients
     // above: server-only write, coach-only read.
+    // coaches/{coachUid}/plans/{planId} — master plans (drafts, approved,
+    // published) written by the server (src/routes/plans.js). Only the coach
+    // may read them; the client reads their published copy under
+    // users/{uid}/plans, covered by the users/{uid} rule above.
+    match /coaches/{coachUid}/plans/{planId} {
+      allow read: if request.auth != null && request.auth.uid == coachUid;
+      allow write: if false;
+    }
+
     match /coaches/{coachUid}/leads/{leadId} {
       allow read: if request.auth != null && request.auth.uid == coachUid;
       allow write: if false;

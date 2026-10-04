@@ -231,3 +231,49 @@ If the server JWT secret changes, previously issued browser tokens become invali
   }
 }
 ```
+
+## Master plans (coach-generated, coach-approved)
+
+A coach generates a plan from a client's intake and a package (Cut Cycle 32
+or Physique Plan 28). The plan starts as a draft, which only the coach can
+see. The coach previews and edits it (each edit is logged), approves it, and
+publishes it. Only a published plan reaches the client. The maths comes from
+`src/intakeCalculations.js`, which is generated from ClientIntake. The
+parameters come from the rule registry in `rules/*.json`, and every number
+in a plan records the rule that produced it. See `src/routes/plans.js` and
+`src/plan/`.
+
+Coach routes need a Bearer token and the coach plan.
+
+### `GET /api/coach/plans/meta`
+Returns the registry version, the packages with their phase layouts, and the
+tier adjustment caps.
+
+### `POST /api/coach/plans/preview`
+Body: `{ leadId | intake, instellingen?, packageId, startDate: "YYYY-MM-DD", tier: "basis"|"medium"|"premium", clientUid? }`.
+Returns `{ plan }` **without saving it**.
+
+### `POST /api/coach/plans`
+Same body. `clientUid` is required and must be on your roster. Saves a draft
+and returns `{ plan }` (201).
+
+### `GET /api/coach/plans?clientUid=`
+Returns `{ plans: [summary] }`.
+
+### `GET /api/coach/plans/:planId`
+Returns the full plan.
+
+### `PATCH /api/coach/plans/:planId`
+Body: `{ changes: [{ path: "phases[0].nutrition.restDay.kcal", value: 2300, reason }] }`.
+- Only targets, sets, progression, deloads, recovery, caps and end criteria can be edited.
+- Each change is appended to `plan.overrides`.
+- Editing an approved plan sends it back to draft.
+
+### `POST /api/coach/plans/:planId/approve` · `POST /api/coach/plans/:planId/publish`
+Draft → approved → published. Publishing does three things:
+- copies a client view of the plan to `users/{clientUid}/plans`, without the override log, provenance or red flags
+- marks the client's previous plan from this coach as superseded
+- updates the coach-assignment summary fields and notifies the client
+
+### `GET /api/client/plan`
+Returns the signed-in client's current published plan, or `{ plan: null }`.
