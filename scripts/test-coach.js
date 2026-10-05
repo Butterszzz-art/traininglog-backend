@@ -38,15 +38,17 @@ const apiError = (Cls, status, msg) => new Cls(status, { error: {} }, msg, new H
 const calls = [];
 let script = [];
 
-const client = coachClient.getClient();
+// `via` tags each recorded call with the provider whose client got it.
+function installFakes(client, via) {
+const record = params => calls.push({ ...JSON.parse(JSON.stringify(params)), ...(via ? { via } : {}) });
 client.messages.create = async params => {
-  calls.push(JSON.parse(JSON.stringify(params)));
+  record(params);
   const step = script.shift();
   if (step.throw) throw step.throw;
   return step.message;
 };
-client.beta.messages.stream = params => {
-  calls.push(JSON.parse(JSON.stringify(params)));
+if (client.beta) client.beta.messages.stream = params => {
+  record(params);
   const step = script.shift();
   const handlers = {};
   return {
@@ -59,6 +61,26 @@ client.beta.messages.stream = params => {
     },
   };
 };
+}
+const client = coachClient.getClient();
+installFakes(client);
+
+// Switch to open-model providers for one test; each has its own client.
+async function withOpenModels(names, fn) {
+  delete process.env.ANTHROPIC_API_KEY;
+  names.forEach(n => { process.env[`${n.toUpperCase()}_API_KEY`] = 'test'; });
+  coachClient.markGood(null);
+  names.forEach(n => installFakes(coachClient.getClient(n), n));
+  try {
+    await fn();
+  } finally {
+    ['OPENROUTER_API_KEY', 'OLLAMA_API_KEY', 'GROQ_API_KEY', 'OPENROUTER_MODELS', 'OLLAMA_MODELS', 'GROQ_MODELS'].forEach(k => delete process.env[k]);
+    process.env.ANTHROPIC_API_KEY = 'test';
+    coachClient.markGood(null);
+  }
+}
+const withOpenRouter = fn => withOpenModels(['openrouter'], fn);
+const withBoth = fn => withOpenModels(['ollama', 'openrouter'], fn);
 
 // ── app: the real /api/ai router behind a fake auth middleware ──────────────
 
@@ -547,6 +569,187 @@ async function run() {
   await t('facts are required', async () => {
     assert.strictEqual((await post('/api/ai/coach/review', null, { raw: '{}' })).status, 400);
   });
+
+  console.log('open models (Ollama / OpenRouter)');
+
+  const free = coachClient.OPENROUTER_FREE_MODELS;
+  const orRefs = free.map(m => `openrouter::${m}`);
+  const olRefs = coachClient.OLLAMA_FREE_MODELS.map(m => `ollama::${m}`);
+
+  await t('OpenRouter key alone → free model chain, no Anthropic-only params', () => withOpenRouter(() => {
+    assert.strictEqual(coachClient.provider(), 'openrouter');
+    assert.strictEqual(coachClient.openModels(), true);
+    assert.deepStrictEqual(coachClient.modelChain('claude-opus-5-5'), orRefs);
+    assert.deepStrictEqual(coachClient.fallbackParams(), {});
+    assert.deepStrictEqual(coachClient.jsonOutput({ type: 'object' }, 'low'), { effort: 'low' });
+    process.env.OPENROUTER_MODELS = 'claude-haiku-4-5-20251001, openai/gpt-x';
+    assert.deepStrictEqual(coachClient.modelChain('m'), ['openrouter::anthropic/claude-haiku-4.5', 'openrouter::openai/gpt-x']);
+  }));
+
+  await t('both open keys → Ollama first, then OpenRouter', () => withBoth(() => {
+    assert.deepStrictEqual(coachClient.providers(), ['ollama', 'openrouter']);
+    assert.deepStrictEqual(coachClient.modelChain('m'), [...olRefs, ...orRefs]);
+    process.env.OLLAMA_MODELS = 'gpt-oss:120b,gemma4:31b';
+    assert.deepStrictEqual(coachClient.modelChain('m').slice(0, 2), ['ollama::gpt-oss:120b', 'ollama::gemma4:31b']);
+    // an OpenRouter model answering doesn't move OpenRouter ahead of Ollama
+    coachClient.markGood(orRefs[2]);
+    assert.deepStrictEqual(coachClient.modelChain('m').slice(2, 4), [orRefs[2], orRefs[3]]);
+  }));
+
+  await t('Anthropic key wins over every open-model key', () => withBoth(() => {
+    process.env.ANTHROPIC_API_KEY = 'test';
+    assert.strictEqual(coachClient.provider(), 'anthropic');
+    assert.strictEqual(coachClient.openModels(), false);
+    assert.deepStrictEqual(coachClient.modelChain('claude-opus-5-5'), ['anthropic::claude-opus-5-5']);
+  }));
+
+  await t('prepare trims each request to what its provider accepts', () => withBoth(() => {
+    const params = {
+      max_tokens: 10, betas: ['b'], fallbacks: 'default', cache_control: { type: 'ephemeral' },
+      output_config: { effort: 'low', format: { type: 'json_schema' } },
+      plugins: [{ id: 'file-parser' }],
+      tools: [{ name: 'x', input_schema: {}, eager_input_streaming: true }],
+      messages: [{ role: 'user', content: 'hi' }],
+    };
+    const ol = coachClient.prepare(olRefs[0], params).body;
+    assert.deepStrictEqual(ol, {
+      max_tokens: 10, model: 'gemma4:31b', output_config: { effort: 'low' },
+      tools: [{ name: 'x', input_schema: {} }], messages: params.messages,
+    });
+    const or = coachClient.prepare(orRefs[0], params).body;
+    assert.strictEqual(or.model, free[0]);
+    assert.deepStrictEqual(or.plugins, params.plugins);
+    assert.deepStrictEqual(or.cache_control, params.cache_control);
+    assert.strictEqual(or.betas, undefined);
+    const pdf = { ...params, messages: [{ role: 'user', content: [{ type: 'document', source: {} }] }] };
+    assert.strictEqual(coachClient.prepare(olRefs[0], pdf), null, 'Ollama has no PDF input');
+    assert.ok(coachClient.prepare(orRefs[0], pdf));
+  }));
+
+  await t('chat: a rate-limited free model is skipped for the next one', () => withOpenRouter(async () => {
+    script = [{ throw: apiError(Anthropic.RateLimitError, 429, 'busy') }, { text: ['Squat looks fine.'], ...endTurn('Squat looks fine.') }];
+    const body = await (await post('/api/ai/coach', { message: 'How is my squat?', data: routePack })).text();
+    assert.deepStrictEqual(parseSSE(body).map(e => e.type), ['text', 'done']);
+    assert.deepStrictEqual(calls.map(c => c.model), [free[0], free[1]]);
+    assert.strictEqual(calls[1].betas, undefined);
+    assert.strictEqual(calls[1].fallbacks, undefined);
+    // the model that answered goes first next time
+    assert.strictEqual(coachClient.modelChain('x')[0], orRefs[1]);
+  }));
+
+  await t('chat: Ollama out of free allowance (402) → OpenRouter answers', () => withBoth(async () => {
+    script = [{ throw: apiError(Anthropic.APIError, 402, 'usage limit reached') }, { text: ['Fine.'], ...endTurn('Fine.') }];
+    const body = await (await post('/api/ai/coach', { message: 'Hi', data: routePack })).text();
+    assert.deepStrictEqual(parseSSE(body).map(e => e.type), ['text', 'done']);
+    assert.deepStrictEqual(calls.map(c => [c.via, c.model]), [['ollama', 'gemma4:31b'], ['openrouter', free[0]]]);
+    assert.strictEqual(calls[0].cache_control, undefined);
+    assert.ok(calls[0].tools.every(tool => tool.eager_input_streaming === undefined));
+  }));
+
+  await t('brief: JSON shape comes from the instructions, not output_config.format', () => withOpenRouter(async () => {
+    script = [endTurn('Sure! {"headline":"Rest today.","bullets":[]}')];
+    const body = await (await post('/api/ai/coach/brief', { data: briefPack })).json();
+    assert.strictEqual(body.source, 'ai');
+    assert.strictEqual(body.headline, 'Rest today.');
+    assert.deepStrictEqual(calls[0].output_config, { effort: 'low' });
+    assert.strictEqual(calls[0].model, free[0]);
+  }));
+
+  await t('ai.js routes use the chain, a token floor and the first text block', () => withBoth(async () => {
+    script = [
+      { throw: apiError(Anthropic.InternalServerError, 503, 'overloaded') },
+      { message: { stop_reason: 'end_turn', content: [{ type: 'thinking', thinking: '' }, { type: 'text', text: 'Solid week.' }] } },
+    ];
+    const res = await post('/api/ai/checkin-summary', {
+      sleep: 7, energy: 6, stress: 4, bodyweightThisWeek: 80, compliancePercent: 90, goal: 'cut', archetype: 'lifter',
+    });
+    assert.deepStrictEqual(await res.json(), { summary: 'Solid week.' });
+    assert.deepStrictEqual(calls.map(c => c.via), ['ollama', 'openrouter']);
+    assert.strictEqual(calls[1].max_tokens, 4096);
+  }));
+
+  console.log('Groq');
+
+  const groq = require('../src/coach/groq');
+  const withAll = fn => withOpenModels(['ollama', 'groq', 'openrouter'], fn);
+
+  await t('groq: Anthropic request ↔ Chat Completions', () => {
+    const req = groq.toChatRequest({
+      model: 'openai/gpt-oss-120b', max_tokens: 16000,
+      system: [{ type: 'text', text: 'Be brief.' }, { type: 'text', text: 'Athlete: Pat.' }],
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'Hi' }] }, { role: 'assistant', content: 'Hello' }],
+    });
+    assert.deepStrictEqual(req, {
+      model: 'openai/gpt-oss-120b',
+      messages: [
+        { role: 'system', content: 'Be brief.\n\nAthlete: Pat.' },
+        { role: 'user', content: 'Hi' },
+        { role: 'assistant', content: 'Hello' },
+      ],
+      max_completion_tokens: 2500,
+      reasoning_effort: 'low',
+    });
+    const msg = groq.toMessage({ id: 'c1', choices: [{ message: { content: 'Done' }, finish_reason: 'length' }], usage: { prompt_tokens: 5, completion_tokens: 7 } }, 'm');
+    assertMatch(msg, { content: [{ type: 'text', text: 'Done' }], stop_reason: 'max_tokens', usage: { input_tokens: 5, output_tokens: 7 } });
+    assert.strictEqual(groq.toMessage({ choices: [] }, 'm').content, null);
+  });
+
+  await t('groq: only short, text-only requests fit the free tier', () => {
+    const small = { max_tokens: 2000, system: 'Short.', messages: [{ role: 'user', content: 'Hi' }] };
+    assert.strictEqual(groq.fitsGroq(small), true);
+    assert.strictEqual(groq.fitsGroq({ ...small, system: 'x'.repeat(29000) }), false, 'ai.js methodology prompt is too big');
+    assert.strictEqual(groq.fitsGroq({ ...small, tools: [{ name: 't' }] }), false);
+    assert.strictEqual(groq.fitsGroq({ ...small, messages: [{ role: 'user', content: [{ type: 'image', source: {} }] }] }), false);
+  });
+
+  await t('groq: HTTP errors become SDK errors the chain understands', async () => {
+    const seen = [];
+    const answers = [
+      { ok: false, status: 429, json: { error: { message: 'Rate limit reached' } } },
+      { ok: true, status: 200, json: { choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }] } },
+    ];
+    const fakeFetch = async (url, init) => {
+      seen.push({ url, auth: init.headers.Authorization, body: JSON.parse(init.body) });
+      const a = answers.shift();
+      return { ok: a.ok, status: a.status, headers: new Headers(), json: async () => a.json };
+    };
+    const c = groq.createGroqClient('k', fakeFetch);
+    const body = { model: 'openai/gpt-oss-20b', max_tokens: 100, messages: [{ role: 'user', content: 'Hi' }] };
+    await assert.rejects(c.messages.create(body), err => err instanceof Anthropic.RateLimitError && err.status === 429);
+    assert.strictEqual((await c.messages.create(body)).content[0].text, 'ok');
+    assert.strictEqual(seen[0].url, 'https://api.groq.com/openai/v1/chat/completions');
+    assert.strictEqual(seen[0].auth, 'Bearer k');
+    const down = groq.createGroqClient('k', async () => { throw new Error('ECONNRESET'); });
+    await assert.rejects(down.messages.create(body), Anthropic.APIConnectionError);
+  });
+
+  await t('all three keys → Ollama, Groq, OpenRouter', () => withAll(() => {
+    assert.deepStrictEqual(coachClient.providers(), ['ollama', 'groq', 'openrouter']);
+    const chain = coachClient.modelChain('m');
+    assert.deepStrictEqual(chain.slice(0, 3), [...olRefs, ...coachClient.GROQ_FREE_MODELS.map(m => `groq::${m}`)]);
+    assert.deepStrictEqual(chain.slice(3), orRefs);
+    const groqRef = `groq::${coachClient.GROQ_FREE_MODELS[0]}`;
+    assert.strictEqual(coachClient.prepare(groqRef, { max_tokens: 10, messages: [{ role: 'user', content: 'hi' }] }, { stream: true }), null);
+  }));
+
+  await t('brief: Ollama busy → Groq answers the short call', () => withAll(async () => {
+    script = [{ throw: apiError(Anthropic.RateLimitError, 429, 'busy') }, endTurn('{"headline":"Easy day.","bullets":[]}')];
+    const body = await (await post('/api/ai/coach/brief', { data: briefPack })).json();
+    assert.strictEqual(body.headline, 'Easy day.');
+    assert.deepStrictEqual(calls.map(c => c.via), ['ollama', 'groq']);
+    assert.strictEqual(calls[1].model, coachClient.GROQ_FREE_MODELS[0]);
+    assert.strictEqual(calls[1].cache_control, undefined);
+  }));
+
+  await t('chat (streamed) and the big ai.js prompt skip Groq', () => withAll(async () => {
+    script = [{ throw: apiError(Anthropic.RateLimitError, 429, 'busy') }, { text: ['Fine.'], ...endTurn('Fine.') }];
+    await (await post('/api/ai/coach', { message: 'Hi', data: routePack })).text();
+    assert.deepStrictEqual(calls.map(c => c.via), ['ollama', 'openrouter']);
+    calls.length = 0;
+    script = [{ throw: apiError(Anthropic.RateLimitError, 429, 'busy') }, endTurn('Solid week.')];
+    await post('/api/ai/checkin-summary', { sleep: 7, energy: 6, stress: 4, bodyweightThisWeek: 80, compliancePercent: 90, goal: 'cut', archetype: 'lifter' });
+    assert.deepStrictEqual(calls.map(c => c.via), ['ollama', 'openrouter']);
+  }));
 
   console.log(`\n${passed} passed`);
 }

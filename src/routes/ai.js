@@ -1,5 +1,5 @@
 const express = require('express');
-const Anthropic = require('@anthropic-ai/sdk');
+const { providers, openModels, createMessage, perModelTimeoutMs, modelChain } = require('../coach/client');
 const { TRAINING_KNOWLEDGE } = require('../knowledge/training-methodology');
 const { NUTRITION_KNOWLEDGE } = require('../knowledge/nutrition-methodology');
 
@@ -8,32 +8,35 @@ const router = express.Router();
 // Conversational coach (streaming, tool use) plus /brief, /review, /body —
 // see src/routes/coach.js.
 router.use('/coach', require('./coach'));
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+// Anthropic model ids; with open models (Ollama / OpenRouter),
+// src/coach/client.js maps every call onto its model chain instead.
 const MODEL = 'claude-sonnet-4-6';
 const MODEL_FAST = 'claude-haiku-4-5-20251001';
+// Open models often reason before answering, and that counts against
+// max_tokens; this floor keeps short answers from coming back empty.
+const OPEN_MODEL_MIN_TOKENS = 4096;
 
 const BASE_SYSTEM = `You are an expert fitness coach inside Pocket Coach. Your advice is grounded in the following evidence-based methodology. ALWAYS apply these principles — never contradict them with bro-science or outdated advice.\n\n${TRAINING_KNOWLEDGE}\n\n${NUTRITION_KNOWLEDGE}\n\n`;
 
 async function callClaude(systemPrompt, userPrompt, maxTokens = 1024, model = MODEL) {
   try {
-    const message = await client.messages.create({
-      model,
-      max_tokens: maxTokens,
+    const message = await createMessage(model, {
+      max_tokens: openModels() ? Math.max(maxTokens, OPEN_MODEL_MIN_TOKENS) : maxTokens,
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }]
-    });
-    const block = message.content?.[0];
-    if (!block || block.type !== 'text') throw new Error('No text content in response');
-    return block.text;
+    }, { timeoutMs: perModelTimeoutMs(45000) });
+    const text = message.content.filter(b => b.type === 'text').map(b => b.text).join('').trim();
+    if (!text) throw new Error('No text content in response');
+    return text;
   } catch (err) {
-    throw new Error(`Claude API error: ${err?.message || String(err)}`);
+    throw new Error(`AI API error: ${err?.message || String(err)}`);
   }
 }
 
 // GET /api/ai/health
 router.get('/health', (_req, res) => {
-  res.json({ status: 'ok', model: MODEL });
+  res.json({ status: 'ok', providers: providers(), model: modelChain(MODEL)[0] || null });
 });
 
 // POST /api/ai/chat — general chat endpoint

@@ -17,7 +17,13 @@ const { defineSecret } = require('firebase-functions/params');
 // need no changes. Add STRIPE_SECRET_KEY here once it's been set the same
 // way (it's optional today — server.js already guards its absence).
 const jwtSecret = defineSecret('JWT_SECRET');
-const anthropicApiKey = defineSecret('ANTHROPIC_API_KEY');
+// AI provider keys (src/coach/client.js): Ollama Cloud first, Groq for
+// short calls, OpenRouter as overflow. ANTHROPIC_API_KEY would override
+// them all but isn't declared, because a declared secret that doesn't
+// exist fails the deploy.
+const ollamaApiKey = defineSecret('OLLAMA_API_KEY');
+const groqApiKey = defineSecret('GROQ_API_KEY');
+const openRouterApiKey = defineSecret('OPENROUTER_API_KEY');
 const intakeCoachUsername = defineSecret('INTAKE_COACH_USERNAME');
 const googleHealthClientId = defineSecret('GOOGLE_HEALTH_CLIENT_ID');
 const googleHealthClientSecret = defineSecret('GOOGLE_HEALTH_CLIENT_SECRET');
@@ -32,10 +38,12 @@ const app = require('./server');
 // (once set up) or direct callers hit this same URL for every path.
 exports.api = onRequest({
   // The default 60s cuts off the streaming AI coach (POST /api/ai/coach),
-  // which can run several model rounds with tool lookups in one request.
-  timeoutSeconds: 300,
+  // which can run several model rounds with tool lookups in one request, and
+  // program import (POST /api/ai/coach/import-program), where free models
+  // can take minutes to write out a month of training.
+  timeoutSeconds: 540,
   secrets: [
-    jwtSecret, anthropicApiKey, intakeCoachUsername,
+    jwtSecret, ollamaApiKey, groqApiKey, openRouterApiKey, intakeCoachUsername,
     googleHealthClientId, googleHealthClientSecret, googleHealthRedirectUri,
     resendApiKey
   ]
