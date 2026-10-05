@@ -23,7 +23,7 @@
 
 const express = require('express');
 const {
-  Anthropic, provider, isConfigured, getClient, modelChain, markGood, isRetryable, perModelTimeoutMs,
+  Anthropic, isConfigured, openModels, providers, prepare, modelChain, markGood, isRetryable, perModelTimeoutMs,
   createMessage, streamMessage, fallbackParams, jsonOutput, MalformedReply,
 } = require('../coach/client');
 const { TOOL_DEFS, runTool } = require('../coach/tools');
@@ -110,12 +110,12 @@ router.post('/', async (req, res) => {
       let jsonRetries = 0;
       let reply;
       // One model at a time from the chain (just COACH_MODEL on the Anthropic
-      // API; several free models on OpenRouter). A rate-limited or overloaded
+      // API; open models on Ollama, then OpenRouter). A rate-limited or overloaded
       // model is skipped, but only before any text reached the athlete, or
       // the reply would repeat itself. Free models are often rate-limited for
       // a few seconds, so after the whole chain fails, pause and go round once more.
       const chain = modelChain(COACH_MODEL);
-      const models = provider() === 'openrouter' ? [...chain, null, ...chain] : chain;
+      const models = openModels() ? [...chain, null, ...chain] : chain;
       let modelIndex = 0;
 
       for (;;) {
@@ -125,8 +125,7 @@ router.post('/', async (req, res) => {
           modelIndex++;
         }
         const model = models[modelIndex];
-        activeStream = getClient().beta.messages.stream({
-          model,
+        const prepared = prepare(model, {
           max_tokens: 16000,
           ...fallbackParams(),
           output_config: { effort: COACH_EFFORT },
@@ -135,6 +134,12 @@ router.post('/', async (req, res) => {
           tools: TOOLS,
           messages,
         });
+        if (!prepared) { // this provider can't take the request at all
+          if (modelIndex >= models.length - 1) throw new Error('No AI model can take this request.');
+          modelIndex++;
+          continue;
+        }
+        activeStream = prepared.client.beta.messages.stream(prepared.body);
 
         // Watchdog: a model that goes quiet (queued free model, stalled
         // upstream) is abandoned and, if nothing streamed yet, the next tried.
@@ -517,21 +522,26 @@ router.post('/import-program', async (req, res) => {
     return res.status(400).json({ error: 'unreadable', message: 'That file looks damaged. Try saving it again, or export it as a PDF.' });
   }
 
-  const openRouter = provider() === 'openrouter';
+  const open = openModels();
+  // Ollama has no PDF input; only OpenRouter's parser can read one.
+  if (open && file.kind === 'pdf' && !providers().includes('openrouter')) {
+    return res.status(422).json({ error: 'unsupported', message: "PDFs can't be imported right now. Export the program as Excel (.xlsx) or Word (.docx) and try again." });
+  }
   const params = {
-    max_tokens: openRouter ? 16000 : 32000,
+    max_tokens: open ? 16000 : 32000,
     ...fallbackParams(),
     output_config: jsonOutput(IMPORT_SCHEMA, 'medium'),
-    // Through OpenRouter the shape comes from the instructions, not a guarantee.
-    system: openRouter
+    // With open models the shape comes from the instructions, not a guarantee.
+    system: open
       ? `${IMPORT_INSTRUCTIONS}\n\nReply with only a JSON object, no other text, matching this JSON Schema:\n${JSON.stringify(IMPORT_SCHEMA)}`
       : IMPORT_INSTRUCTIONS,
     messages: [{
       role: 'user',
       content: [...file.content, { type: 'text', text: 'Convert this training program.' }],
     }],
-    // Models without native PDF input get OpenRouter's free PDF-to-text parser.
-    ...(openRouter && file.kind === 'pdf' ? { plugins: [{ id: 'file-parser', pdf: { engine: 'cloudflare-ai' } }] } : {}),
+    // OpenRouter's free PDF-to-text parser, for models without native PDF
+    // input (client.js drops it for other providers).
+    ...(open && file.kind === 'pdf' ? { plugins: [{ id: 'file-parser', pdf: { engine: 'cloudflare-ai' } }] } : {}),
   };
   const ctrl = new AbortController();
   res.on('close', () => { if (!res.writableEnded) ctrl.abort(); });
@@ -544,7 +554,7 @@ router.post('/import-program', async (req, res) => {
       // A reply that isn't JSON (free models sometimes ramble) → next model.
       accept: r => r.stop_reason === 'refusal' || r.stop_reason === 'max_tokens' || parseJsonObject(replyText(r)) !== null,
       // A model that can't take this input (images, long files) → next model.
-      skipStatuses: openRouter ? [400, 404, 413, 422] : [],
+      skipStatuses: open ? [400, 404, 413, 422] : [],
     });
     if (reply.stop_reason === 'refusal') {
       return res.status(422).json({ error: 'unreadable', message: "The AI couldn't read this file as a training program." });
@@ -565,8 +575,8 @@ router.post('/import-program', async (req, res) => {
     const busy = !(err instanceof Anthropic.APIError) || err.status === 429 || err.status >= 500;
     let message = "Couldn't import the program. Try again.";
     if (busy) message = 'The AI is busy right now (the free AI allowance may be used up for today). Try again later.';
-    else if (openRouter && file.kind === 'image') message = "The AI models couldn't read this photo. Try a PDF, Excel or Word file instead.";
-    else if (openRouter) message = "The AI models couldn't read this file. Try exporting it as Excel (.xlsx) instead.";
+    else if (open && file.kind === 'image') message = "The AI models couldn't read this photo. Try a PDF, Excel or Word file instead.";
+    else if (open) message = "The AI models couldn't read this file. Try exporting it as Excel (.xlsx) instead.";
     return res.status(502).json({ error: 'ai_failed', message });
   }
 });

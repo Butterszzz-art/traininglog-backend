@@ -112,9 +112,10 @@ const aiProgram = () => ({
 
 const calls = [];
 let script = [];
-function installFakes(client) {
+// `via` tags each recorded call with the provider whose client got it.
+function installFakes(client, via) {
 client.beta.messages.stream = params => {
-  calls.push(JSON.parse(JSON.stringify(params)));
+  calls.push({ ...JSON.parse(JSON.stringify(params)), ...(via ? { via } : {}) });
   const step = script.shift();
   return {
     abort() {},
@@ -127,19 +128,22 @@ client.beta.messages.stream = params => {
 }
 installFakes(coachClient.getClient());
 
-async function withOpenRouter(fn) {
+// Switch to open-model providers for one test; each has its own client.
+async function withOpenModels(names, fn) {
   delete process.env.ANTHROPIC_API_KEY;
-  process.env.OPENROUTER_API_KEY = 'test';
+  names.forEach(n => { process.env[`${n.toUpperCase()}_API_KEY`] = 'test'; });
   coachClient.markGood(null);
-  installFakes(coachClient.getClient());
+  names.forEach(n => installFakes(coachClient.getClient(n), n));
   try {
     await fn();
   } finally {
     delete process.env.OPENROUTER_API_KEY;
+    delete process.env.OLLAMA_API_KEY;
     process.env.ANTHROPIC_API_KEY = 'test';
     coachClient.markGood(null);
   }
 }
+const withOpenRouter = fn => withOpenModels(['openrouter'], fn);
 const reply = (obj, stop = 'end_turn') => ({ message: { stop_reason: stop, content: [{ type: 'thinking', thinking: '' }, { type: 'text', text: JSON.stringify(obj) }] } });
 
 const app = express();
@@ -332,6 +336,34 @@ async function run() {
     const res = await post(photo);
     assert.strictEqual(res.status, 502);
     assert.strictEqual((await res.json()).message, "The AI models couldn't read this photo. Try a PDF, Excel or Word file instead.");
+  }));
+
+  console.log('import through Ollama + OpenRouter');
+
+  const withBoth = fn => withOpenModels(['ollama', 'openrouter'], fn);
+
+  await t('photo and spreadsheet go to Ollama first, with the schema in the instructions', () => withBoth(async () => {
+    script = [reply(aiProgram()), reply(aiProgram())];
+    assert.strictEqual((await post(photo)).status, 200);
+    assert.strictEqual((await post({ fileName: 'a.xlsx', data: XLSX.toString('base64') })).status, 200);
+    assert.deepStrictEqual(calls.map(c => [c.via, c.model]), [['ollama', 'gemma4:31b'], ['ollama', 'gemma4:31b']]);
+    assert.strictEqual(calls[0].messages[0].content[0].type, 'image');
+    assert.ok(calls[0].system.includes('matching this JSON Schema'));
+    assert.deepStrictEqual(calls[0].output_config, { effort: 'medium' });
+  }));
+
+  await t('PDF skips Ollama (no PDF input) and goes to OpenRouter with the parser', () => withBoth(async () => {
+    script = [reply(aiProgram())];
+    assert.strictEqual((await post(pdf)).status, 200);
+    assert.deepStrictEqual(calls.map(c => c.via), ['openrouter']);
+    assert.deepStrictEqual(calls[0].plugins, [{ id: 'file-parser', pdf: { engine: 'cloudflare-ai' } }]);
+  }));
+
+  await t('PDF with only Ollama configured → 422 before any AI call', () => withOpenModels(['ollama'], async () => {
+    const res = await post(pdf);
+    assert.strictEqual(res.status, 422);
+    assert.strictEqual((await res.json()).error, 'unsupported');
+    assert.strictEqual(calls.length, 0);
   }));
 
   console.log(`\n${passed} passed`);

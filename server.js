@@ -4183,7 +4183,7 @@ app.post('/mobility/sessions', authenticateToken, async (req, res) => {
 // ── AI Chat ───────────────────────────────────────────────────────────────────
 
 // POST /ai/chat — short general chat through the configured AI provider
-// (src/coach/client.js: Anthropic or OpenRouter).
+// (src/coach/client.js: Anthropic, or Ollama / OpenRouter).
 app.post('/ai/chat', authenticateToken, requirePaidPlan, async (req, res) => {
   const aiClient = require('./src/coach/client');
   try {
@@ -4197,7 +4197,7 @@ app.post('/ai/chat', authenticateToken, requirePaidPlan, async (req, res) => {
     }
 
     const reply = await aiClient.createMessage('claude-haiku-4-5-20251001', {
-      max_tokens: aiClient.provider() === 'openrouter' ? 4096 : 1024,
+      max_tokens: aiClient.openModels() ? 4096 : 1024,
       system:     systemPrompt || 'You are a helpful fitness coaching assistant.',
       messages:   messages.map(m => ({ role: m.role, content: String(m.content) }))
     }, { timeoutMs: aiClient.perModelTimeoutMs(30000, 30000) });

@@ -38,15 +38,17 @@ const apiError = (Cls, status, msg) => new Cls(status, { error: {} }, msg, new H
 const calls = [];
 let script = [];
 
-function installFakes(client) {
+// `via` tags each recorded call with the provider whose client got it.
+function installFakes(client, via) {
+const record = params => calls.push({ ...JSON.parse(JSON.stringify(params)), ...(via ? { via } : {}) });
 client.messages.create = async params => {
-  calls.push(JSON.parse(JSON.stringify(params)));
+  record(params);
   const step = script.shift();
   if (step.throw) throw step.throw;
   return step.message;
 };
 client.beta.messages.stream = params => {
-  calls.push(JSON.parse(JSON.stringify(params)));
+  record(params);
   const step = script.shift();
   const handlers = {};
   return {
@@ -63,21 +65,22 @@ client.beta.messages.stream = params => {
 const client = coachClient.getClient();
 installFakes(client);
 
-// Switch the provider to OpenRouter for one test; its client is a separate instance.
-async function withOpenRouter(fn) {
+// Switch to open-model providers for one test; each has its own client.
+async function withOpenModels(names, fn) {
   delete process.env.ANTHROPIC_API_KEY;
-  process.env.OPENROUTER_API_KEY = 'test';
+  names.forEach(n => { process.env[`${n.toUpperCase()}_API_KEY`] = 'test'; });
   coachClient.markGood(null);
-  installFakes(coachClient.getClient());
+  names.forEach(n => installFakes(coachClient.getClient(n), n));
   try {
     await fn();
   } finally {
-    delete process.env.OPENROUTER_API_KEY;
-    delete process.env.OPENROUTER_MODELS;
+    ['OPENROUTER_API_KEY', 'OLLAMA_API_KEY', 'OPENROUTER_MODELS', 'OLLAMA_MODELS'].forEach(k => delete process.env[k]);
     process.env.ANTHROPIC_API_KEY = 'test';
     coachClient.markGood(null);
   }
 }
+const withOpenRouter = fn => withOpenModels(['openrouter'], fn);
+const withBoth = fn => withOpenModels(['ollama', 'openrouter'], fn);
 
 // ── app: the real /api/ai router behind a fake auth middleware ──────────────
 
@@ -567,24 +570,60 @@ async function run() {
     assert.strictEqual((await post('/api/ai/coach/review', null, { raw: '{}' })).status, 400);
   });
 
-  console.log('OpenRouter');
+  console.log('open models (Ollama / OpenRouter)');
 
   const free = coachClient.OPENROUTER_FREE_MODELS;
+  const orRefs = free.map(m => `openrouter::${m}`);
+  const olRefs = coachClient.OLLAMA_FREE_MODELS.map(m => `ollama::${m}`);
 
   await t('OpenRouter key alone → free model chain, no Anthropic-only params', () => withOpenRouter(() => {
     assert.strictEqual(coachClient.provider(), 'openrouter');
-    assert.strictEqual(coachClient.isConfigured(), true);
-    assert.deepStrictEqual(coachClient.modelChain('claude-opus-5-5'), free);
+    assert.strictEqual(coachClient.openModels(), true);
+    assert.deepStrictEqual(coachClient.modelChain('claude-opus-5-5'), orRefs);
     assert.deepStrictEqual(coachClient.fallbackParams(), {});
     assert.deepStrictEqual(coachClient.jsonOutput({ type: 'object' }, 'low'), { effort: 'low' });
     process.env.OPENROUTER_MODELS = 'claude-haiku-4-5-20251001, openai/gpt-x';
-    assert.deepStrictEqual(coachClient.modelChain('m'), ['anthropic/claude-haiku-4.5', 'openai/gpt-x']);
+    assert.deepStrictEqual(coachClient.modelChain('m'), ['openrouter::anthropic/claude-haiku-4.5', 'openrouter::openai/gpt-x']);
   }));
 
-  await t('Anthropic key wins when both are set', () => withOpenRouter(() => {
+  await t('both open keys → Ollama first, then OpenRouter', () => withBoth(() => {
+    assert.deepStrictEqual(coachClient.providers(), ['ollama', 'openrouter']);
+    assert.deepStrictEqual(coachClient.modelChain('m'), [...olRefs, ...orRefs]);
+    process.env.OLLAMA_MODELS = 'gpt-oss:120b,gemma4:31b';
+    assert.deepStrictEqual(coachClient.modelChain('m').slice(0, 2), ['ollama::gpt-oss:120b', 'ollama::gemma4:31b']);
+    // an OpenRouter model answering doesn't move OpenRouter ahead of Ollama
+    coachClient.markGood(orRefs[2]);
+    assert.deepStrictEqual(coachClient.modelChain('m').slice(2, 4), [orRefs[2], orRefs[3]]);
+  }));
+
+  await t('Anthropic key wins over every open-model key', () => withBoth(() => {
     process.env.ANTHROPIC_API_KEY = 'test';
     assert.strictEqual(coachClient.provider(), 'anthropic');
-    assert.deepStrictEqual(coachClient.modelChain('claude-opus-5-5'), ['claude-opus-5-5']);
+    assert.strictEqual(coachClient.openModels(), false);
+    assert.deepStrictEqual(coachClient.modelChain('claude-opus-5-5'), ['anthropic::claude-opus-5-5']);
+  }));
+
+  await t('prepare trims each request to what its provider accepts', () => withBoth(() => {
+    const params = {
+      max_tokens: 10, betas: ['b'], fallbacks: 'default', cache_control: { type: 'ephemeral' },
+      output_config: { effort: 'low', format: { type: 'json_schema' } },
+      plugins: [{ id: 'file-parser' }],
+      tools: [{ name: 'x', input_schema: {}, eager_input_streaming: true }],
+      messages: [{ role: 'user', content: 'hi' }],
+    };
+    const ol = coachClient.prepare(olRefs[0], params).body;
+    assert.deepStrictEqual(ol, {
+      max_tokens: 10, model: 'gemma4:31b', output_config: { effort: 'low' },
+      tools: [{ name: 'x', input_schema: {} }], messages: params.messages,
+    });
+    const or = coachClient.prepare(orRefs[0], params).body;
+    assert.strictEqual(or.model, free[0]);
+    assert.deepStrictEqual(or.plugins, params.plugins);
+    assert.deepStrictEqual(or.cache_control, params.cache_control);
+    assert.strictEqual(or.betas, undefined);
+    const pdf = { ...params, messages: [{ role: 'user', content: [{ type: 'document', source: {} }] }] };
+    assert.strictEqual(coachClient.prepare(olRefs[0], pdf), null, 'Ollama has no PDF input');
+    assert.ok(coachClient.prepare(orRefs[0], pdf));
   }));
 
   await t('chat: a rate-limited free model is skipped for the next one', () => withOpenRouter(async () => {
@@ -595,7 +634,16 @@ async function run() {
     assert.strictEqual(calls[1].betas, undefined);
     assert.strictEqual(calls[1].fallbacks, undefined);
     // the model that answered goes first next time
-    assert.strictEqual(coachClient.modelChain('x')[0], free[1]);
+    assert.strictEqual(coachClient.modelChain('x')[0], orRefs[1]);
+  }));
+
+  await t('chat: Ollama out of free allowance (402) → OpenRouter answers', () => withBoth(async () => {
+    script = [{ throw: apiError(Anthropic.APIError, 402, 'usage limit reached') }, { text: ['Fine.'], ...endTurn('Fine.') }];
+    const body = await (await post('/api/ai/coach', { message: 'Hi', data: routePack })).text();
+    assert.deepStrictEqual(parseSSE(body).map(e => e.type), ['text', 'done']);
+    assert.deepStrictEqual(calls.map(c => [c.via, c.model]), [['ollama', 'gemma4:31b'], ['openrouter', free[0]]]);
+    assert.strictEqual(calls[0].cache_control, undefined);
+    assert.ok(calls[0].tools.every(tool => tool.eager_input_streaming === undefined));
   }));
 
   await t('brief: JSON shape comes from the instructions, not output_config.format', () => withOpenRouter(async () => {
@@ -607,7 +655,7 @@ async function run() {
     assert.strictEqual(calls[0].model, free[0]);
   }));
 
-  await t('ai.js routes use the chain, a token floor and the first text block', () => withOpenRouter(async () => {
+  await t('ai.js routes use the chain, a token floor and the first text block', () => withBoth(async () => {
     script = [
       { throw: apiError(Anthropic.InternalServerError, 503, 'overloaded') },
       { message: { stop_reason: 'end_turn', content: [{ type: 'thinking', thinking: '' }, { type: 'text', text: 'Solid week.' }] } },
@@ -616,7 +664,7 @@ async function run() {
       sleep: 7, energy: 6, stress: 4, bodyweightThisWeek: 80, compliancePercent: 90, goal: 'cut', archetype: 'lifter',
     });
     assert.deepStrictEqual(await res.json(), { summary: 'Solid week.' });
-    assert.deepStrictEqual(calls.map(c => c.model), [free[0], free[1]]);
+    assert.deepStrictEqual(calls.map(c => c.via), ['ollama', 'openrouter']);
     assert.strictEqual(calls[1].max_tokens, 4096);
   }));
 
