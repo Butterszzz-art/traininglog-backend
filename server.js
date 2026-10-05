@@ -381,6 +381,8 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
 // The AI coach routes (src/routes/coach.js) take the phone's whole coach data
 // pack — weeks of workouts, bodyweight, sleep and intake — which can outgrow
 // 256kb. express.json() skips bodies that are already parsed, so this runs first.
+// Program import carries the coach's file as base64 (8 MB cap → ~11 MB JSON).
+app.use('/api/ai/coach/import-program', express.json({ limit: '12mb' }));
 app.use('/api/ai/coach', express.json({ limit: '1mb' }));
 app.use(express.json({ limit: '256kb' }));
 
@@ -4180,12 +4182,13 @@ app.post('/mobility/sessions', authenticateToken, async (req, res) => {
 
 // ── AI Chat ───────────────────────────────────────────────────────────────────
 
-// POST /ai/chat — proxy to Anthropic claude-haiku-4-5
+// POST /ai/chat — short general chat through the configured AI provider
+// (src/coach/client.js: Anthropic or OpenRouter).
 app.post('/ai/chat', authenticateToken, requirePaidPlan, async (req, res) => {
+  const aiClient = require('./src/coach/client');
   try {
-    const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-    if (!ANTHROPIC_API_KEY) {
-      return sendError(res, 503, 'ai.not_configured', 'Anthropic API key is not configured.');
+    if (!aiClient.isConfigured()) {
+      return sendError(res, 503, 'ai.not_configured', 'No AI provider key is configured.');
     }
 
     const { messages, systemPrompt } = req.body || {};
@@ -4193,34 +4196,18 @@ app.post('/ai/chat', authenticateToken, requirePaidPlan, async (req, res) => {
       return sendError(res, 422, 'ai.invalid_payload', 'messages array is required.');
     }
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 30000); // 30s timeout for AI
+    const reply = await aiClient.createMessage('claude-haiku-4-5-20251001', {
+      max_tokens: aiClient.provider() === 'openrouter' ? 4096 : 1024,
+      system:     systemPrompt || 'You are a helpful fitness coaching assistant.',
+      messages:   messages.map(m => ({ role: m.role, content: String(m.content) }))
+    }, { timeoutMs: aiClient.perModelTimeoutMs(30000, 30000) });
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      signal: controller.signal,
-      headers: {
-        'x-api-key':         ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-        'Content-Type':      'application/json'
-      },
-      body: JSON.stringify({
-        model:      'claude-haiku-4-5-20251001',
-        max_tokens: 1024,
-        system:     systemPrompt || 'You are a helpful fitness coaching assistant.',
-        messages:   messages.map(m => ({ role: m.role, content: String(m.content) }))
-      })
-    }).finally(() => clearTimeout(timer));
-
-    const data = await response.json();
-    if (!response.ok) {
-      return sendError(res, 502, 'ai.upstream_error', 'Anthropic API returned an error.',
-        data?.error?.message || JSON.stringify(data));
-    }
-
-    const reply = data?.content?.[0]?.text || '';
-    return sendSuccess(res, 200, { reply });
+    const text = reply.content.filter(b => b.type === 'text').map(b => b.text).join('');
+    return sendSuccess(res, 200, { reply: text });
   } catch (err) {
+    if (err instanceof aiClient.Anthropic.APIError) {
+      return sendError(res, 502, 'ai.upstream_error', 'The AI provider returned an error.', err.message);
+    }
     if (err.name === 'AbortError') {
       return sendError(res, 504, 'ai.timeout', 'AI request timed out.');
     }

@@ -38,7 +38,7 @@ const apiError = (Cls, status, msg) => new Cls(status, { error: {} }, msg, new H
 const calls = [];
 let script = [];
 
-const client = coachClient.getClient();
+function installFakes(client) {
 client.messages.create = async params => {
   calls.push(JSON.parse(JSON.stringify(params)));
   const step = script.shift();
@@ -59,6 +59,25 @@ client.beta.messages.stream = params => {
     },
   };
 };
+}
+const client = coachClient.getClient();
+installFakes(client);
+
+// Switch the provider to OpenRouter for one test; its client is a separate instance.
+async function withOpenRouter(fn) {
+  delete process.env.ANTHROPIC_API_KEY;
+  process.env.OPENROUTER_API_KEY = 'test';
+  coachClient.markGood(null);
+  installFakes(coachClient.getClient());
+  try {
+    await fn();
+  } finally {
+    delete process.env.OPENROUTER_API_KEY;
+    delete process.env.OPENROUTER_MODELS;
+    process.env.ANTHROPIC_API_KEY = 'test';
+    coachClient.markGood(null);
+  }
+}
 
 // ── app: the real /api/ai router behind a fake auth middleware ──────────────
 
@@ -547,6 +566,59 @@ async function run() {
   await t('facts are required', async () => {
     assert.strictEqual((await post('/api/ai/coach/review', null, { raw: '{}' })).status, 400);
   });
+
+  console.log('OpenRouter');
+
+  const free = coachClient.OPENROUTER_FREE_MODELS;
+
+  await t('OpenRouter key alone → free model chain, no Anthropic-only params', () => withOpenRouter(() => {
+    assert.strictEqual(coachClient.provider(), 'openrouter');
+    assert.strictEqual(coachClient.isConfigured(), true);
+    assert.deepStrictEqual(coachClient.modelChain('claude-opus-5-5'), free);
+    assert.deepStrictEqual(coachClient.fallbackParams(), {});
+    assert.deepStrictEqual(coachClient.jsonOutput({ type: 'object' }, 'low'), { effort: 'low' });
+    process.env.OPENROUTER_MODELS = 'claude-haiku-4-5-20251001, openai/gpt-x';
+    assert.deepStrictEqual(coachClient.modelChain('m'), ['anthropic/claude-haiku-4.5', 'openai/gpt-x']);
+  }));
+
+  await t('Anthropic key wins when both are set', () => withOpenRouter(() => {
+    process.env.ANTHROPIC_API_KEY = 'test';
+    assert.strictEqual(coachClient.provider(), 'anthropic');
+    assert.deepStrictEqual(coachClient.modelChain('claude-opus-5-5'), ['claude-opus-5-5']);
+  }));
+
+  await t('chat: a rate-limited free model is skipped for the next one', () => withOpenRouter(async () => {
+    script = [{ throw: apiError(Anthropic.RateLimitError, 429, 'busy') }, { text: ['Squat looks fine.'], ...endTurn('Squat looks fine.') }];
+    const body = await (await post('/api/ai/coach', { message: 'How is my squat?', data: routePack })).text();
+    assert.deepStrictEqual(parseSSE(body).map(e => e.type), ['text', 'done']);
+    assert.deepStrictEqual(calls.map(c => c.model), [free[0], free[1]]);
+    assert.strictEqual(calls[1].betas, undefined);
+    assert.strictEqual(calls[1].fallbacks, undefined);
+    // the model that answered goes first next time
+    assert.strictEqual(coachClient.modelChain('x')[0], free[1]);
+  }));
+
+  await t('brief: JSON shape comes from the instructions, not output_config.format', () => withOpenRouter(async () => {
+    script = [endTurn('Sure! {"headline":"Rest today.","bullets":[]}')];
+    const body = await (await post('/api/ai/coach/brief', { data: briefPack })).json();
+    assert.strictEqual(body.source, 'ai');
+    assert.strictEqual(body.headline, 'Rest today.');
+    assert.deepStrictEqual(calls[0].output_config, { effort: 'low' });
+    assert.strictEqual(calls[0].model, free[0]);
+  }));
+
+  await t('ai.js routes use the chain, a token floor and the first text block', () => withOpenRouter(async () => {
+    script = [
+      { throw: apiError(Anthropic.InternalServerError, 503, 'overloaded') },
+      { message: { stop_reason: 'end_turn', content: [{ type: 'thinking', thinking: '' }, { type: 'text', text: 'Solid week.' }] } },
+    ];
+    const res = await post('/api/ai/checkin-summary', {
+      sleep: 7, energy: 6, stress: 4, bodyweightThisWeek: 80, compliancePercent: 90, goal: 'cut', archetype: 'lifter',
+    });
+    assert.deepStrictEqual(await res.json(), { summary: 'Solid week.' });
+    assert.deepStrictEqual(calls.map(c => c.model), [free[0], free[1]]);
+    assert.strictEqual(calls[1].max_tokens, 4096);
+  }));
 
   console.log(`\n${passed} passed`);
 }

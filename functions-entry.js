@@ -17,7 +17,10 @@ const { defineSecret } = require('firebase-functions/params');
 // need no changes. Add STRIPE_SECRET_KEY here once it's been set the same
 // way (it's optional today — server.js already guards its absence).
 const jwtSecret = defineSecret('JWT_SECRET');
-const anthropicApiKey = defineSecret('ANTHROPIC_API_KEY');
+// AI provider key (src/coach/client.js). The routes use ANTHROPIC_API_KEY
+// when it is set and OpenRouter otherwise; only the live one is declared,
+// because a declared secret that doesn't exist fails the deploy.
+const openRouterApiKey = defineSecret('OPENROUTER_API_KEY');
 const intakeCoachUsername = defineSecret('INTAKE_COACH_USERNAME');
 const googleHealthClientId = defineSecret('GOOGLE_HEALTH_CLIENT_ID');
 const googleHealthClientSecret = defineSecret('GOOGLE_HEALTH_CLIENT_SECRET');
@@ -32,10 +35,12 @@ const app = require('./server');
 // (once set up) or direct callers hit this same URL for every path.
 exports.api = onRequest({
   // The default 60s cuts off the streaming AI coach (POST /api/ai/coach),
-  // which can run several model rounds with tool lookups in one request.
-  timeoutSeconds: 300,
+  // which can run several model rounds with tool lookups in one request, and
+  // program import (POST /api/ai/coach/import-program), where free models
+  // can take minutes to write out a month of training.
+  timeoutSeconds: 540,
   secrets: [
-    jwtSecret, anthropicApiKey, intakeCoachUsername,
+    jwtSecret, openRouterApiKey, intakeCoachUsername,
     googleHealthClientId, googleHealthClientSecret, googleHealthRedirectUri,
     resendApiKey
   ]

@@ -22,7 +22,10 @@
 'use strict';
 
 const express = require('express');
-const { Anthropic, isConfigured, getClient, createMessage, fallbackParams, MalformedReply } = require('../coach/client');
+const {
+  Anthropic, provider, isConfigured, getClient, modelChain, markGood, isRetryable, perModelTimeoutMs,
+  createMessage, streamMessage, fallbackParams, jsonOutput, MalformedReply,
+} = require('../coach/client');
 const { TOOL_DEFS, runTool } = require('../coach/tools');
 const { COACH_INSTRUCTIONS, athleteContext } = require('../coach/prompt');
 const { buildBriefDigest, buildBodyFacts } = require('../coach/digest');
@@ -33,7 +36,7 @@ const COACH_MODEL = process.env.COACH_MODEL || 'claude-opus-5-5';
 const COACH_EFFORT = process.env.COACH_EFFORT || 'medium';
 const MAX_TOOL_ROUNDS = 8;
 const MAX_HISTORY = 20;
-const IDLE_TIMEOUT_MS = 120000;
+const CHAIN_RETRY_PAUSE_MS = Number(process.env.COACH_CHAIN_RETRY_PAUSE_MS) || 5000;
 
 // Tool inputs here are tiny, but eager streaming keeps tool calls from
 // arriving in one late burst; runTool() validates every input itself.
@@ -106,10 +109,24 @@ router.post('/', async (req, res) => {
       let startedTextThisRound = false;
       let jsonRetries = 0;
       let reply;
+      // One model at a time from the chain (just COACH_MODEL on the Anthropic
+      // API; several free models on OpenRouter). A rate-limited or overloaded
+      // model is skipped, but only before any text reached the athlete, or
+      // the reply would repeat itself. Free models are often rate-limited for
+      // a few seconds, so after the whole chain fails, pause and go round once more.
+      const chain = modelChain(COACH_MODEL);
+      const models = provider() === 'openrouter' ? [...chain, null, ...chain] : chain;
+      let modelIndex = 0;
 
       for (;;) {
+        if (models[modelIndex] === null) {
+          await new Promise(r => setTimeout(r, CHAIN_RETRY_PAUSE_MS));
+          if (clientGone) throw new Error('client gone');
+          modelIndex++;
+        }
+        const model = models[modelIndex];
         activeStream = getClient().beta.messages.stream({
-          model: COACH_MODEL,
+          model,
           max_tokens: 16000,
           ...fallbackParams(),
           output_config: { effort: COACH_EFFORT },
@@ -119,13 +136,14 @@ router.post('/', async (req, res) => {
           messages,
         });
 
-        // Watchdog: a stream that goes quiet for too long is abandoned.
+        // Watchdog: a model that goes quiet (queued free model, stalled
+        // upstream) is abandoned and, if nothing streamed yet, the next tried.
         let stalled = false;
         let idleTimer = null;
         const stream = activeStream;
         const arm = () => {
           clearTimeout(idleTimer);
-          idleTimer = setTimeout(() => { stalled = true; stream.abort(); }, IDLE_TIMEOUT_MS);
+          idleTimer = setTimeout(() => { stalled = true; stream.abort(); }, perModelTimeoutMs(30000));
         };
         activeStream.on('streamEvent', arm);
         arm();
@@ -141,10 +159,15 @@ router.post('/', async (req, res) => {
 
         try {
           reply = await activeStream.finalMessage();
-          if (!Array.isArray(reply && reply.content)) throw new MalformedReply(COACH_MODEL);
+          if (!Array.isArray(reply && reply.content)) throw new MalformedReply(model);
+          markGood(model);
           break;
         } catch (err) {
           if (clientGone) throw err;
+          if ((stalled || isRetryable(err) || err instanceof MalformedReply) && !startedTextThisRound && modelIndex < models.length - 1) {
+            modelIndex++;
+            continue;
+          }
           if (stalled) throw new Error('The model stopped responding.');
           // Only an unparseable streamed tool input is worth re-issuing, and
           // only if no text has reached the athlete yet (it would repeat).
@@ -194,7 +217,7 @@ router.post('/', async (req, res) => {
     if (clientGone) return undefined;
     logError('[AI coach]', err);
     let msg = 'The coach hit a problem. Try again in a moment.';
-    if (err instanceof Anthropic.RateLimitError) msg = 'The coach is busy right now. Try again in a minute.';
+    if (err instanceof Anthropic.RateLimitError) msg = 'The coach is busy right now (the free AI allowance may be used up for today). Try again later.';
     else if (err instanceof Anthropic.AuthenticationError) msg = 'The coach is not set up correctly on the server.';
     else if (err instanceof Anthropic.APIError && err.status === 402) msg = "The coach's AI account is out of credits. Try again later.";
     send('error', { message: msg });
@@ -246,7 +269,8 @@ function parseJsonObject(text) {
   try { return JSON.parse(raw.slice(start, end + 1)); } catch { return null; }
 }
 
-// Structured outputs guarantee the shape; parse defensively anyway.
+// Structured outputs guarantee the shape on the Anthropic API; through
+// OpenRouter it's best-effort, so parse defensively either way.
 function parseBrief(text) {
   const obj = parseJsonObject(text);
   if (!obj) return null;
@@ -284,13 +308,13 @@ router.post('/brief', async (req, res) => {
   try {
     const reply = await createMessage(BRIEF_MODEL, {
       max_tokens: 2000,
-      output_config: { effort: 'low', format: { type: 'json_schema', schema: BRIEF_SCHEMA } },
+      output_config: jsonOutput(BRIEF_SCHEMA, 'low'),
       system: [
         { type: 'text', text: BRIEF_INSTRUCTIONS },
         { type: 'text', text: athleteContext({ profile: pack.profile || {}, memory, style, today: digest.date }) },
       ],
       messages: [{ role: 'user', content: JSON.stringify(facts) }],
-    }, { timeoutMs: 30000 });
+    }, { timeoutMs: perModelTimeoutMs(20000, 30000) });
     if (reply.stop_reason === 'refusal') return res.json(rules);
     const brief = parseBrief(replyText(reply));
     if (!brief) return res.json(rules);
@@ -401,13 +425,13 @@ router.post('/review', async (req, res) => {
   try {
     const reply = await createMessage(REVIEW_MODEL, {
       max_tokens: 4000,
-      output_config: { effort: 'medium', format: { type: 'json_schema', schema: REVIEW_SCHEMA } },
+      output_config: jsonOutput(REVIEW_SCHEMA, 'medium'),
       system: [
         { type: 'text', text: REVIEW_INSTRUCTIONS },
         { type: 'text', text: athleteContext({ profile: pack.profile || {}, memory, style, today: String(facts.week && facts.week.end || '').slice(0, 10) }) },
       ],
       messages: [{ role: 'user', content: JSON.stringify({ facts, draft: { wins: fallback.wins, watch: fallback.watch } }) }],
-    }, { timeoutMs: 60000 });
+    }, { timeoutMs: perModelTimeoutMs(45000, 60000) });
     if (reply.stop_reason === 'refusal') return res.json(fallback);
     const obj = parseJsonObject(replyText(reply));
     const summary = obj && typeof obj.summary === 'string' ? obj.summary.replace(/\s+/g, ' ').trim().slice(0, 600) : '';
@@ -454,13 +478,13 @@ router.post('/body', async (req, res) => {
   try {
     const reply = await createMessage(BODY_MODEL, {
       max_tokens: 2000,
-      output_config: { effort: 'low', format: { type: 'json_schema', schema: BRIEF_SCHEMA } },
+      output_config: jsonOutput(BRIEF_SCHEMA, 'low'),
       system: [
         { type: 'text', text: BODY_INSTRUCTIONS },
         { type: 'text', text: athleteContext({ profile: pack.profile || {}, memory, style, today: body.facts.date }) },
       ],
       messages: [{ role: 'user', content: JSON.stringify({ facts: body.facts, draft: rules.bullets }) }],
-    }, { timeoutMs: 30000 });
+    }, { timeoutMs: perModelTimeoutMs(20000, 30000) });
     if (reply.stop_reason === 'refusal') return res.json(rules);
     const parsed = parseBrief(replyText(reply));
     if (!parsed) return res.json(rules);
@@ -468,6 +492,82 @@ router.post('/body', async (req, res) => {
   } catch (err) {
     logError('[AI body]', err);
     return res.json({ ...rules, aiError: aiError(err) });
+  }
+});
+
+// ── POST /api/ai/coach/import-program — import a coach's own program file ───
+// Body: { fileName, data } where data is the file as base64 (Excel .xlsx,
+// Word .docx, PDF, CSV/text, or a photo). See src/coach/programImport.js.
+// Returns { program, warnings }: program is a Library-shaped program document
+// the phone saves with programBuilderV2Core.importLibraryProgram().
+// Errors: { error: code, message } with 400 / 413 / 422 / 502.
+
+const { ImportError, readImportFile, IMPORT_SCHEMA, IMPORT_INSTRUCTIONS, toProgramDoc } = require('../coach/programImport');
+
+const IMPORT_MODEL = process.env.COACH_IMPORT_MODEL || COACH_MODEL;
+const IMPORT_TIMEOUT_MS = 480000; // the function itself times out at 540 s
+
+router.post('/import-program', async (req, res) => {
+  let file;
+  try {
+    file = readImportFile(req.body || {});
+  } catch (err) {
+    if (err instanceof ImportError) return res.status(err.status).json({ error: err.code, message: err.message });
+    // A truncated or malformed zip fails inside Buffer reads.
+    return res.status(400).json({ error: 'unreadable', message: 'That file looks damaged. Try saving it again, or export it as a PDF.' });
+  }
+
+  const openRouter = provider() === 'openrouter';
+  const params = {
+    max_tokens: openRouter ? 16000 : 32000,
+    ...fallbackParams(),
+    output_config: jsonOutput(IMPORT_SCHEMA, 'medium'),
+    // Through OpenRouter the shape comes from the instructions, not a guarantee.
+    system: openRouter
+      ? `${IMPORT_INSTRUCTIONS}\n\nReply with only a JSON object, no other text, matching this JSON Schema:\n${JSON.stringify(IMPORT_SCHEMA)}`
+      : IMPORT_INSTRUCTIONS,
+    messages: [{
+      role: 'user',
+      content: [...file.content, { type: 'text', text: 'Convert this training program.' }],
+    }],
+    // Models without native PDF input get OpenRouter's free PDF-to-text parser.
+    ...(openRouter && file.kind === 'pdf' ? { plugins: [{ id: 'file-parser', pdf: { engine: 'cloudflare-ai' } }] } : {}),
+  };
+  const ctrl = new AbortController();
+  res.on('close', () => { if (!res.writableEnded) ctrl.abort(); });
+
+  try {
+    const { reply } = await streamMessage(IMPORT_MODEL, params, {
+      signal: ctrl.signal,
+      deadlineMs: IMPORT_TIMEOUT_MS,
+      idleMs: perModelTimeoutMs(90000, 120000),
+      // A reply that isn't JSON (free models sometimes ramble) → next model.
+      accept: r => r.stop_reason === 'refusal' || r.stop_reason === 'max_tokens' || parseJsonObject(replyText(r)) !== null,
+      // A model that can't take this input (images, long files) → next model.
+      skipStatuses: openRouter ? [400, 404, 413, 422] : [],
+    });
+    if (reply.stop_reason === 'refusal') {
+      return res.status(422).json({ error: 'unreadable', message: "The AI couldn't read this file as a training program." });
+    }
+    if (reply.stop_reason === 'max_tokens') {
+      return res.status(422).json({ error: 'too_long', message: 'This program is too long to import in one go. Import one month at a time.' });
+    }
+    const obj = parseJsonObject(replyText(reply));
+    const result = toProgramDoc(obj, req.body.fileName);
+    if (!result) {
+      const why = obj && Array.isArray(obj.warnings) && typeof obj.warnings[0] === 'string' ? ` ${obj.warnings[0].slice(0, 200)}` : '';
+      return res.status(422).json({ error: 'no_program', message: `No training program was found in this file.${why}` });
+    }
+    return res.json(result);
+  } catch (err) {
+    if (ctrl.signal.aborted || res.headersSent || res.destroyed) return undefined;
+    logError('[AI import-program]', err);
+    const busy = !(err instanceof Anthropic.APIError) || err.status === 429 || err.status >= 500;
+    let message = "Couldn't import the program. Try again.";
+    if (busy) message = 'The AI is busy right now (the free AI allowance may be used up for today). Try again later.';
+    else if (openRouter && file.kind === 'image') message = "The AI models couldn't read this photo. Try a PDF, Excel or Word file instead.";
+    else if (openRouter) message = "The AI models couldn't read this file. Try exporting it as Excel (.xlsx) instead.";
+    return res.status(502).json({ error: 'ai_failed', message });
   }
 });
 
