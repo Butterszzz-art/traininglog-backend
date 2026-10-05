@@ -9,6 +9,9 @@
                              endpoint: OLLAMA_MODELS, or OLLAMA_FREE_MODELS.
                              No logging, no training, no retention;
                              no PDF input.
+     GROQ_API_KEY          → Groq (src/coach/groq.js): GROQ_MODELS, or
+                             GROQ_FREE_MODELS. Short text-only,
+                             non-streamed calls only; see fitsGroq().
      OPENROUTER_API_KEY    → OpenRouter's Anthropic-compatible endpoint:
                              OPENROUTER_MODELS, or OPENROUTER_FREE_MODELS.
    A model that is rate-limited, out of allowance, overloaded, stalled
@@ -24,6 +27,7 @@
 'use strict';
 
 const Anthropic = require('@anthropic-ai/sdk');
+const { createGroqClient, fitsGroq } = require('./groq');
 
 const BASE_URLS = {
   openrouter: 'https://openrouter.ai/api',
@@ -33,13 +37,14 @@ const BASE_URLS = {
 const KEY_VARS = {
   anthropic: 'ANTHROPIC_API_KEY',
   ollama: 'OLLAMA_API_KEY',
+  groq: 'GROQ_API_KEY',
   openrouter: 'OPENROUTER_API_KEY',
 };
 
 /** Providers in the order their models are tried. */
 function providers() {
   if (process.env.ANTHROPIC_API_KEY) return ['anthropic'];
-  return ['ollama', 'openrouter'].filter(p => process.env[KEY_VARS[p]]);
+  return ['ollama', 'groq', 'openrouter'].filter(p => process.env[KEY_VARS[p]]);
 }
 
 /** The first provider tried, or null when none is configured. */
@@ -62,12 +67,13 @@ function getClient(name = provider()) {
   if (!name || !process.env[KEY_VARS[name]]) throw new Error('AI_NOT_CONFIGURED');
   const key = process.env[KEY_VARS[name]];
   if (clients[name] && clients[name].key === key) return clients[name].client;
-  const client = name === 'anthropic'
-    ? new Anthropic({ apiKey: key })
-    // maxRetries 0: on a rate limit, moving to the next model in the chain is
-    // faster than backing off, and doesn't spend the free allowance. Both
-    // hosts take the key as a Bearer token.
-    : new Anthropic({ baseURL: BASE_URLS[name], apiKey: null, authToken: key, maxRetries: 0 });
+  let client;
+  if (name === 'anthropic') client = new Anthropic({ apiKey: key });
+  else if (name === 'groq') client = createGroqClient(key);
+  // maxRetries 0: on a rate limit, moving to the next model in the chain is
+  // faster than backing off, and doesn't spend the free allowance. Both
+  // hosts take the key as a Bearer token.
+  else client = new Anthropic({ baseURL: BASE_URLS[name], apiKey: null, authToken: key, maxRetries: 0 });
   clients[name] = { key, client };
   return client;
 }
@@ -97,6 +103,10 @@ const OPENROUTER_FREE_MODELS = [
 // Gemma 4 takes images and tools. Override with OLLAMA_MODELS.
 const OLLAMA_FREE_MODELS = ['gemma4:31b'];
 
+// Groq free tier (about 30 requests/min, 1,000/day, 8K tokens/min each).
+// Override with GROQ_MODELS.
+const GROQ_FREE_MODELS = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b'];
+
 const listFromEnv = name => (process.env[name] || '').split(',').map(s => s.trim()).filter(Boolean);
 
 const SEP = '::';
@@ -124,6 +134,7 @@ function modelChain(id) {
     let models;
     if (p === 'anthropic') models = [id];
     else if (p === 'ollama') models = listFromEnv('OLLAMA_MODELS').length ? listFromEnv('OLLAMA_MODELS') : OLLAMA_FREE_MODELS;
+    else if (p === 'groq') models = listFromEnv('GROQ_MODELS').length ? listFromEnv('GROQ_MODELS') : GROQ_FREE_MODELS;
     else models = (listFromEnv('OPENROUTER_MODELS').length ? listFromEnv('OPENROUTER_MODELS') : OPENROUTER_FREE_MODELS).map(openRouterSlug);
     const refs = models.map(m => ref(p, m));
     const i = refs.indexOf(lastGood[p]);
@@ -137,9 +148,10 @@ const hasDocument = messages => (messages || []).some(m => Array.isArray(m.conte
 /**
  * The client and request body for one chain step, trimmed to what that
  * provider accepts — or null when it can't take this request at all
- * (Ollama has no PDF input).
+ * (Ollama has no PDF input; Groq only takes short, text-only, non-streamed
+ * calls). Pass { stream: true } for streamed calls.
  */
-function prepare(r, params) {
+function prepare(r, params, { stream = false } = {}) {
   const { provider: p, model } = parseRef(r);
   const body = { ...params, model };
   if (p !== 'anthropic') {
@@ -158,6 +170,10 @@ function prepare(r, params) {
     delete body.cache_control; // prompt caching isn't supported
     if (Array.isArray(body.tools)) body.tools = body.tools.map(({ eager_input_streaming, ...t }) => t);
   }
+  if (p === 'groq') {
+    if (stream || !fitsGroq(body)) return null;
+    delete body.cache_control;
+  }
   return { client: getClient(p), body };
 }
 
@@ -169,13 +185,13 @@ class MalformedReply extends Error {
 /**
  * Worth trying the next model: rate limit, overload, upstream/server error,
  * network. With open models also a provider that refuses this account
- * (bad key, free allowance used up), since the next step may be another
- * provider.
+ * (bad key, free allowance used up) or this request's size, since the next
+ * step may be another provider.
  */
 function isRetryable(err) {
   if (err instanceof Anthropic.APIConnectionError) return true;
   if (!(err instanceof Anthropic.APIError)) return false;
-  if (openModels() && [401, 402, 403].includes(err.status)) return true;
+  if (openModels() && [401, 402, 403, 413].includes(err.status)) return true;
   return err.status === undefined || err.status === 429 || err.status === 408 || err.status >= 500;
 }
 
@@ -234,7 +250,7 @@ async function streamMessage(base, params, { idleMs = 120000, deadlineMs = 24000
   let lastErr = new Error('No AI model can take this request.');
   for (const r of modelChain(base)) {
     if (Date.now() - started > deadlineMs || (signal && signal.aborted)) break;
-    const prepared = prepare(r, params);
+    const prepared = prepare(r, params, { stream: true });
     if (!prepared) continue;
     const stream = prepared.client.beta.messages.stream(prepared.body);
     let stalled = false;
@@ -289,5 +305,5 @@ module.exports = {
   Anthropic, provider, providers, openModels, isConfigured, getClient, prepare, parseRef,
   modelChain, markGood, isRetryable, perModelTimeoutMs,
   createMessage, streamMessage, fallbackParams, jsonOutput, MalformedReply,
-  OPENROUTER_FREE_MODELS, OLLAMA_FREE_MODELS,
+  OPENROUTER_FREE_MODELS, OLLAMA_FREE_MODELS, GROQ_FREE_MODELS,
 };

@@ -133,7 +133,7 @@ router.post('/', async (req, res) => {
           system,
           tools: TOOLS,
           messages,
-        });
+        }, { stream: true });
         if (!prepared) { // this provider can't take the request at all
           if (modelIndex >= models.length - 1) throw new Error('No AI model can take this request.');
           modelIndex++;

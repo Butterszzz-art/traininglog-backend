@@ -47,7 +47,7 @@ client.messages.create = async params => {
   if (step.throw) throw step.throw;
   return step.message;
 };
-client.beta.messages.stream = params => {
+if (client.beta) client.beta.messages.stream = params => {
   record(params);
   const step = script.shift();
   const handlers = {};
@@ -74,7 +74,7 @@ async function withOpenModels(names, fn) {
   try {
     await fn();
   } finally {
-    ['OPENROUTER_API_KEY', 'OLLAMA_API_KEY', 'OPENROUTER_MODELS', 'OLLAMA_MODELS'].forEach(k => delete process.env[k]);
+    ['OPENROUTER_API_KEY', 'OLLAMA_API_KEY', 'GROQ_API_KEY', 'OPENROUTER_MODELS', 'OLLAMA_MODELS', 'GROQ_MODELS'].forEach(k => delete process.env[k]);
     process.env.ANTHROPIC_API_KEY = 'test';
     coachClient.markGood(null);
   }
@@ -666,6 +666,89 @@ async function run() {
     assert.deepStrictEqual(await res.json(), { summary: 'Solid week.' });
     assert.deepStrictEqual(calls.map(c => c.via), ['ollama', 'openrouter']);
     assert.strictEqual(calls[1].max_tokens, 4096);
+  }));
+
+  console.log('Groq');
+
+  const groq = require('../src/coach/groq');
+  const withAll = fn => withOpenModels(['ollama', 'groq', 'openrouter'], fn);
+
+  await t('groq: Anthropic request ↔ Chat Completions', () => {
+    const req = groq.toChatRequest({
+      model: 'openai/gpt-oss-120b', max_tokens: 16000,
+      system: [{ type: 'text', text: 'Be brief.' }, { type: 'text', text: 'Athlete: Pat.' }],
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'Hi' }] }, { role: 'assistant', content: 'Hello' }],
+    });
+    assert.deepStrictEqual(req, {
+      model: 'openai/gpt-oss-120b',
+      messages: [
+        { role: 'system', content: 'Be brief.\n\nAthlete: Pat.' },
+        { role: 'user', content: 'Hi' },
+        { role: 'assistant', content: 'Hello' },
+      ],
+      max_completion_tokens: 2500,
+      reasoning_effort: 'low',
+    });
+    const msg = groq.toMessage({ id: 'c1', choices: [{ message: { content: 'Done' }, finish_reason: 'length' }], usage: { prompt_tokens: 5, completion_tokens: 7 } }, 'm');
+    assertMatch(msg, { content: [{ type: 'text', text: 'Done' }], stop_reason: 'max_tokens', usage: { input_tokens: 5, output_tokens: 7 } });
+    assert.strictEqual(groq.toMessage({ choices: [] }, 'm').content, null);
+  });
+
+  await t('groq: only short, text-only requests fit the free tier', () => {
+    const small = { max_tokens: 2000, system: 'Short.', messages: [{ role: 'user', content: 'Hi' }] };
+    assert.strictEqual(groq.fitsGroq(small), true);
+    assert.strictEqual(groq.fitsGroq({ ...small, system: 'x'.repeat(29000) }), false, 'ai.js methodology prompt is too big');
+    assert.strictEqual(groq.fitsGroq({ ...small, tools: [{ name: 't' }] }), false);
+    assert.strictEqual(groq.fitsGroq({ ...small, messages: [{ role: 'user', content: [{ type: 'image', source: {} }] }] }), false);
+  });
+
+  await t('groq: HTTP errors become SDK errors the chain understands', async () => {
+    const seen = [];
+    const answers = [
+      { ok: false, status: 429, json: { error: { message: 'Rate limit reached' } } },
+      { ok: true, status: 200, json: { choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }] } },
+    ];
+    const fakeFetch = async (url, init) => {
+      seen.push({ url, auth: init.headers.Authorization, body: JSON.parse(init.body) });
+      const a = answers.shift();
+      return { ok: a.ok, status: a.status, headers: new Headers(), json: async () => a.json };
+    };
+    const c = groq.createGroqClient('k', fakeFetch);
+    const body = { model: 'openai/gpt-oss-20b', max_tokens: 100, messages: [{ role: 'user', content: 'Hi' }] };
+    await assert.rejects(c.messages.create(body), err => err instanceof Anthropic.RateLimitError && err.status === 429);
+    assert.strictEqual((await c.messages.create(body)).content[0].text, 'ok');
+    assert.strictEqual(seen[0].url, 'https://api.groq.com/openai/v1/chat/completions');
+    assert.strictEqual(seen[0].auth, 'Bearer k');
+    const down = groq.createGroqClient('k', async () => { throw new Error('ECONNRESET'); });
+    await assert.rejects(down.messages.create(body), Anthropic.APIConnectionError);
+  });
+
+  await t('all three keys → Ollama, Groq, OpenRouter', () => withAll(() => {
+    assert.deepStrictEqual(coachClient.providers(), ['ollama', 'groq', 'openrouter']);
+    const chain = coachClient.modelChain('m');
+    assert.deepStrictEqual(chain.slice(0, 3), [...olRefs, ...coachClient.GROQ_FREE_MODELS.map(m => `groq::${m}`)]);
+    assert.deepStrictEqual(chain.slice(3), orRefs);
+    const groqRef = `groq::${coachClient.GROQ_FREE_MODELS[0]}`;
+    assert.strictEqual(coachClient.prepare(groqRef, { max_tokens: 10, messages: [{ role: 'user', content: 'hi' }] }, { stream: true }), null);
+  }));
+
+  await t('brief: Ollama busy → Groq answers the short call', () => withAll(async () => {
+    script = [{ throw: apiError(Anthropic.RateLimitError, 429, 'busy') }, endTurn('{"headline":"Easy day.","bullets":[]}')];
+    const body = await (await post('/api/ai/coach/brief', { data: briefPack })).json();
+    assert.strictEqual(body.headline, 'Easy day.');
+    assert.deepStrictEqual(calls.map(c => c.via), ['ollama', 'groq']);
+    assert.strictEqual(calls[1].model, coachClient.GROQ_FREE_MODELS[0]);
+    assert.strictEqual(calls[1].cache_control, undefined);
+  }));
+
+  await t('chat (streamed) and the big ai.js prompt skip Groq', () => withAll(async () => {
+    script = [{ throw: apiError(Anthropic.RateLimitError, 429, 'busy') }, { text: ['Fine.'], ...endTurn('Fine.') }];
+    await (await post('/api/ai/coach', { message: 'Hi', data: routePack })).text();
+    assert.deepStrictEqual(calls.map(c => c.via), ['ollama', 'openrouter']);
+    calls.length = 0;
+    script = [{ throw: apiError(Anthropic.RateLimitError, 429, 'busy') }, endTurn('Solid week.')];
+    await post('/api/ai/checkin-summary', { sleep: 7, energy: 6, stress: 4, bodyweightThisWeek: 80, compliancePercent: 90, goal: 'cut', archetype: 'lifter' });
+    assert.deepStrictEqual(calls.map(c => c.via), ['ollama', 'openrouter']);
   }));
 
   console.log(`\n${passed} passed`);
