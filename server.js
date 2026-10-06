@@ -37,6 +37,7 @@ const { computeSessionVolume, safeDocId, naturalDocId, syncEntryDocId, saveWorko
 // The "Last updated" date of terms.html / privacy.html in the app repo. Bump it
 // whenever either changes so users/{uid}.consents shows which version was agreed.
 const TERMS_VERSION = '2026-10-02';
+const coachShare = require('./src/coachShare');
 
 const app = express();
 
@@ -697,6 +698,12 @@ async function deleteIntakeLeads(email) {
 async function deleteFirestoreAccount(uid, username, email) {
   await deleteFromCoachRosters(uid);
   await deleteIntakeLeads(email);
+  // As a coach, remove my invite and assignment from each client's side.
+  const asCoach = await db.collection(`coaches/${uid}/clients`).get();
+  for (const d of asCoach.docs) {
+    await db.collection(`users/${d.id}/coachInvites`).doc(uid).delete();
+    await db.collection(`users/${d.id}/coachAssignment`).doc(uid).delete();
+  }
   await db.recursiveDelete(db.collection('users').doc(uid));
   await db.recursiveDelete(db.collection('coaches').doc(uid)); // no-op if this user never coached anyone
   await db.collection('usernames').doc(String(username).toLowerCase()).delete();
@@ -2977,19 +2984,8 @@ app.get('/api/coach/clients', authenticateToken, requireCoachPlan, async (req, r
     const uid = await resolveFirestoreUid(coachId);
     if (uid) {
       const snap = await db.collection(`coaches/${uid}/clients`).orderBy('athleteDisplayName').get();
-      const clients = snap.docs.map(d => ({
-        id: d.id,
-        clientId: d.id,
-        clientName: d.get('athleteDisplayName') || '',
-        email: d.get('email') || '',
-        status: d.get('status') || 'active',
-        trainingMode: d.get('trainingMode') || '',
-        currentProgram: d.get('currentProgram') || '',
-        lastCheckIn: d.get('lastCheckInAt') || null,
-        alertStatus: d.get('alertStatus') || 'ok',
-        currentNutritionSummary: d.get('nutritionSummary') || '',
-        latestCheckInData: d.get('latestCheckInJson') ?? null
-      }));
+      const now = new Date();
+      const clients = snap.docs.map(d => coachClientSummary(d.id, d.data() || {}, now));
       return sendSuccess(res, 200, { clients });
     }
 
@@ -3027,8 +3023,56 @@ app.get('/api/coach/clients', authenticateToken, requireCoachPlan, async (req, r
   }
 });
 
+// Roster row for one client doc. Alerts are computed here, at read time, from
+// whatever the client has shared (see src/coachShare.js), so "days since
+// check-in" is always current and nothing is flagged on missing data.
+function coachClientSummary(id, data, now = new Date()) {
+  const { alerts, alertStatus } = coachShare.computeClientAlerts(data, now);
+  return {
+    id,
+    clientId: id,
+    clientName: data.athleteDisplayName || '',
+    email: data.email || '',
+    status: data.status || 'active',
+    trainingMode: data.trainingMode || '',
+    currentProgram: data.currentProgram || '',
+    currentProgramId: data.currentProgramId || '',
+    activeProgramName: data.activeProgramName || '',
+    lastCheckIn: data.lastCheckInAt || null,
+    alertStatus,
+    alerts,
+    currentNutritionSummary: data.nutritionSummary || '',
+    macroTargets: data.macroTargets || null,
+    latestCheckInData: data.latestCheckInJson ?? null,
+    compliancePercent: data.compliancePercent ?? null,
+    workoutsLoggedThisWeek: data.workoutsWeekStart === coachShare.weekStartOf(now) ? (data.workoutsLoggedThisWeek ?? null) : null,
+    currentBodyweight: data.currentBodyweight ?? null,
+    weeklyWeightChangePercent: data.weeklyWeightChangePercent ?? null,
+    sharing: data.sharing || null,
+    lastSharedAt: data.lastSharedAt || null
+  };
+}
+
+// True when coaches/{coachUid}/clients/{clientUid} exists and is accepted.
+async function isActiveCoachLink(coachUid, clientUid) {
+  if (!coachUid || !clientUid) return false;
+  const snap = await db.collection(`coaches/${coachUid}/clients`).doc(clientUid).get();
+  return snap.exists && snap.get('status') === 'active';
+}
+
+// Linking clients is a Coach-plan feature. INTAKE_COACH_USERNAME (the account
+// that owns the public intake form) is always allowed, and COACH_PLAN_REQUIRED=false
+// turns the check off (e.g. for a beta).
+async function hasCoachAccess(username) {
+  if (process.env.COACH_PLAN_REQUIRED === 'false') return true;
+  if (process.env.INTAKE_COACH_USERNAME && String(username).toLowerCase() === String(process.env.INTAKE_COACH_USERNAME).toLowerCase()) return true;
+  const info = await getUserPlanInfo(username);
+  return info.plan === 'coach';
+}
+
 // Verify a coach-client relationship exists in the CoachClients table.
 async function verifyCoachClientLink(coachUsername, clientUsername) {
+  if (!airtableEnabled) return false;
   const safeCoach = escapeAirtableFormulaValue(coachUsername);
   const safeClient = escapeAirtableFormulaValue(clientUsername);
   const records = await base(COACH_CLIENTS_TABLE)
@@ -3094,6 +3138,9 @@ app.post('/api/coach/clients/invite', authenticateToken, requireCoachPlan, coach
     const coachUid = await resolveCallerUid(req.user);
     if (!coachUid) {
       return sendError(res, 409, 'coach.not_migrated', 'Your account needs to complete migration before linking clients. Contact support.');
+    }
+    if (!(await hasCoachAccess(req.user.username))) {
+      return sendError(res, 403, 'coach.plan_required', 'Inviting clients needs the Coach plan.');
     }
 
     const clientUid = await resolveFirestoreUid(clientUsername);
@@ -3169,16 +3216,19 @@ app.post('/api/coach/clients/accept', authenticateToken, coachInviteLimiter, asy
       return sendError(res, 409, 'coach.invite_not_pending', 'This invite is no longer pending.');
     }
 
+    const userSnap = await db.collection('users').doc(clientUid).get();
+    const sharing = coachShare.normalizeSharing(userSnap.exists ? userSnap.get('coachSharing') : null);
+
     const now = FieldValue.serverTimestamp();
     const batch = db.batch();
     batch.set(inviteRef, { status: 'active', acceptedAt: now }, { merge: true });
-    batch.set(clientDocRef, { status: 'active', acceptedAt: now }, { merge: true });
+    batch.set(clientDocRef, { status: 'active', acceptedAt: now, sharing }, { merge: true });
     await batch.commit();
     await coachNotifications.coachInviteAccepted(db, {
       coachUsername: inviteSnap.get('coachUsername') || coachUsername, clientUsername: req.user.username,
     });
 
-    return sendSuccess(res, 200, { coachUsername, status: 'active' });
+    return sendSuccess(res, 200, { coachUsername, coachUid, status: 'active', sharing });
   } catch (err) {
     console.error('POST /api/coach/clients/accept failed:', err);
     return sendError(res, 500, 'coach.server_error', String(err));
@@ -3214,6 +3264,184 @@ app.get('/api/client/coach-invites', authenticateToken, async (req, res) => {
   }
 });
 
+// Removes a coach↔client link from both sides: the coach's roster doc (with
+// its notes subcollection and every piece of data the client shared), the
+// client's invite, and whatever the coach assigned. The client's own copy of
+// past coach notes (users/{uid}/coachNotes) is theirs and stays.
+async function unlinkCoachClient(coachUid, clientUid) {
+  await db.recursiveDelete(db.collection(`coaches/${coachUid}/clients`).doc(clientUid));
+  await db.collection(`users/${clientUid}/coachInvites`).doc(coachUid).delete();
+  await db.collection(`users/${clientUid}/coachAssignment`).doc(coachUid).delete();
+}
+
+// GET /api/client/coach-sharing — the athlete's switches for what linked
+// coaches can see. Defaults to everything on (check-ins, bodyweight, workouts).
+app.get('/api/client/coach-sharing', authenticateToken, async (req, res) => {
+  if (!firebaseEnabled) return sendError(res, 503, 'coach.firebase_disabled', 'Client linking requires a migrated (Firebase) account.');
+  try {
+    const uid = await resolveCallerUid(req.user);
+    if (!uid) return sendError(res, 409, 'coach.not_migrated', 'Your account needs to complete migration first. Contact support.');
+    const snap = await db.collection('users').doc(uid).get();
+    return sendSuccess(res, 200, { sharing: coachShare.normalizeSharing(snap.exists ? snap.get('coachSharing') : null) });
+  } catch (err) {
+    console.error('GET /api/client/coach-sharing failed:', err);
+    return sendError(res, 500, 'coach.server_error', String(err));
+  }
+});
+
+// Active coaches for a client, from the client's own invite mirror.
+async function activeCoachUidsFor(clientUid) {
+  const snap = await db.collection(`users/${clientUid}/coachInvites`).where('status', '==', 'active').get();
+  return snap.docs.map(d => d.id);
+}
+
+// PUT /api/client/coach-sharing — body: { checkIns?, bodyweight?, workouts? }
+// Turning a switch off also deletes that data from every coach's copy.
+app.put('/api/client/coach-sharing', authenticateToken, async (req, res) => {
+  if (!firebaseEnabled) return sendError(res, 503, 'coach.firebase_disabled', 'Client linking requires a migrated (Firebase) account.');
+  try {
+    const uid = await resolveCallerUid(req.user);
+    if (!uid) return sendError(res, 409, 'coach.not_migrated', 'Your account needs to complete migration first. Contact support.');
+    const userRef = db.collection('users').doc(uid);
+    const current = coachShare.normalizeSharing((await userRef.get()).get?.('coachSharing'));
+    const sharing = coachShare.normalizeSharing({ ...current, ...(req.body || {}) });
+    await userRef.set({ coachSharing: sharing }, { merge: true });
+
+    const cleared = {};
+    for (const key of coachShare.SHARING_KEYS) {
+      if (!sharing[key]) for (const f of coachShare.SHARE_FIELDS[key]) cleared[f] = FieldValue.delete ? FieldValue.delete() : null;
+    }
+    const coachUids = await activeCoachUidsFor(uid);
+    if (coachUids.length) {
+      const batch = db.batch();
+      for (const coachUid of coachUids) {
+        batch.set(db.collection(`coaches/${coachUid}/clients`).doc(uid), { sharing, ...cleared }, { merge: true });
+      }
+      await batch.commit();
+    }
+    return sendSuccess(res, 200, { sharing });
+  } catch (err) {
+    console.error('PUT /api/client/coach-sharing failed:', err);
+    return sendError(res, 500, 'coach.server_error', String(err));
+  }
+});
+
+const coachShareLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: { code: 'coach.rate_limited', message: 'Too many requests. Try again shortly.' } }
+});
+
+// POST /api/client/coach-share — the athlete's app pushes a snapshot
+// (recent check-ins, bodyweight series, weekly workout counts, compliance).
+// It's filtered by the athlete's sharing switches and copied onto every
+// active coach's roster doc. No-op (200, coaches: 0) when not coached.
+app.post('/api/client/coach-share', authenticateToken, coachShareLimiter, async (req, res) => {
+  if (!firebaseEnabled) return sendError(res, 503, 'coach.firebase_disabled', 'Client linking requires a migrated (Firebase) account.');
+  try {
+    const uid = await resolveCallerUid(req.user);
+    if (!uid) return sendError(res, 409, 'coach.not_migrated', 'Your account needs to complete migration first. Contact support.');
+    const coachUids = await activeCoachUidsFor(uid);
+    if (!coachUids.length) return sendSuccess(res, 200, { coaches: 0 });
+
+    const userSnap = await db.collection('users').doc(uid).get();
+    const sharing = coachShare.normalizeSharing(userSnap.exists ? userSnap.get('coachSharing') : null);
+    const fields = coachShare.buildShareFields(req.body, sharing);
+    const payload = { ...fields, sharing, lastSharedAt: new Date().toISOString().slice(0, 10), sharedAt: FieldValue.serverTimestamp() };
+
+    const batch = db.batch();
+    for (const coachUid of coachUids) {
+      batch.set(db.collection(`coaches/${coachUid}/clients`).doc(uid), payload, { merge: true });
+    }
+    await batch.commit();
+    return sendSuccess(res, 200, { coaches: coachUids.length, sharing });
+  } catch (err) {
+    console.error('POST /api/client/coach-share failed:', err);
+    return sendError(res, 500, 'coach.server_error', String(err));
+  }
+});
+
+// GET /api/coach/clients/:clientUid — full detail for one client, including
+// the shared check-in history, bodyweight series and weekly workout counts.
+app.get('/api/coach/clients/:clientUid', authenticateToken, requireCoachPlan, async (req, res) => {
+  if (!firebaseEnabled) return sendError(res, 503, 'coach.firebase_disabled', 'Client linking requires a migrated (Firebase) account.');
+  try {
+    const clientUid = String(req.params.clientUid || '').trim();
+    const coachUid = await resolveCallerUid(req.user);
+    if (!coachUid) return sendError(res, 409, 'coach.not_migrated', 'Your account needs to complete migration first. Contact support.');
+    const snap = await db.collection(`coaches/${coachUid}/clients`).doc(clientUid).get();
+    if (!snap.exists) return sendError(res, 404, 'coach.not_linked', 'This client is not linked to your roster.');
+    const data = snap.data() || {};
+    const client = {
+      ...coachClientSummary(clientUid, data),
+      checkIns: Array.isArray(data.checkIns) ? data.checkIns : [],
+      bodyweight: Array.isArray(data.bodyweight) ? data.bodyweight : [],
+      weeklyWorkouts: Array.isArray(data.weeklyWorkouts) ? data.weeklyWorkouts : []
+    };
+    return sendSuccess(res, 200, { client });
+  } catch (err) {
+    console.error('GET /api/coach/clients/:clientUid failed:', err);
+    return sendError(res, 500, 'coach.server_error', String(err));
+  }
+});
+
+// ── Coach program library ────────────────────────────────────────────────────
+// coaches/{coachUid}/programs/{programId}: { name, notes, days: { Mon: [{ name,
+// sets, reps, repsMax? }] } }. Shared by the mobile builder and the desktop
+// console (they used to keep separate localStorage lists that never met).
+app.get('/api/coach/programs', authenticateToken, requireCoachPlan, async (req, res) => {
+  if (!firebaseEnabled) return sendError(res, 503, 'coach.firebase_disabled', 'Coach programs require a migrated (Firebase) account.');
+  try {
+    const coachUid = await resolveCallerUid(req.user);
+    if (!coachUid) return sendError(res, 409, 'coach.not_migrated', 'Your account needs to complete migration first. Contact support.');
+    const snap = await db.collection(`coaches/${coachUid}/programs`).get();
+    const programs = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    return sendSuccess(res, 200, { programs });
+  } catch (err) {
+    console.error('GET /api/coach/programs failed:', err);
+    return sendError(res, 500, 'coach.server_error', String(err));
+  }
+});
+
+const PROGRAM_ID_RE = /^[a-zA-Z0-9_-]{1,64}$/;
+
+// PUT /api/coach/programs/:id — create or replace one program.
+app.put('/api/coach/programs/:id', authenticateToken, requireCoachPlan, coachInviteLimiter, async (req, res) => {
+  if (!firebaseEnabled) return sendError(res, 503, 'coach.firebase_disabled', 'Coach programs require a migrated (Firebase) account.');
+  try {
+    const id = String(req.params.id || '');
+    if (!PROGRAM_ID_RE.test(id)) return sendError(res, 422, 'coach.invalid_program_id', 'Invalid program id.');
+    const program = coachShare.sanitizeCoachProgram(req.body);
+    if (!program) return sendError(res, 422, 'coach.invalid_payload', 'Program name is required.');
+    const coachUid = await resolveCallerUid(req.user);
+    if (!coachUid) return sendError(res, 409, 'coach.not_migrated', 'Your account needs to complete migration first. Contact support.');
+    const saved = { ...program, updatedAt: new Date().toISOString() };
+    await db.collection(`coaches/${coachUid}/programs`).doc(id).set(saved);
+    return sendSuccess(res, 200, { program: { id, ...saved } });
+  } catch (err) {
+    console.error('PUT /api/coach/programs/:id failed:', err);
+    return sendError(res, 500, 'coach.server_error', String(err));
+  }
+});
+
+app.delete('/api/coach/programs/:id', authenticateToken, requireCoachPlan, async (req, res) => {
+  if (!firebaseEnabled) return sendError(res, 503, 'coach.firebase_disabled', 'Coach programs require a migrated (Firebase) account.');
+  try {
+    const coachUid = await resolveCallerUid(req.user);
+    if (!coachUid) return sendError(res, 409, 'coach.not_migrated', 'Your account needs to complete migration first. Contact support.');
+    const ref = db.collection(`coaches/${coachUid}/programs`).doc(String(req.params.id || ''));
+    if (!(await ref.get()).exists) return sendError(res, 404, 'coach.program_not_found', 'Program not found.');
+    await ref.delete();
+    return sendSuccess(res, 200, { deleted: req.params.id });
+  } catch (err) {
+    console.error('DELETE /api/coach/programs/:id failed:', err);
+    return sendError(res, 500, 'coach.server_error', String(err));
+  }
+});
+
 // DELETE /api/coach/clients/:clientUid — coach removes (or cancels a pending
 // invite to) a client. Client-initiated unlink is a natural follow-up to add
 // once the mobile app actually surfaces this relationship, not built yet.
@@ -3234,11 +3462,7 @@ app.delete('/api/coach/clients/:clientUid', authenticateToken, requireCoachPlan,
       return sendError(res, 404, 'coach.not_linked', 'This client is not linked to your roster.');
     }
 
-    const inviteRef = db.collection(`users/${clientUid}/coachInvites`).doc(coachUid);
-    const batch = db.batch();
-    batch.delete(clientDocRef);
-    batch.delete(inviteRef);
-    await batch.commit();
+    await unlinkCoachClient(coachUid, clientUid);
     await coachNotifications.coachInviteWithdrawn(db, {
       coachUsername: req.user.username, clientUsername: existing.get('athleteDisplayName') || await usernameForUid(clientUid),
     });
@@ -3299,19 +3523,33 @@ app.delete('/api/client/coaches/:coachUid', authenticateToken, async (req, res) 
 // (coach-side history + client-side inbox) so each party queries their own
 // side without needing read access into the other's collection.
 
-// PATCH /api/coach/clients/:clientUid — body: { currentProgram?, nutritionSummary?, trainingMode? }
+// PATCH /api/coach/clients/:clientUid — body: { currentProgram?, nutritionSummary?,
+// trainingMode?, programId?, macroTargets? }
+//   programId: a program from the coach's library (GET /api/coach/programs).
+//     Its full content is converted to the app's program format and copied to
+//     the client's assignment, so they can import it; '' clears it.
+//   macroTargets: { calories, protein, carbs, fat } the client can apply.
 app.patch('/api/coach/clients/:clientUid', authenticateToken, requireCoachPlan, coachInviteLimiter, async (req, res) => {
   if (!firebaseEnabled) return sendError(res, 503, 'coach.firebase_disabled', 'Client linking requires a migrated (Firebase) account.');
   try {
     const clientUid = String(req.params.clientUid || '').trim();
     if (!clientUid) return sendError(res, 422, 'coach.missing_client_id', 'clientUid is required.');
 
-    const fields = {};
+    const fields = {};      // written to both the coach's doc and the client's mirror
+    const clientOnly = {};  // full program content: client's mirror only
     for (const key of ['currentProgram', 'nutritionSummary', 'trainingMode']) {
       if (typeof req.body?.[key] === 'string') fields[key] = req.body[key].slice(0, 2000);
     }
-    if (!Object.keys(fields).length) {
-      return sendError(res, 422, 'coach.invalid_payload', 'Provide at least one of currentProgram, nutritionSummary, trainingMode.');
+    if (req.body?.macroTargets !== undefined) {
+      const targets = req.body.macroTargets === null ? null : coachShare.sanitizeMacroTargets(req.body.macroTargets);
+      if (req.body.macroTargets !== null && !targets) {
+        return sendError(res, 422, 'coach.invalid_macros', 'macroTargets needs numeric calories, protein, carbs and fat.');
+      }
+      fields.macroTargets = targets;
+    }
+    const programId = typeof req.body?.programId === 'string' ? req.body.programId.trim() : null;
+    if (!Object.keys(fields).length && programId === null) {
+      return sendError(res, 422, 'coach.invalid_payload', 'Provide at least one of currentProgram, programId, nutritionSummary, macroTargets, trainingMode.');
     }
 
     const coachUid = await resolveCallerUid(req.user);
@@ -3325,6 +3563,23 @@ app.patch('/api/coach/clients/:clientUid', authenticateToken, requireCoachPlan, 
       return sendError(res, 404, 'coach.not_linked', 'This client is not linked to your roster.');
     }
 
+    if (programId === '') {
+      fields.currentProgram = '';
+      fields.currentProgramId = '';
+      clientOnly.program = null;
+    } else if (programId) {
+      const progSnap = await db.collection(`coaches/${coachUid}/programs`).doc(programId).get();
+      if (!progSnap.exists) return sendError(res, 404, 'coach.program_not_found', 'That program is not in your library.');
+      const stored = progSnap.data() || {};
+      const program = coachShare.toClientProgram(stored, { coachUsername: req.user.username, programId, rev: stored.updatedAt || null });
+      if (!program || !program.days.length) {
+        return sendError(res, 422, 'coach.program_empty', 'Add at least one exercise to this program before assigning it.');
+      }
+      fields.currentProgram = program.title;
+      fields.currentProgramId = programId;
+      clientOnly.program = program;
+    }
+
     const now = FieldValue.serverTimestamp();
     const batch = db.batch();
     batch.set(clientDocRef, { ...fields, updatedAt: now }, { merge: true });
@@ -3333,6 +3588,7 @@ app.patch('/api/coach/clients/:clientUid', authenticateToken, requireCoachPlan, 
     batch.set(db.collection(`users/${clientUid}/coachAssignment`).doc(coachUid), {
       coachUsername: req.user.username,
       ...fields,
+      ...clientOnly,
       updatedAt: now
     }, { merge: true });
     await batch.commit();
@@ -3833,12 +4089,28 @@ app.delete('/coach/exercise-videos/:id', authenticateToken, requireCoachPlan, as
 app.get('/exercise-videos', authenticateToken, async (req, res) => {
   try {
     const clientUsername = req.user.username;
-    if (!airtableEnabled) return sendSuccess(res, 200, { items: [] });
+    const items = [];
+    const seenCoachUids = new Set();
 
-    // Find this user's coach(es) via the CoachClients table — that
-    // relationship isn't migrated bidirectionally yet (PHASE2-NOTES.md gap
-    // #1), so this lookup always goes through Airtable regardless of either
-    // party's migration status. Only the video STORAGE is per-coach-migrated.
+    // Coaches linked through Firestore (the invite/accept flow).
+    if (firebaseEnabled) {
+      const clientUid = await resolveCallerUid(req.user);
+      if (clientUid) {
+        const invites = await db.collection(`users/${clientUid}/coachInvites`).where('status', '==', 'active').get();
+        for (const inv of invites.docs) {
+          seenCoachUids.add(inv.id);
+          const coachId = inv.get('coachUsername') || '';
+          const snap = await db.collection(`coaches/${inv.id}/exerciseVideos`).get();
+          for (const d of snap.docs) {
+            items.push({ id: d.id, coachId, exerciseName: d.get('exerciseName') || '', videoUrl: d.get('videoUrl') || '', notes: d.get('notes') || '' });
+          }
+        }
+      }
+    }
+
+    if (!airtableEnabled) return sendSuccess(res, 200, { items });
+
+    // Legacy links in Airtable's CoachClients table.
     const safeClient = escapeAirtableFormulaValue(clientUsername);
     const links = await base(COACH_CLIENTS_TABLE)
       .select({
@@ -3848,14 +4120,14 @@ app.get('/exercise-videos', authenticateToken, async (req, res) => {
       .firstPage();
 
     const coachIds = [...new Set(links.map(l => l.get('CoachId')).filter(Boolean))];
-    if (!coachIds.length) return sendSuccess(res, 200, { items: [] });
+    if (!coachIds.length) return sendSuccess(res, 200, { items });
 
     // Each coach may or may not have migrated independently of this client —
     // fetch their videos from whichever store they're actually in.
-    const items = [];
     const legacyCoachIds = [];
     for (const coachId of coachIds) {
       const coachUid = await resolveFirestoreUid(coachId);
+      if (coachUid && seenCoachUids.has(coachUid)) continue;
       if (coachUid) {
         const snap = await db.collection(`coaches/${coachUid}/exerciseVideos`).get();
         for (const d of snap.docs) {
