@@ -1,7 +1,7 @@
 const express = require('express');
 const Airtable = require('airtable');
 const jwt = require('jsonwebtoken');
-const { db, firebaseEnabled } = require('./firebase');
+const { db, firebaseEnabled } = require('./firebaseAdmin');
 const { computeSessionVolume } = require('./workoutStore');
 
 const router = express.Router();

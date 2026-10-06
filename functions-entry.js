@@ -52,7 +52,7 @@ exports.api = onRequest({
 // Daily: delete intake leads older than 12 months that never became a
 // client (the retention period stated in privacy.html). Needs the Cloud
 // Scheduler API, which `firebase deploy` offers to enable on first deploy.
-const { db, firebaseEnabled } = require('./firebase');
+const { db, firebaseEnabled } = require('./firebaseAdmin');
 const { purgeStaleLeads } = require('./src/leadRetention');
 
 exports.purgeStaleLeads = onSchedule({ schedule: 'every day 03:30', timeZone: 'Europe/Amsterdam' }, async () => {

@@ -24,7 +24,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { db, firebaseEnabled, initError } = require(path.join(__dirname, '..', 'firebase'));
+const { db, firebaseEnabled, initError } = require(path.join(__dirname, '..', 'firebaseAdmin'));
 const { compactWorkout, readStoredWorkout, WORKOUT_FORMAT } = require(path.join(__dirname, '..', 'workoutFormat'));
 const { computeSessionVolume } = require(path.join(__dirname, '..', 'workoutStore'));
 
