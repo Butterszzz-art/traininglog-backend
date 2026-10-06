@@ -1,6 +1,6 @@
 // Full-server test harness for Phase 2 route conversions (see PHASE2-NOTES.md).
 //
-// Mocks firebase.js's `db` via require.cache injection and authenticates
+// Mocks firebaseAdmin.js's `db` via require.cache injection and authenticates
 // with a locally-signed legacy-style JWT — this bypasses the
 // email_verified gate that otherwise blocks testing protected routes
 // without a real inbox to click a verification link from. Because
@@ -24,7 +24,7 @@ const TEST_PORT = 39871;
 process.env.PORT = String(TEST_PORT);
 
 const BACKEND_DIR = path.join(__dirname, '..');
-const firebasePath = path.join(BACKEND_DIR, 'firebase.js');
+const firebasePath = path.join(BACKEND_DIR, 'firebaseAdmin.js');
 
 // ── Fake Firestore ───────────────────────────────────────────────────────────
 const store = {}; // collectionPath -> { docId -> data }

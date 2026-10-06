@@ -7,7 +7,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { db, firebaseEnabled, initError } = require(path.join(__dirname, '..', 'firebase'));
+const { db, firebaseEnabled, initError } = require(path.join(__dirname, '..', 'firebaseAdmin'));
 
 const file = process.argv[2];
 const DRY_RUN = process.argv.includes('--dry-run');

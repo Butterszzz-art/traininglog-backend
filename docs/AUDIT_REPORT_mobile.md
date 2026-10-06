@@ -48,7 +48,7 @@ Audit date: 2026-10-03. Read-only. No tracked files were changed and nothing was
 | Public intake form | `m:intake/` | Static page. Posts to `b:/api/intake` (`m:intake/intake.js:12,118`). |
 | Production API | `b:functions-entry.js` → `b:server.js` | A single Express app wrapped as the Firebase Cloud Function `api` in project `pocketcoach-280c4`. Secrets come from Secret Manager (`b:functions-entry.js:19-41`). |
 | Legacy API | `m:server.js` | An Express server that talks to Airtable. Nothing in the clients points at it: `m:config.js:2`, `m:src/config/constants.js:9` and `m:coach/coach.js:7` all point at the Cloud Function. `m:.env.production:2` mentions Render. **Whether it is deployed is unverified.** |
-| Firebase | `b:firebase.js`, `b:firestore.rules`, `m:src/js/firebase-auth.js`, `m:src/js/firebase-config.js` | Auth and Firestore. Only the server (Admin SDK) reads and writes Firestore (`b:firestore.rules:3-9`). |
+| Firebase | `b:firebaseAdmin.js`, `b:firestore.rules`, `m:src/js/firebase-auth.js`, `m:src/js/firebase-config.js` | Auth and Firestore. Only the server (Admin SDK) reads and writes Firestore (`b:firestore.rules:3-9`). |
 | Airtable | `b:server.js` (legacy fallback for unmigrated users), `m:server.js`, `m:index.html:4131,4257-4300` | Legacy store. The backend treats it as optional now (`b:server.js:404-420`). |
 | AI | `b:src/routes/ai.js` (Anthropic SDK), `m:src/coach/client.js` (Anthropic **or OpenRouter**) | Backend AI routes require a paid plan (`b:server.js:4124,4188`). |
 | Payments | `b:server.js:298` (Stripe webhook), `b:src/routes/appleIap.js` | |

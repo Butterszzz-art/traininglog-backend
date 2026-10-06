@@ -41,7 +41,7 @@
 
 **Pattern (established this pass, apply to everything below):** `const uid = await resolveFirestoreUid(req.user.username);` — if `uid` resolves, that user has migrated; read/write Firestore exclusively for this route (no dual-write, no fallback-merge — Firestore is the sole source of truth for them from this point on). If `uid` is `null`, they haven't migrated; leave the existing Airtable code path completely untouched. `resolveFirestoreUid` works identically regardless of whether the current request carries a Firebase ID token or a legacy JWT — it only depends on whether that username ever completed `/auth/signup-complete`.
 
-Verify each conversion with the same method used for MacroTargets/Templates: `node scripts/test-firestore-routes.js` — a full HTTP-level test against the real `server.js` with `firebase.js`'s `db` mocked via `require.cache` injection and a locally-signed legacy JWT (bypasses the email-verification gate that blocks live production testing without a real inbox). Add request/assert blocks there for each newly-converted route.
+Verify each conversion with the same method used for MacroTargets/Templates: `node scripts/test-firestore-routes.js` — a full HTTP-level test against the real `server.js` with `firebaseAdmin.js`'s `db` mocked via `require.cache` injection and a locally-signed legacy JWT (bypasses the email-verification gate that blocks live production testing without a real inbox). Add request/assert blocks there for each newly-converted route.
 
 | Route(s) | Table | Status |
 |---|---|---|

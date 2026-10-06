@@ -10,7 +10,7 @@
 'use strict';
 
 const path = require('path');
-const { db, firebaseEnabled, initError } = require(path.join(__dirname, '..', 'firebase'));
+const { db, firebaseEnabled, initError } = require(path.join(__dirname, '..', 'firebaseAdmin'));
 const { readStoredWorkout } = require(path.join(__dirname, '..', 'workoutFormat'));
 const { recordExerciseBests, bestSetsByLift } = require(path.join(__dirname, '..', 'src', 'routes', 'exerciseBoard'));
 
