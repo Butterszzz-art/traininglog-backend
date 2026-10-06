@@ -2,6 +2,7 @@ const express = require('express');
 const { providers, openModels, createMessage, perModelTimeoutMs, modelChain } = require('../coach/client');
 const { TRAINING_KNOWLEDGE } = require('../knowledge/training-methodology');
 const { NUTRITION_KNOWLEDGE } = require('../knowledge/nutrition-methodology');
+const exerciseClassify = require('../coach/exerciseClassify');
 
 const router = express.Router();
 
@@ -325,6 +326,22 @@ router.post('/sleep-insight', async (req, res) => {
   } catch (err) {
     console.error('[AI sleep-insight]', err.message);
     return res.status(502).json({ error: 'AI request failed', details: err.message });
+  }
+});
+
+// POST /api/ai/classify-exercises — { names: string[] } →
+// { results: [{ name, muscleGroup|null, confidence, canonicalName|null }] }.
+// The app's fallback for exercise names it can't place on a muscle group
+// itself; see src/coach/exerciseClassify.js.
+router.post('/classify-exercises', async (req, res) => {
+  const { names, error } = exerciseClassify.cleanNames((req.body || {}).names);
+  if (error) return res.status(422).json({ success: false, error });
+  try {
+    const results = await exerciseClassify.classifyExercises(names);
+    return res.json({ success: true, results });
+  } catch (err) {
+    console.error('[AI classify-exercises]', err.message);
+    return res.status(502).json({ success: false, error: 'AI request failed', details: err.message });
   }
 });
 
