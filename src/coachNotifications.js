@@ -85,4 +85,14 @@ async function notifyCoachPlan(db, { coachUsername, clientUsername, fields = {} 
   });
 }
 
-module.exports = { notifyCoachInvite, coachInviteAccepted, coachInviteWithdrawn, coachLeftByClient, notifyCoachNote, notifyCoachPlan };
+// A coach shared a video (src/routes/coachVideos.js). Repeats from the same
+// coach collapse into one "sent you N videos" row while it's unread.
+async function notifyCoachVideo(db, { coachUsername, clientUsernames, title }) {
+  return notify(db, {
+    to: clientUsernames, type: 'coach_video', actor: coachUsername, actorName: coachUsername,
+    text: 'sent you a video', data: { coach: coachUsername, title: String(title || '').slice(0, 80) },
+    collapseKey: `coach_video__${profileKey(coachUsername)}`,
+  });
+}
+
+module.exports = { notifyCoachInvite, coachInviteAccepted, coachInviteWithdrawn, coachLeftByClient, notifyCoachNote, notifyCoachPlan, notifyCoachVideo };
