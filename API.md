@@ -229,13 +229,13 @@ All routes need `Authorization: Bearer <token>` and a Firebase (migrated) accoun
 - `DELETE /api/coach/clients/:clientUid`: removes a client or cancels an invite, including everything the client shared.
 - `GET /api/coach/programs`, `PUT /api/coach/programs/:id` `{ name, notes?, days: { Mon: [{ name, sets, reps, repsMax? }] } }`, `DELETE /api/coach/programs/:id`: the coach's program library, shared by the mobile builder and the desktop console.
 - `POST /coach/workouts` `{ clientUid | clientUsername, date, title?, workout }`: checks the Firestore link first and falls back to Airtable `CoachClients`.
-- Notes: `POST|GET /api/coach/clients/:clientUid/notes`. Videos: `POST|GET /coach/exercise-videos`, `DELETE /coach/exercise-videos/:id`. Leads: `GET /api/coach/leads`, `PATCH /api/coach/leads/:id`.
+- Notes: `POST|GET /api/coach/clients/:clientUid/notes`. Technique videos (per exercise): `POST|GET /coach/exercise-videos`, `DELETE /coach/exercise-videos/:id`. Coach videos (program / diet / cardio / general walkthroughs, Loom/YouTube/Vimeo/Drive links): `GET|POST /api/coach/videos`, `PATCH|DELETE /api/coach/videos/:id` — body `{ title, category: program|diet|cardio|technique|general, videoUrl, message?, audience: all|selected, clientUids? }`; active clients it reaches get a `coach_video` notification. Leads: `GET /api/coach/leads`, `PATCH /api/coach/leads/:id`.
 
 **Client side**
 - `GET /api/client/coach-invites`, `POST /api/coach/clients/accept` `{ coachUsername }`, `DELETE /api/client/coaches/:coachUid` (decline a pending invite or leave a coach).
 - `GET|PUT /api/client/coach-sharing` `{ checkIns, bodyweight, workouts }`: all on by default. Turning a switch off deletes that data from every coach's copy.
 - `POST /api/client/coach-share` `{ checkIns, bodyweight, workouts: { thisWeek, weekStart, weekly }, compliancePercent, activeProgramName }`: filtered by the switches and copied to each active coach. Returns `{ coaches: 0 }` when there is no coach.
-- `GET /api/client/coach-assignment` (includes `program` and `macroTargets`), `GET /api/client/coach-notes`, `GET /exercise-videos`.
+- `GET /api/client/coach-assignment` (includes `program` and `macroTargets`), `GET /api/client/coach-notes`, `GET /exercise-videos`, `GET /api/client/coach-videos` (videos from active coaches meant for the caller, newest first).
 
 Run `node scripts/test-coach-share.js` (helpers) and `node scripts/test-firestore-routes.js` (routes).
 

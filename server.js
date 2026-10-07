@@ -24,6 +24,7 @@ const { createNotificationsRouter, notifyVolumePasses, deleteNotifications } = r
 const coachNotifications = require('./src/coachNotifications');
 const { createSyncRouter } = require('./src/routes/sync');
 const { createCoachPlansRouter, createClientPlanRouter } = require('./src/routes/plans');
+const { createCoachVideosRouter, createClientCoachVideosRouter } = require('./src/routes/coachVideos');
 const { createRegistry } = require('./src/rules/registry');
 const { FieldPath } = require('firebase-admin/firestore');
 const { createExerciseBoardRouter, recordExerciseBests, forgetExerciseSession, deleteExerciseBests } = require('./src/routes/exerciseBoard');
@@ -4678,6 +4679,25 @@ const coachPlansRouter = planRegistry && createCoachPlansRouter({
 const clientPlanRouter = createClientPlanRouter({ db, sendError, sendSuccess, resolveCallerUid });
 app.use('/api/coach/plans', authenticateToken, requireCoachPlan, planLimiter, plansAvailable, (req, res, next) => coachPlansRouter(req, res, next));
 app.use('/api/client/plan', authenticateToken, planLimiter, plansAvailable, clientPlanRouter);
+
+// ── Coach videos (program / diet / cardio walkthroughs) ─────────────────────
+// See src/routes/coachVideos.js. Links only; the app plays them inline.
+const videosAvailable = (_req, res, next) => (firebaseEnabled ? next() : sendError(res, 503, 'videos.firebase_disabled', 'Coach videos require a migrated (Firebase) backend.'));
+const coachVideosLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: { code: 'videos.rate_limited', message: 'Too many requests. Try again shortly.' } }
+});
+app.use('/api/coach/videos', authenticateToken, requireCoachPlan, coachVideosLimiter, videosAvailable, createCoachVideosRouter({
+  db, sendError, sendSuccess, resolveCallerUid,
+  notifyVideo: async ({ coachUsername, clients, title }) => {
+    const clientUsernames = (await Promise.all(clients.map(c => c.name || usernameForUid(c.uid)))).filter(Boolean);
+    if (clientUsernames.length) await coachNotifications.notifyCoachVideo(db, { coachUsername, clientUsernames, title });
+  },
+}));
+app.use('/api/client/coach-videos', authenticateToken, coachVideosLimiter, videosAvailable, createClientCoachVideosRouter({ db, sendError, sendSuccess, resolveCallerUid }));
 
 app.use('/', leaderboardRoute);
 

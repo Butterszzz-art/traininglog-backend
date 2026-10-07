@@ -1,5 +1,5 @@
 // In-app notifications: friend requests, shares, groups, friends' posts,
-// leaderboard moves and coaching (invites, accepts, notes, plan updates).
+// leaderboard moves and coaching (invites, accepts, notes, plan updates, videos).
 //
 // Things other people did to you (sent a request, shared a template, added you
 // to a group, passed you on a leaderboard) used to be visible only if you
@@ -34,6 +34,7 @@ const TYPE_CATEGORY = {
   coach_accepted: 'coaching',
   coach_note: 'coaching',
   coach_plan: 'coaching',
+  coach_video: 'coaching',
   coach_left: 'coaching',
 };
 const PAGE = 50;
