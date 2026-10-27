@@ -433,6 +433,12 @@ app.get('/health', async (_req, res) => {
       JWT_SECRET:       hasJwt    ? 'SET' : 'MISSING',
       FIREBASE_SERVICE_ACCOUNT: process.env.FIREBASE_SERVICE_ACCOUNT ? 'SET' : 'MISSING',
     },
+    // Activity Sync (Google Health) is off until all three are SET.
+    activitySync: {
+      GOOGLE_HEALTH_CLIENT_ID:     process.env.GOOGLE_HEALTH_CLIENT_ID ? 'SET' : 'MISSING',
+      GOOGLE_HEALTH_CLIENT_SECRET: process.env.GOOGLE_HEALTH_CLIENT_SECRET ? 'SET' : 'MISSING',
+      GOOGLE_HEALTH_REDIRECT_URI:  process.env.GOOGLE_HEALTH_REDIRECT_URI ? 'SET' : 'MISSING',
+    },
     firebase: {
       enabled: firebaseEnabled,
       projectId: firebaseProjectId,
@@ -2424,39 +2430,34 @@ app.post('/api/activity-sync/disconnect', authenticateToken, async (req, res) =>
   }
 });
 
-// Data types fetched for the daily summary, and where each lands in the
-// assembled `activity` object below. NOTE: the exact RollupValue field name
-// per data type (the `valueKey`) is confirmed for steps only (`countSum`,
-// per Google's docs); the others are best-effort guesses pending a real
-// response to check against — extractRollupValue() below falls back through
-// a few common field-name candidates and logs a warning if none hit, so a
-// naming miss degrades to a 0 in that one field instead of breaking the
-// whole request.
-const ACTIVITY_SYNC_DATA_TYPES = [
-  { dataType: 'steps',            unionKey: 'steps',           valueKey: 'countSum' },
-  { dataType: 'distance',         unionKey: 'distance',        valueKey: 'distanceMetersSum' },
-  { dataType: 'active-minutes',   unionKey: 'activeMinutes',   valueKey: 'durationMinutesSum' },
-  { dataType: 'total-calories',   unionKey: 'totalCalories',   valueKey: 'caloriesSum' },
-  { dataType: 'sedentary-period', unionKey: 'sedentaryPeriod', valueKey: 'durationMinutesSum' }
-];
+// Data types fetched for the daily summary. Field names and types are from
+// Google's v4 reference (developers.google.com/health/reference/rest/v4/*RollupValue):
+// int64 fields (steps, distance, active minutes) arrive as JSON strings,
+// durations as "123.5s" strings, and only kcalSum is a plain number.
+const ACTIVITY_SYNC_DATA_TYPES = ['steps', 'distance', 'active-minutes', 'total-calories', 'sedentary-period'];
 
-function civilDate(dateStr) {
-  const [year, month, day] = dateStr.split('-').map(Number);
-  return { date: { year, month, day } };
+function toNumber(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
 }
 
-function extractRollupValue(rollupPoint, unionKey, valueKey) {
-  const union = rollupPoint?.[unionKey];
-  if (!union) return 0;
-  if (typeof union[valueKey] === 'number') return union[valueKey];
-  // Fallback: grab whatever the first numeric field in the union object is,
-  // in case the real field name differs from our valueKey guess above.
-  const firstNumeric = Object.values(union).find(v => typeof v === 'number');
-  if (typeof firstNumeric === 'number') {
-    console.warn(`[ActivitySync] "${valueKey}" not found on ${unionKey} rollup value, used fallback field instead — update ACTIVITY_SYNC_DATA_TYPES.`);
-    return firstNumeric;
-  }
-  return 0;
+// Parses a protobuf Duration string ("3600s", "3.5s") to minutes.
+function durationToMinutes(value) {
+  if (typeof value !== 'string') return 0;
+  return toNumber(value.replace(/s$/, '')) / 60;
+}
+
+// Builds the activity summary from the per-data-type rollup points. A missing
+// rollup (no device worn, or that one fetch failed) counts as 0.
+function buildActivitySummary(rollups) {
+  const activeLevels = rollups['active-minutes']?.activeMinutes?.activeMinutesRollupByActivityLevel || [];
+  return {
+    steps:            toNumber(rollups.steps?.steps?.countSum),
+    distanceKm:       toNumber(rollups.distance?.distance?.millimetersSum) / 1e6,
+    caloriesOut:      toNumber(rollups['total-calories']?.totalCalories?.kcalSum),
+    activeMinutes:    Math.round(activeLevels.reduce((sum, l) => sum + toNumber(l?.activeMinutesSum), 0)),
+    sedentaryMinutes: Math.round(durationToMinutes(rollups['sedentary-period']?.sedentaryPeriod?.durationSum))
+  };
 }
 
 async function fetchDailyRollup(accessToken, healthUserId, dataType, date) {
@@ -2498,21 +2499,18 @@ app.get('/api/activity-sync/activity', authenticateToken, async (req, res) => {
     const session = await getValidActivitySyncSession(req.user.uid);
     if (!session) return sendError(res, 409, 'activity_sync.not_connected', 'Activity Sync is not connected.');
 
+    // Fetched in parallel (the app gives this request 8s), and one failing
+    // data type doesn't sink the others. If every one fails, report the error.
+    const results = await Promise.allSettled(ACTIVITY_SYNC_DATA_TYPES.map(dataType =>
+      fetchDailyRollup(session.accessToken, session.healthUserId, dataType, date)));
     const rollups = {};
-    for (const { dataType } of ACTIVITY_SYNC_DATA_TYPES) {
-      rollups[dataType] = await fetchDailyRollup(session.accessToken, session.healthUserId, dataType, date);
-    }
+    results.forEach((r, i) => {
+      if (r.status === 'fulfilled') rollups[ACTIVITY_SYNC_DATA_TYPES[i]] = r.value;
+      else console.warn(`[ActivitySync] dailyRollUp(${ACTIVITY_SYNC_DATA_TYPES[i]}) failed:`, r.reason?.message);
+    });
+    if (results.every(r => r.status === 'rejected')) throw results[0].reason;
 
-    const val = (dataType, unionKey, valueKey) => extractRollupValue(rollups[dataType], unionKey, valueKey);
-    const activity = {
-      date,
-      steps:            val('steps', 'steps', 'countSum'),
-      distanceKm:       val('distance', 'distance', 'distanceMetersSum') / 1000,
-      caloriesOut:      val('total-calories', 'totalCalories', 'caloriesSum'),
-      activeMinutes:    val('active-minutes', 'activeMinutes', 'durationMinutesSum'),
-      sedentaryMinutes: val('sedentary-period', 'sedentaryPeriod', 'durationMinutesSum'),
-      syncedAt: new Date().toISOString()
-    };
+    const activity = { date, ...buildActivitySummary(rollups), syncedAt: new Date().toISOString() };
 
     await db.collection(`users/${req.user.uid}/activitySync`).doc(date).set(activity, { merge: true });
 
@@ -2524,50 +2522,47 @@ app.get('/api/activity-sync/activity', authenticateToken, async (req, res) => {
 });
 
 // Sleep has no dailyRollUp (sessions can span midnight), so it's fetched via
-// the `list` method instead of the dailyRollUp POST the other data types use.
-// ⚠️ The exact query parameter names below (time-range filter, pagination)
-// are a best-effort guess pending a real response to verify against
-// https://developers.google.com/health/reference/rest/v4/users.dataTypes.dataPoints/list
-// — if this 404s/400s in practice, check that reference and adjust.
-// "Last night" is attributed to the day the user wakes up: query a window
-// from the prior evening through midday of `date`, and take whichever
-// session's interval ends latest in that window (handles naps/multiple
-// sessions by picking the main overnight one).
+// dataPoints.list, filtered on sleep.interval.end_time (the one time filter
+// Google supports for sleep). "Last night" is attributed to the day the user
+// wakes up: sessions ending from noon the day before through noon of `date`.
+// The main overnight sleep wins over naps; otherwise the latest-ending one.
+const SLEEP_ASLEEP_STAGES = ['LIGHT', 'DEEP', 'REM', 'ASLEEP', 'RESTLESS'];
+
 async function fetchSleepSession(accessToken, healthUserId, date) {
-  const dayStart = new Date(date + 'T12:00:00Z');
-  const windowStart = new Date(dayStart.getTime() - 24 * 60 * 60 * 1000).toISOString();
-  const windowEnd = dayStart.toISOString();
+  const windowEnd = new Date(date + 'T12:00:00Z');
+  const windowStart = new Date(windowEnd.getTime() - 24 * 60 * 60 * 1000);
+  const filter = `sleep.interval.end_time >= "${windowStart.toISOString()}" AND sleep.interval.end_time < "${windowEnd.toISOString()}"`;
 
   const response = await fetch(
-    `${GOOGLE_HEALTH_API_BASE}/users/${healthUserId}/dataTypes/sleep/dataPoints`
-    + `?startTime=${encodeURIComponent(windowStart)}&endTime=${encodeURIComponent(windowEnd)}`,
+    `${GOOGLE_HEALTH_API_BASE}/users/${healthUserId}/dataTypes/sleep/dataPoints?`
+    + new URLSearchParams({ filter, pageSize: '25' }),
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
   const data = await response.json();
   if (!response.ok) throw new Error(data?.error?.message || 'sleep dataPoints.list failed');
 
-  const points = data.dataPoints || data.point || [];
-  if (!points.length) return null;
+  const sessions = (data.dataPoints || [])
+    .map(p => p?.sleep)
+    .filter(s => s?.interval?.startTime && s?.interval?.endTime);
+  if (!sessions.length) return null;
 
-  // Pick the session with the latest interval.endTime within the window.
-  const latest = points.reduce((best, p) => {
-    const end = new Date(p?.sleep?.interval?.endTime || 0).getTime();
-    const bestEnd = new Date(best?.sleep?.interval?.endTime || 0).getTime();
-    return end > bestEnd ? p : best;
-  }, points[0]);
+  const endOf = s => new Date(s.interval.endTime).getTime();
+  const pool = sessions.filter(s => s.metadata?.mainSleep);
+  const latest = (pool.length ? pool : sessions).reduce((best, s) => (endOf(s) > endOf(best) ? s : best));
+  const interval = latest.interval;
 
-  const interval = latest?.sleep?.interval;
-  if (!interval?.startTime || !interval?.endTime) return null;
-
-  const stageMinutes = { LIGHT: 0, DEEP: 0, REM: 0, AWAKE: 0 };
-  for (const stage of latest?.sleep?.stages || []) {
+  const stageMinutes = { LIGHT: 0, DEEP: 0, REM: 0, AWAKE: 0, ASLEEP: 0, RESTLESS: 0 };
+  for (const stage of latest.stages || []) {
     const type = String(stage?.type || '').toUpperCase();
     const mins = (new Date(stage.endTime) - new Date(stage.startTime)) / 60000;
     if (Number.isFinite(mins) && mins > 0 && type in stageMinutes) stageMinutes[type] += mins;
   }
-  const sleepMinutes = stageMinutes.LIGHT + stageMinutes.DEEP + stageMinutes.REM;
+  const stagedAsleep = SLEEP_ASLEEP_STAGES.reduce((sum, t) => sum + stageMinutes[t], 0);
+  // Google's own summary is the better number when present (int64 → string).
+  const summaryAsleep = Number(latest.summary?.minutesAsleep);
+  const sleepMinutes = Number.isFinite(summaryAsleep) && summaryAsleep > 0 ? summaryAsleep : stagedAsleep;
   const timeInBedMinutes = (new Date(interval.endTime) - new Date(interval.startTime)) / 60000;
-  const awakenings = (latest?.sleep?.shortAwakenings || []).length;
+  const awakenings = (latest.shortAwakenings || []).length;
 
   return {
     bedtime: interval.startTime,
@@ -2594,7 +2589,12 @@ function computeSleepScore({ sleepMinutes, deepMinutes, remMinutes, awakenings }
   const restorativeRatio = sleepMinutes > 0 ? (deepMinutes + remMinutes) / sleepMinutes : 0;
   const qualityScore = Math.min(restorativeRatio / 0.45, 1) * 35;
   const restfulnessScore = Math.max(15 - Math.min(awakenings, 15), 0);
-  const score = Math.round(durationScore + qualityScore + restfulnessScore);
+  // "Classic" sleep (no stage breakdown) has no deep/REM data, so score it on
+  // duration and restfulness alone, scaled to 100, instead of capping it at 65.
+  const hasStages = deepMinutes + remMinutes > 0;
+  const score = Math.round(hasStages
+    ? durationScore + qualityScore + restfulnessScore
+    : (durationScore + restfulnessScore) * (100 / 65));
   const label = score >= 90 ? 'Excellent' : score >= 80 ? 'Good' : score >= 60 ? 'Fair' : 'Poor';
   return { score, label };
 }

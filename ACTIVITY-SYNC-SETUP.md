@@ -19,8 +19,11 @@ directly (Google OAuth 2.0 via Google Cloud Console, not `dev.fitbit.com`).
 3. Create OAuth 2.0 credentials (APIs & Services → Credentials → Create
    Credentials → OAuth client ID), type **Web application**.
 4. Set the **Authorized redirect URI** to exactly match
-   `GOOGLE_HEALTH_REDIRECT_URI` below — your deployed function's base URL +
-   `/api/activity-sync/callback`.
+   `GOOGLE_HEALTH_REDIRECT_URI` below. For the deployed function that is:
+   `https://us-central1-pocketcoach-280c4.cloudfunctions.net/api/api/activity-sync/callback`
+   (the doubled `/api/api/` is correct: the function is named `api` and the
+   Express routes also start with `/api/`). Any difference, even a trailing
+   slash, makes Google reject the connect with `redirect_uri_mismatch`.
 5. On the OAuth consent screen's **Audience** page, while in "Testing"
    status, add your own Google account(s) as test users (required to
    complete consent until the app passes Google's verification review for
@@ -69,22 +72,22 @@ gets redirected back to after consent (`?activitySync=connected` /
 Heart rate and weight are not wired up yet — add scopes + new data-type
 fetches if/when those are needed.
 
-⚠️ **The per-data-type response field names in `server.js`
-(`ACTIVITY_SYNC_DATA_TYPES`) are confirmed for `steps` only** (`countSum`,
-per Google's docs) — `distance`/`active-minutes`/`total-calories`/
-`sedentary-period` field names are best-effort guesses. The code falls back
-to the first numeric field it finds and logs a warning if the guessed field
-name is wrong, so it degrades gracefully, but check the logs after the
-first real connect and fix the `valueKey`s in `ACTIVITY_SYNC_DATA_TYPES` if
-you see those warnings.
+Field names and request shapes were checked against Google's v4 reference
+(`*RollupValue` pages, `dataPoints.list`, `users.getIdentity`). int64 values
+(steps, distance in millimetres, active minutes) come back as strings and
+durations as `"123s"` strings, which `buildActivitySummary` parses. Sleep is
+filtered with `sleep.interval.end_time`, prefers the `mainSleep` session over
+naps, and counts `ASLEEP`/`RESTLESS` stages for "classic" (non-staged) sleep.
+The sleep score (`computeSleepScore` in `server.js`) is an original estimate,
+not Fitbit's or Google's own scoring — don't present it in the UI as anything
+more than an in-app estimate.
 
-⚠️ **`fetchSleepSession`'s query parameter names (`startTime`/`endTime`) are
-also an unverified guess** — check
-`https://developers.google.com/health/reference/rest/v4/users.dataTypes.dataPoints/list`
-if `/api/activity-sync/sleep` errors out, and adjust. The sleep score
-formula (`computeSleepScore` in `server.js`) is an original estimate, not a
-reproduction of Fitbit's or Google's own (undisclosed) scoring — don't
-present it in the UI as anything more than an in-app estimate.
+## Checking it's switched on
+
+`GET /api/health` now includes an `activitySync` block showing each of the
+three secrets as `SET` or `MISSING`. All three must be `SET` (and the function
+redeployed after setting them) before the app's Settings stops saying
+"Activity Sync is not available yet."
 
 ## 4. Rate limits / token lifetime
 
