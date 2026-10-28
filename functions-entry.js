@@ -30,6 +30,9 @@ const googleHealthClientSecret = defineSecret('GOOGLE_HEALTH_CLIENT_SECRET');
 const googleHealthRedirectUri = defineSecret('GOOGLE_HEALTH_REDIRECT_URI');
 // Resend API key for emailing report and block alerts (src/moderationEmail.js).
 const resendApiKey = defineSecret('RESEND_API_KEY');
+// USDA FoodData Central key for food search (src/routes/food.js). Free from
+// https://fdc.nal.usda.gov/api-key-signup — set it before deploying.
+const usdaApiKey = defineSecret('USDA_API_KEY');
 
 const app = require('./server');
 
@@ -45,7 +48,7 @@ exports.api = onRequest({
   secrets: [
     jwtSecret, ollamaApiKey, groqApiKey, openRouterApiKey, intakeCoachUsername,
     googleHealthClientId, googleHealthClientSecret, googleHealthRedirectUri,
-    resendApiKey
+    resendApiKey, usdaApiKey
   ]
 }, app);
 
