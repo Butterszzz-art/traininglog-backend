@@ -25,8 +25,6 @@ const coachNotifications = require('./src/coachNotifications');
 const { createSyncRouter, syncDocId } = require('./src/routes/sync');
 const { createCoachNutritionRouter } = require('./src/routes/coachNutrition');
 const { createCoachFoodsRouter, createClientCoachFoodsRouter } = require('./src/routes/coachFoods');
-
-const { createSyncRouter } = require('./src/routes/sync');
 const { createFoodRouter } = require('./src/routes/food');
 const { createCoachPlansRouter, createClientPlanRouter } = require('./src/routes/plans');
 const { createCoachVideosRouter, createClientCoachVideosRouter } = require('./src/routes/coachVideos');
