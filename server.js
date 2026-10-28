@@ -23,6 +23,7 @@ const { createSharesRouter, deleteShares } = require('./src/routes/shares');
 const { createNotificationsRouter, notifyVolumePasses, deleteNotifications } = require('./src/routes/notifications');
 const coachNotifications = require('./src/coachNotifications');
 const { createSyncRouter } = require('./src/routes/sync');
+const { createFoodRouter } = require('./src/routes/food');
 const { createCoachPlansRouter, createClientPlanRouter } = require('./src/routes/plans');
 const { createCoachVideosRouter, createClientCoachVideosRouter } = require('./src/routes/coachVideos');
 const { createRegistry } = require('./src/rules/registry');
@@ -4648,6 +4649,18 @@ app.use('/api/sync', authenticateToken, syncLimiter, createSyncRouter({
   documentId: FieldPath.documentId(),
   enabled: () => process.env.CLOUD_SYNC_ENABLED !== 'false',
 }));
+// Food search for the food log (src/routes/food.js): USDA FoodData Central
+// with our own key plus Open Food Facts, merged and cached. Signed-in only,
+// so the USDA key's quota isn't open to the whole internet.
+const foodLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 90,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: { code: 'food.rate_limited', message: 'Too many food searches. Try again shortly.' } }
+});
+app.use('/api/food', authenticateToken, foodLimiter, createFoodRouter({ sendError, sendSuccess }));
+
 // ── Master plans (src/routes/plans.js) ───────────────────────────────────────
 // A broken rules/*.json must not take the whole API down: only the plan
 // routes answer 503 until it is fixed.
