@@ -3049,6 +3049,7 @@ function coachClientSummary(id, data, now = new Date()) {
     alerts,
     currentNutritionSummary: data.nutritionSummary || '',
     macroTargets: data.macroTargets || null,
+    hideNutritionNumbers: data.hideNutritionNumbers === true,
     latestCheckInData: data.latestCheckInJson ?? null,
     compliancePercent: data.compliancePercent ?? null,
     workoutsLoggedThisWeek: data.workoutsWeekStart === coachShare.weekStartOf(now) ? (data.workoutsLoggedThisWeek ?? null) : null,
@@ -3534,7 +3535,9 @@ app.delete('/api/client/coaches/:coachUid', authenticateToken, async (req, res) 
 // side without needing read access into the other's collection.
 
 // PATCH /api/coach/clients/:clientUid — body: { currentProgram?, nutritionSummary?,
-// trainingMode?, programId?, macroTargets? }
+// trainingMode?, programId?, macroTargets?, hideNutritionNumbers? }
+//   hideNutritionNumbers: true = the client's app hides calorie and macro
+//     numbers so they only log (for clients who shouldn't count).
 //   programId: a program from the coach's library (GET /api/coach/programs).
 //     Its full content is converted to the app's program format and copied to
 //     the client's assignment, so they can import it; '' clears it.
@@ -3557,9 +3560,10 @@ app.patch('/api/coach/clients/:clientUid', authenticateToken, requireCoachPlan, 
       }
       fields.macroTargets = targets;
     }
+    if (typeof req.body?.hideNutritionNumbers === 'boolean') fields.hideNutritionNumbers = req.body.hideNutritionNumbers;
     const programId = typeof req.body?.programId === 'string' ? req.body.programId.trim() : null;
     if (!Object.keys(fields).length && programId === null) {
-      return sendError(res, 422, 'coach.invalid_payload', 'Provide at least one of currentProgram, programId, nutritionSummary, macroTargets, trainingMode.');
+      return sendError(res, 422, 'coach.invalid_payload', 'Provide at least one of currentProgram, programId, nutritionSummary, macroTargets, trainingMode, hideNutritionNumbers.');
     }
 
     const coachUid = await resolveCallerUid(req.user);
