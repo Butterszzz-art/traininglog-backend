@@ -13,12 +13,18 @@
 //
 //   GET /search?q=<text>&limit=<n>
 //     → { foods: [...], sources: { usda: 'ok'|'error'|'disabled', off: ... } }
+//   GET /barcode/:code      (EAN-8/13, UPC-A, GTIN-14 with a valid check digit)
+//     → { food } or 404 food.barcode_not_found. Open Food Facts' product API
+//     first (it has serving sizes), then USDA Branded by GTIN.
 'use strict';
 
 const express = require('express');
 const foods = require('../nutrition/foods');
 
 const SEARCH_TTL_MS = 24 * 60 * 60 * 1000;
+const BARCODE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const BARCODE_MISS_TTL_MS = 6 * 60 * 60 * 1000; // a product may be added to OFF soon
+const OFF_PRODUCT_FIELDS = 'code,product_name,product_name_nl,product_name_en,generic_name,generic_name_nl,brands,nutriments,serving_size,serving_quantity,product_quantity,product_quantity_unit,quantity,countries_tags';
 const CACHE_MAX = 800;
 const UPSTREAM_TIMEOUT_MS = 4500;
 const DEFAULT_LIMIT = 20;
@@ -91,6 +97,61 @@ function createFoodRouter({
     const data = await getJson(fetchFn, url, { 'User-Agent': userAgent() });
     return { status: 'ok', foods: (data.hits || []).map(foods.mapOffProduct).filter(Boolean) };
   }
+
+  async function lookupOff(code) {
+    const url = `https://world.openfoodfacts.org/api/v2/product/${code}?fields=${OFF_PRODUCT_FIELDS}`;
+    try {
+      const data = await getJson(fetchFn, url, { 'User-Agent': userAgent() });
+      return data && data.status === 1 ? foods.mapOffProduct({ ...data.product, code: data.product?.code || code }) : null;
+    } catch (err) {
+      if (err.status === 404) return null; // OFF answers 404 for unknown codes
+      throw err;
+    }
+  }
+
+  async function lookupUsda(code) {
+    const key = usdaKey();
+    if (!key || key === 'DEMO_KEY') return null;
+    // Branded foods are indexed by GTIN; USDA stores UPC-A as 12 digits.
+    const gtins = [...new Set([code, code.replace(/^0/, '')])];
+    for (const gtin of gtins) {
+      const url = 'https://api.nal.usda.gov/fdc/v1/foods/search?' + new URLSearchParams({
+        query: gtin, dataType: 'Branded', pageSize: '5', api_key: key,
+      });
+      const data = await getJson(fetchFn, url);
+      const hit = (data.foods || []).find(f => foods.normalizeBarcode(f.gtinUpc) === code);
+      if (hit) return foods.mapUsdaFood(hit);
+    }
+    return null;
+  }
+
+  router.get('/barcode/:code', async (req, res) => {
+    const code = foods.normalizeBarcode(req.params.code);
+    if (!code || !foods.validBarcode(code)) {
+      return sendError(res, 422, 'food.invalid_barcode', 'That barcode doesn’t look right. Try scanning again or type the numbers under it.');
+    }
+    const cached = cache.get(`b:${code}`);
+    if (cached !== undefined) {
+      if (!cached) return sendError(res, 404, 'food.barcode_not_found', 'This product isn’t in the food databases yet. You can add it yourself.');
+      return sendSuccess(res, 200, { food: cached, cached: true });
+    }
+    let food = null;
+    let failed = 0;
+    for (const lookup of [lookupOff, lookupUsda]) {
+      try {
+        food = await lookup(code);
+      } catch (err) {
+        failed++;
+        log.warn(`[food] barcode ${code} lookup failed: ${err.message}`);
+      }
+      if (food) break;
+    }
+    if (!food && failed === 2) return sendError(res, 502, 'food.lookup_unavailable', 'Barcode lookup is unavailable right now. Try again shortly, or add the food yourself.');
+    // Only remember a miss when every source actually answered.
+    if (food || !failed) cache.set(`b:${code}`, food, food ? BARCODE_TTL_MS : BARCODE_MISS_TTL_MS);
+    if (!food) return sendError(res, 404, 'food.barcode_not_found', 'This product isn’t in the food databases yet. You can add it yourself.');
+    return sendSuccess(res, 200, { food });
+  });
 
   router.get('/search', async (req, res) => {
     const q = foods.normalizeQuery(req.query.q);
