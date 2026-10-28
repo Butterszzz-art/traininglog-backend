@@ -22,7 +22,8 @@ const { createFeedRouter, deleteFeedPosts } = require('./src/routes/feed');
 const { createSharesRouter, deleteShares } = require('./src/routes/shares');
 const { createNotificationsRouter, notifyVolumePasses, deleteNotifications } = require('./src/routes/notifications');
 const coachNotifications = require('./src/coachNotifications');
-const { createSyncRouter } = require('./src/routes/sync');
+const { createSyncRouter, syncDocId } = require('./src/routes/sync');
+const { createCoachNutritionRouter } = require('./src/routes/coachNutrition');
 const { createCoachPlansRouter, createClientPlanRouter } = require('./src/routes/plans');
 const { createCoachVideosRouter, createClientCoachVideosRouter } = require('./src/routes/coachVideos');
 const { createRegistry } = require('./src/rules/registry');
@@ -3276,14 +3277,16 @@ async function unlinkCoachClient(coachUid, clientUid) {
 }
 
 // GET /api/client/coach-sharing — the athlete's switches for what linked
-// coaches can see. Defaults to everything on (check-ins, bodyweight, workouts).
+// coaches can see. Check-ins, bodyweight and workouts default to on; the
+// food log (nutrition) is off until the client turns it on.
 app.get('/api/client/coach-sharing', authenticateToken, async (req, res) => {
   if (!firebaseEnabled) return sendError(res, 503, 'coach.firebase_disabled', 'Client linking requires a migrated (Firebase) account.');
   try {
     const uid = await resolveCallerUid(req.user);
     if (!uid) return sendError(res, 409, 'coach.not_migrated', 'Your account needs to complete migration first. Contact support.');
     const snap = await db.collection('users').doc(uid).get();
-    return sendSuccess(res, 200, { sharing: coachShare.normalizeSharing(snap.exists ? snap.get('coachSharing') : null) });
+    const stored = snap.exists ? snap.get('coachSharing') : null;
+    return sendSuccess(res, 200, { sharing: coachShare.normalizeSharing(stored), decided: coachShare.decidedSharing(stored) });
   } catch (err) {
     console.error('GET /api/client/coach-sharing failed:', err);
     return sendError(res, 500, 'coach.server_error', String(err));
@@ -3296,7 +3299,7 @@ async function activeCoachUidsFor(clientUid) {
   return snap.docs.map(d => d.id);
 }
 
-// PUT /api/client/coach-sharing — body: { checkIns?, bodyweight?, workouts? }
+// PUT /api/client/coach-sharing — body: { checkIns?, bodyweight?, workouts?, nutrition? }
 // Turning a switch off also deletes that data from every coach's copy.
 app.put('/api/client/coach-sharing', authenticateToken, async (req, res) => {
   if (!firebaseEnabled) return sendError(res, 503, 'coach.firebase_disabled', 'Client linking requires a migrated (Firebase) account.');
@@ -3304,9 +3307,11 @@ app.put('/api/client/coach-sharing', authenticateToken, async (req, res) => {
     const uid = await resolveCallerUid(req.user);
     if (!uid) return sendError(res, 409, 'coach.not_migrated', 'Your account needs to complete migration first. Contact support.');
     const userRef = db.collection('users').doc(uid);
-    const current = coachShare.normalizeSharing((await userRef.get()).get?.('coachSharing'));
-    const sharing = coachShare.normalizeSharing({ ...current, ...(req.body || {}) });
-    await userRef.set({ coachSharing: sharing }, { merge: true });
+    // Store only the switches the client has set, so an undecided one (the
+    // food log) stays undecided when another switch changes.
+    const stored = coachShare.mergeSharing((await userRef.get()).get?.('coachSharing'), req.body);
+    const sharing = coachShare.normalizeSharing(stored);
+    await userRef.set({ coachSharing: stored }, { merge: true });
 
     const cleared = {};
     for (const key of coachShare.SHARING_KEYS) {
@@ -3320,7 +3325,7 @@ app.put('/api/client/coach-sharing', authenticateToken, async (req, res) => {
       }
       await batch.commit();
     }
-    return sendSuccess(res, 200, { sharing });
+    return sendSuccess(res, 200, { sharing, decided: coachShare.decidedSharing(stored) });
   } catch (err) {
     console.error('PUT /api/client/coach-sharing failed:', err);
     return sendError(res, 500, 'coach.server_error', String(err));
@@ -4648,6 +4653,19 @@ app.use('/api/sync', authenticateToken, syncLimiter, createSyncRouter({
   documentId: FieldPath.documentId(),
   enabled: () => process.env.CLOUD_SYNC_ENABLED !== 'false',
 }));
+// A coach reading a client's food log (src/routes/coachNutrition.js). The
+// link and the client's food-log sharing switch are checked on every request.
+const coachNutritionLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: { code: 'coach.rate_limited', message: 'Too many requests. Try again shortly.' } }
+});
+app.use('/api/coach/nutrition', authenticateToken, requireCoachPlan, coachNutritionLimiter,
+  (req, res, next) => (firebaseEnabled ? next() : sendError(res, 503, 'coach.firebase_disabled', 'Client linking requires a migrated (Firebase) account.')),
+  createCoachNutritionRouter({ db, sendError, sendSuccess, resolveCallerUid, syncDocId }));
+
 // ── Master plans (src/routes/plans.js) ───────────────────────────────────────
 // A broken rules/*.json must not take the whole API down: only the plan
 // routes answer 503 until it is fixed.

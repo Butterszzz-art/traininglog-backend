@@ -6,8 +6,11 @@
 // strips whatever the client switched off, and the result is copied onto each
 // active coach's roster doc (coaches/{coachUid}/clients/{clientUid}).
 
-const SHARING_KEYS = ['checkIns', 'bodyweight', 'workouts'];
-const DEFAULT_SHARING = Object.freeze({ checkIns: true, bodyweight: true, workouts: true });
+// nutrition (the food-level diary) is opt-in: food logs are health data, so
+// a coach only sees them after the client switches it on. The others keep
+// their original default (on).
+const SHARING_KEYS = ['checkIns', 'bodyweight', 'workouts', 'nutrition'];
+const DEFAULT_SHARING = Object.freeze({ checkIns: true, bodyweight: true, workouts: true, nutrition: false });
 
 // Fields on the coach's roster doc that come from the client's share, grouped
 // by the sharing switch that controls them. Turning a switch off deletes these.
@@ -15,6 +18,10 @@ const SHARE_FIELDS = {
   checkIns: ['checkIns', 'lastCheckInAt', 'latestCheckInJson'],
   bodyweight: ['bodyweight', 'currentBodyweight', 'weeklyWeightChangePercent'],
   workouts: ['weeklyWorkouts', 'workoutsLoggedThisWeek', 'workoutsWeekStart', 'compliancePercent', 'activeProgramName'],
+  // Nothing is copied onto the roster: the coach reads the client's own
+  // synced food log at request time (src/routes/coachNutrition.js), so
+  // switching it off cuts access straight away.
+  nutrition: [],
 };
 
 const MAX_CHECKINS = 12;
@@ -26,6 +33,28 @@ function normalizeSharing(value) {
   const src = value && typeof value === 'object' ? value : {};
   const out = {};
   for (const key of SHARING_KEYS) out[key] = typeof src[key] === 'boolean' ? src[key] : DEFAULT_SHARING[key];
+  return out;
+}
+
+// Which switches the client has actually set (vs. still on their default).
+// The app asks once about nutrition while it is undecided.
+function decidedSharing(value) {
+  const src = value && typeof value === 'object' ? value : {};
+  const out = {};
+  for (const key of SHARING_KEYS) out[key] = typeof src[key] === 'boolean';
+  return out;
+}
+
+// The stored switches after a change: what was stored, plus the boolean
+// keys in `changes`. Keys never set stay unset, so "not asked yet" survives.
+function mergeSharing(stored, changes) {
+  const base = stored && typeof stored === 'object' ? stored : {};
+  const body = changes && typeof changes === 'object' ? changes : {};
+  const out = {};
+  for (const key of SHARING_KEYS) {
+    if (typeof body[key] === 'boolean') out[key] = body[key];
+    else if (typeof base[key] === 'boolean') out[key] = base[key];
+  }
   return out;
 }
 
@@ -286,6 +315,8 @@ module.exports = {
   SHARE_FIELDS,
   DEFAULT_SHARING,
   normalizeSharing,
+  decidedSharing,
+  mergeSharing,
   buildShareFields,
   computeClientAlerts,
   weeklyChangePercent,
