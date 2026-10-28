@@ -443,7 +443,7 @@ async function run() {
   });
 
   await t('refuses requests without req.user, even if mounted without auth', async () => {
-    for (const path of ['/api/ai/coach', '/api/ai/coach/brief', '/api/ai/coach/review', '/api/ai/coach/body']) {
+    for (const path of ['/api/ai/coach', '/api/ai/coach/brief', '/api/ai/coach/review', '/api/ai/coach/body', '/api/ai/coach/nutrition-review']) {
       const res = await post(path, { message: 'x', data: routePack }, { user: null });
       assert.strictEqual(res.status, 401, path);
     }
@@ -568,6 +568,69 @@ async function run() {
 
   await t('facts are required', async () => {
     assert.strictEqual((await post('/api/ai/coach/review', null, { raw: '{}' })).status, 400);
+  });
+
+  console.log('POST /api/ai/coach/nutrition-review');
+
+  const nutritionBody = {
+    facts: {
+      week: { start: '2026-10-19', end: '2026-10-25', daysLogged: 7, avgKcal: 2400, avgProtein: 160 },
+      target: { calories: 2500, protein: 180 },
+      maintenance: { kcal: 2950, confidence: 'good' },
+      supplementCandidates: [{ id: 'vitamin_d', why: 'Oct-Mar' }, { id: 'creatine', why: 'trains' }],
+    },
+    rules: {
+      headline: 'Protein 160 g vs 180 g.',
+      items: [{ kind: 'work_on', text: 'Protein averaged 160 g against your 180 g target.' }, { kind: 'nonsense', text: 'x' }],
+      supplements: [{ id: 'vitamin_d', why: 'Oct-Mar' }, { id: 'ashwagandha', why: 'nope' }],
+    },
+  };
+
+  await t('AI nutrition review: cleaned, only listed supplements, no unknown kinds', async () => {
+    const ai = {
+      headline: 'Real maintenance is ~2,950 kcal, so 2,500 keeps the cut going.',
+      items: [
+        { kind: 'work_on', text: 'Add 20 g protein at breakfast.' },
+        { kind: 'work_on', text: 'Two.' },
+        { kind: 'work_on', text: 'A third work-on is dropped.' },
+        { kind: 'keeps_working', text: 'Fibre 32 g.' },
+        { kind: 'think_about', text: 'Weight -0.5 kg.' },
+      ],
+      supplements: [
+        { id: 'vitamin_d', why: 'Little sun until March.' },
+        { id: 'iron', why: 'Not a candidate for this athlete.' },
+        { id: 'vitamin_d', why: 'duplicate' },
+      ],
+    };
+    script = [endTurn(JSON.stringify(ai))];
+    const body = await (await post('/api/ai/coach/nutrition-review', nutritionBody)).json();
+    assert.strictEqual(body.source, 'ai');
+    assert.deepStrictEqual(body.items.map(i => i.text), ['Add 20 g protein at breakfast.', 'Two.', 'Fibre 32 g.', 'Weight -0.5 kg.']);
+    assert.deepStrictEqual(body.supplements, [{ id: 'vitamin_d', name: 'Vitamin D', why: 'Little sun until March.' }]);
+    assert.deepStrictEqual(JSON.parse(calls[0].messages[0].content).facts.maintenance, { kcal: 2950, confidence: 'good' });
+    assert.strictEqual(calls[0].output_config.format.type, 'json_schema');
+  });
+
+  await t('unusable AI reply → the app’s rules review, cleaned', async () => {
+    script = [endTurn('no json here')];
+    const body = await (await post('/api/ai/coach/nutrition-review', nutritionBody)).json();
+    assert.deepStrictEqual(body, {
+      headline: 'Protein 160 g vs 180 g.',
+      items: [{ kind: 'work_on', text: 'Protein averaged 160 g against your 180 g target.' }],
+      supplements: [{ id: 'vitamin_d', name: 'Vitamin D', why: 'Oct-Mar' }],
+      source: 'rules',
+    });
+  });
+
+  await t('AI failure → rules review with aiError', async () => {
+    script = [{ throw: new Error('network down') }];
+    const body = await (await post('/api/ai/coach/nutrition-review', nutritionBody)).json();
+    assertMatch(body, { source: 'rules', aiError: 'failed' });
+  });
+
+  await t('nutrition review: facts required, size-capped', async () => {
+    assert.strictEqual((await post('/api/ai/coach/nutrition-review', null, { raw: '{}' })).status, 400);
+    assert.strictEqual((await post('/api/ai/coach/nutrition-review', { facts: { blob: 'x'.repeat(25000) } })).status, 400);
   });
 
   console.log('open models (Ollama / OpenRouter)');

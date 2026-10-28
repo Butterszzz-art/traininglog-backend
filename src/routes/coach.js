@@ -29,6 +29,7 @@ const {
 const { TOOL_DEFS, runTool } = require('../coach/tools');
 const { COACH_INSTRUCTIONS, athleteContext } = require('../coach/prompt');
 const { buildBriefDigest, buildBodyFacts } = require('../coach/digest');
+const nutritionReview = require('../coach/nutritionReview');
 
 const router = express.Router();
 
@@ -450,6 +451,36 @@ router.post('/review', async (req, res) => {
     });
   } catch (err) {
     logError('[AI review]', err);
+    return res.json({ ...fallback, aiError: aiError(err) });
+  }
+});
+
+// ── POST /api/ai/coach/nutrition-review — weekly "Nutrition and performance"
+// Body: { facts, rules, memory, style }. facts come from the app
+// (nutrition-insights.js); rules is the app's own rules-based review, which
+// is also the fallback. Returns { headline, items, supplements, source }.
+// See src/coach/nutritionReview.js for the guardrails.
+router.post('/nutrition-review', async (req, res) => {
+  const { facts, rules, memory, style } = req.body || {};
+  const checked = nutritionReview.checkFacts(facts);
+  if (checked.error) return res.status(400).json({ error: checked.error });
+  const fallback = { ...nutritionReview.cleanRules(rules, facts), source: 'rules' };
+  try {
+    const reply = await createMessage(REVIEW_MODEL, {
+      max_tokens: 3000,
+      output_config: jsonOutput(nutritionReview.SCHEMA, 'medium'),
+      system: [
+        { type: 'text', text: nutritionReview.INSTRUCTIONS },
+        { type: 'text', text: athleteContext({ profile: {}, memory, style, today: String(facts.week && facts.week.end || '').slice(0, 10) }) },
+      ],
+      messages: [{ role: 'user', content: JSON.stringify({ facts, draft: fallback }) }],
+    }, { timeoutMs: perModelTimeoutMs(45000, 60000) });
+    if (reply.stop_reason === 'refusal') return res.json(fallback);
+    const review = nutritionReview.parseReview(parseJsonObject(replyText(reply)), facts);
+    if (!review) return res.json(fallback);
+    return res.json({ ...review, source: 'ai' });
+  } catch (err) {
+    logError('[AI nutrition-review]', err);
     return res.json({ ...fallback, aiError: aiError(err) });
   }
 });
