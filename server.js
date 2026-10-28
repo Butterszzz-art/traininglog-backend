@@ -25,6 +25,9 @@ const coachNotifications = require('./src/coachNotifications');
 const { createSyncRouter, syncDocId } = require('./src/routes/sync');
 const { createCoachNutritionRouter } = require('./src/routes/coachNutrition');
 const { createCoachFoodsRouter, createClientCoachFoodsRouter } = require('./src/routes/coachFoods');
+
+const { createSyncRouter } = require('./src/routes/sync');
+const { createFoodRouter } = require('./src/routes/food');
 const { createCoachPlansRouter, createClientPlanRouter } = require('./src/routes/plans');
 const { createCoachVideosRouter, createClientCoachVideosRouter } = require('./src/routes/coachVideos');
 const { createRegistry } = require('./src/rules/registry');
@@ -4666,6 +4669,17 @@ const coachNutritionLimiter = rateLimit({
 app.use('/api/coach/nutrition', authenticateToken, requireCoachPlan, coachNutritionLimiter,
   (req, res, next) => (firebaseEnabled ? next() : sendError(res, 503, 'coach.firebase_disabled', 'Client linking requires a migrated (Firebase) account.')),
   createCoachNutritionRouter({ db, sendError, sendSuccess, resolveCallerUid, syncDocId }));
+// Food search for the food log (src/routes/food.js): USDA FoodData Central
+// with our own key plus Open Food Facts, merged and cached. Signed-in only,
+// so the USDA key's quota isn't open to the whole internet.
+const foodLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 90,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: { code: 'food.rate_limited', message: 'Too many food searches. Try again shortly.' } }
+});
+app.use('/api/food', authenticateToken, foodLimiter, createFoodRouter({ sendError, sendSuccess }));
 
 // Coach-approved foods shared with clients (src/routes/coachFoods.js).
 const foodsAvailable = (_req, res, next) => (firebaseEnabled ? next() : sendError(res, 503, 'foods.firebase_disabled', 'Coach foods require a migrated (Firebase) backend.'));
