@@ -24,6 +24,7 @@ const { createNotificationsRouter, notifyVolumePasses, deleteNotifications } = r
 const coachNotifications = require('./src/coachNotifications');
 const { createSyncRouter, syncDocId } = require('./src/routes/sync');
 const { createCoachNutritionRouter } = require('./src/routes/coachNutrition');
+const { createCoachFoodsRouter, createClientCoachFoodsRouter } = require('./src/routes/coachFoods');
 const { createCoachPlansRouter, createClientPlanRouter } = require('./src/routes/plans');
 const { createCoachVideosRouter, createClientCoachVideosRouter } = require('./src/routes/coachVideos');
 const { createRegistry } = require('./src/rules/registry');
@@ -4665,6 +4666,13 @@ const coachNutritionLimiter = rateLimit({
 app.use('/api/coach/nutrition', authenticateToken, requireCoachPlan, coachNutritionLimiter,
   (req, res, next) => (firebaseEnabled ? next() : sendError(res, 503, 'coach.firebase_disabled', 'Client linking requires a migrated (Firebase) account.')),
   createCoachNutritionRouter({ db, sendError, sendSuccess, resolveCallerUid, syncDocId }));
+
+// Coach-approved foods shared with clients (src/routes/coachFoods.js).
+const foodsAvailable = (_req, res, next) => (firebaseEnabled ? next() : sendError(res, 503, 'foods.firebase_disabled', 'Coach foods require a migrated (Firebase) backend.'));
+app.use('/api/coach/foods', authenticateToken, requireCoachPlan, coachNutritionLimiter, foodsAvailable,
+  createCoachFoodsRouter({ db, sendError, sendSuccess, resolveCallerUid }));
+app.use('/api/client/coach-foods', authenticateToken, coachNutritionLimiter, foodsAvailable,
+  createClientCoachFoodsRouter({ db, sendError, sendSuccess, resolveCallerUid }));
 
 // ── Master plans (src/routes/plans.js) ───────────────────────────────────────
 // A broken rules/*.json must not take the whole API down: only the plan
