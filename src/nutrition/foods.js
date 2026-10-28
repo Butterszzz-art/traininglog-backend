@@ -294,13 +294,21 @@ function words(s) {
 }
 
 function scoreFood(food, queryWords, position) {
+  const nameOnly = words(food.name);
   const nameWords = words(`${food.name} ${food.brand || ''}`);
   const hits = queryWords.filter(q => nameWords.some(w => w.startsWith(q))).length;
   let score = queryWords.length ? (hits / queryWords.length) * 10 : 0;
-  if (words(food.name)[0] && queryWords[0] && words(food.name)[0].startsWith(queryWords[0])) score += 2;
+  if (nameOnly[0] && queryWords[0] && nameOnly[0].startsWith(queryWords[0])) score += 2;
+  // The thing itself before things made with it: "banaan" → a banana before
+  // "banaan speltpannenkoek". Exact name wins; each extra word costs a bit.
+  // (Not for US branded products: their names are often just the category.)
+  const usBranded = food.source === 'usda' && food.dataType === 'Branded';
+  if (!usBranded && queryWords.length && nameOnly.join(' ') === queryWords.join(' ')) score += 6;
+  const extra = nameOnly.filter(w => !queryWords.some(q => w.startsWith(q))).length;
+  score -= Math.min(extra, 4) * 0.6;
   if (food.source === 'off') score += food.nl ? 3 : 1;
-  if (food.source === 'usda') score += food.dataType === 'Branded' ? -1 : 2;
-  return score - position * 0.35;
+  if (food.source === 'usda') score += usBranded ? -2 : 2;
+  return score - position * 0.25;
 }
 
 function rankFoods(query, lists, limit = 20) {
