@@ -24,6 +24,7 @@ const { createNotificationsRouter, notifyVolumePasses, deleteNotifications } = r
 const coachNotifications = require('./src/coachNotifications');
 const { createSyncRouter, syncDocId } = require('./src/routes/sync');
 const { createCoachNutritionRouter } = require('./src/routes/coachNutrition');
+const { createCoachFoodsRouter, createClientCoachFoodsRouter } = require('./src/routes/coachFoods');
 
 const { createSyncRouter } = require('./src/routes/sync');
 const { createFoodRouter } = require('./src/routes/food');
@@ -4683,6 +4684,13 @@ const foodLimiter = rateLimit({
   message: { success: false, error: { code: 'food.rate_limited', message: 'Too many food searches. Try again shortly.' } }
 });
 app.use('/api/food', authenticateToken, foodLimiter, createFoodRouter({ sendError, sendSuccess }));
+
+// Coach-approved foods shared with clients (src/routes/coachFoods.js).
+const foodsAvailable = (_req, res, next) => (firebaseEnabled ? next() : sendError(res, 503, 'foods.firebase_disabled', 'Coach foods require a migrated (Firebase) backend.'));
+app.use('/api/coach/foods', authenticateToken, requireCoachPlan, coachNutritionLimiter, foodsAvailable,
+  createCoachFoodsRouter({ db, sendError, sendSuccess, resolveCallerUid }));
+app.use('/api/client/coach-foods', authenticateToken, coachNutritionLimiter, foodsAvailable,
+  createClientCoachFoodsRouter({ db, sendError, sendSuccess, resolveCallerUid }));
 
 // ── Master plans (src/routes/plans.js) ───────────────────────────────────────
 // A broken rules/*.json must not take the whole API down: only the plan

@@ -31,6 +31,22 @@ function num(v, max = 100000) {
   return Number.isFinite(n) && n >= 0 && n <= max ? n : null;
 }
 
+// Calories vs. what the macros add up to (4P + 4C + 9F). Labels can
+// legitimately differ by fibre (2 kcal/g on EU labels), polyols, alcohol and
+// rounding, so a food is only flagged when it is more than 15 % off both
+// with and without fibre, and small amounts get a 10 kcal margin.
+// Same rule as the app's food-core.js kcalCheck.
+function kcalMismatch({ kcal, protein, carbs, fat, fiber }) {
+  const k = Number(kcal) || 0;
+  const base = (Number(protein) || 0) * 4 + (Number(carbs) || 0) * 4 + (Number(fat) || 0) * 9;
+  const withFiber = base + (Number(fiber) || 0) * 2;
+  const off = expected => {
+    const diff = Math.abs(k - expected);
+    return diff > 10 && diff > Math.max(k, expected) * 0.15;
+  };
+  return off(base) && off(withFiber);
+}
+
 // One synced entry → what the coach may see, or null when unusable.
 function sanitizeEntry(raw) {
   if (!raw || typeof raw !== 'object') return null;
@@ -57,7 +73,8 @@ function sanitizeEntry(raw) {
     if (v !== null) out[k] = k === 'kcal' ? Math.round(v) : round1(v);
   }
   for (const k of ['kcal', 'protein', 'carbs', 'fat']) if (out[k] === undefined) out[k] = 0;
-  if (raw.flag === 'kcal_mismatch') out.flag = 'kcal_mismatch';
+  // Worked out here too, so the flag doesn't depend on the app version.
+  if (raw.flag === 'kcal_mismatch' || kcalMismatch(out)) out.flag = 'kcal_mismatch';
   const t = num(raw.t, 1e14);
   if (t !== null) out.t = Math.round(t);
   return out;
@@ -194,6 +211,6 @@ function summarize({ entries, totalsByDate, target, today, days = 28 }) {
 
 module.exports = {
   MEALS, NUTRIENTS, MAX_DAYS,
-  sanitizeEntry, sanitizeTotals, sanitizeTarget,
+  sanitizeEntry, sanitizeTotals, sanitizeTarget, kcalMismatch,
   buildDays, windowStats, adherenceLevel, onTarget, summarize, addDays,
 };
