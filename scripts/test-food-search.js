@@ -197,6 +197,47 @@ async function get(server, p) {
     server.close();
   }
 
+  // ── Barcode ───────────────────────────────────────────────────────────────
+  {
+    const f = fakeFetch({
+      'world.openfoodfacts.org': { status: 1, product: { ...offHagelslag, serving_quantity: 20, serving_size: '20 g' } },
+      'api.nal.usda.gov': { foods: [usdaBranded] },
+    });
+    const server = await serve(createFoodRouter({ sendError, sendSuccess, fetchFn: f, usdaKey: () => 'k', log: { warn() {} } }));
+    let r = await get(server, '/api/food/barcode/8710400002970');
+    check('barcode: OFF product with per-100 g and serving', r.status === 200 && r.body.food.id === 'off:8710400002970' && r.body.food.servings[0].grams === 20);
+    const n = f.calls.length;
+    r = await get(server, '/api/food/barcode/8710400002970');
+    check('barcode: second lookup cached', r.body.cached === true && f.calls.length === n);
+    r = await get(server, '/api/food/barcode/8710400002971');
+    check('barcode: bad check digit rejected before any lookup', r.status === 422 && f.calls.length === n);
+    server.close();
+  }
+  {
+    const f = fakeFetch({ 'world.openfoodfacts.org': { status: 0 }, 'api.nal.usda.gov': { foods: [usdaBranded] } });
+    const server = await serve(createFoodRouter({ sendError, sendSuccess, fetchFn: f, usdaKey: () => 'k', log: { warn() {} } }));
+    const r = await get(server, '/api/food/barcode/012345678905');
+    check('barcode: falls back to USDA Branded by GTIN', r.status === 200 && r.body.food.id === 'usda:999');
+    server.close();
+  }
+  {
+    const f = fakeFetch({ 'world.openfoodfacts.org': { status: 0 }, 'api.nal.usda.gov': { foods: [] } });
+    const cache = createCache();
+    const server = await serve(createFoodRouter({ sendError, sendSuccess, fetchFn: f, usdaKey: () => 'k', cache, log: { warn() {} } }));
+    const r = await get(server, '/api/food/barcode/96385074');
+    check('barcode: not found → 404 with add-it-yourself code', r.status === 404 && r.body.error.code === 'food.barcode_not_found');
+    check('barcode: miss remembered', cache.get('b:96385074') === null);
+    server.close();
+  }
+  {
+    const f = fakeFetch({});
+    const cache = createCache();
+    const server = await serve(createFoodRouter({ sendError, sendSuccess, fetchFn: f, usdaKey: () => 'k', cache, log: { warn() {} } }));
+    const r = await get(server, '/api/food/barcode/96385074');
+    check('barcode: both sources down → 502, not cached', r.status === 502 && cache.size === 0);
+    server.close();
+  }
+
   const failed = results.filter(r => !r.pass);
   results.forEach(r => console.log(`${r.pass ? 'PASS' : 'FAIL'}  ${r.label}`));
   console.log(`\n${results.length - failed.length}/${results.length} passed`);
