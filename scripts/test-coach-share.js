@@ -11,9 +11,9 @@ function test(label, fn) {
 
 const NOW = new Date('2026-09-24T12:00:00Z'); // a Thursday
 
-test('normalizeSharing defaults everything on', () => {
-  assert.deepStrictEqual(cs.normalizeSharing(null), { checkIns: true, bodyweight: true, workouts: true });
-  assert.deepStrictEqual(cs.normalizeSharing({ bodyweight: false, junk: 1 }), { checkIns: true, bodyweight: false, workouts: true });
+test('normalizeSharing defaults everything on except the food log', () => {
+  assert.deepStrictEqual(cs.normalizeSharing(null), { checkIns: true, bodyweight: true, workouts: true, nutrition: false });
+  assert.deepStrictEqual(cs.normalizeSharing({ bodyweight: false, junk: 1 }), { checkIns: true, bodyweight: false, workouts: true, nutrition: false });
 });
 
 test('buildShareFields keeps valid check-ins, newest first, deduped by date', () => {
