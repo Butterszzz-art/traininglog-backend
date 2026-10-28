@@ -24,6 +24,7 @@ const foods = require('../nutrition/foods');
 const SEARCH_TTL_MS = 24 * 60 * 60 * 1000;
 const BARCODE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const BARCODE_MISS_TTL_MS = 6 * 60 * 60 * 1000; // a product may be added to OFF soon
+const OFF_SEARCH_FIELDS = 'code,product_name,product_name_nl,product_name_en,generic_name,generic_name_nl,brands,nutriments,serving_size,serving_quantity,product_quantity,product_quantity_unit,quantity,countries_tags';
 const OFF_PRODUCT_FIELDS = 'code,product_name,product_name_nl,product_name_en,generic_name,generic_name_nl,brands,nutriments,serving_size,serving_quantity,product_quantity,product_quantity_unit,quantity,countries_tags';
 const CACHE_MAX = 800;
 const UPSTREAM_TIMEOUT_MS = 4500;
@@ -64,16 +65,15 @@ async function getJson(fetchFn, url, headers = {}) {
   return res.json();
 }
 
-function createFoodRouter({
-  sendError, sendSuccess,
+// The search itself, shared by GET /api/food/search and the AI search
+// assist (src/nutrition/searchAssist.js), with one cache between them.
+function createFoodSearcher({
   fetchFn = (...a) => fetch(...a),
   usdaKey = () => process.env.USDA_API_KEY || '',
   userAgent = () => process.env.OFF_USER_AGENT || DEFAULT_USER_AGENT,
   cache = createCache(),
   log = console,
 } = {}) {
-  const router = express.Router();
-
   async function searchUsda(q) {
     const key = usdaKey();
     if (!key || key === 'DEMO_KEY') return { status: 'disabled', foods: [] };
@@ -87,15 +87,57 @@ function createFoodRouter({
     return { status: 'ok', foods: (data.foods || []).map(foods.mapUsdaFood).filter(Boolean) };
   }
 
-  async function searchOff(q) {
+  async function offQuery(q) {
     const url = 'https://search.openfoodfacts.org/search?' + new URLSearchParams({
       q,
       page_size: String(OFF_PAGE),
       langs: 'nl,en',
-      fields: 'code,product_name,product_name_nl,product_name_en,generic_name,generic_name_nl,brands,nutriments,serving_size,serving_quantity,product_quantity,product_quantity_unit,quantity,countries_tags',
+      fields: OFF_SEARCH_FIELDS,
     });
     const data = await getJson(fetchFn, url, { 'User-Agent': userAgent() });
-    return { status: 'ok', foods: (data.hits || []).map(foods.mapOffProduct).filter(Boolean) };
+    return (data.hits || []).map(foods.mapOffProduct).filter(Boolean);
+  }
+
+  // Dutch products first: the same words limited to products sold in the
+  // Netherlands, run next to the worldwide query (a plain "yoghurt" otherwise
+  // starts with Bulgarian products). Either one answering is enough.
+  async function searchOff(q) {
+    const [nl, all] = await Promise.allSettled([
+      offQuery(`${q} countries_tags:"en:netherlands"`),
+      offQuery(q),
+    ]);
+    if (nl.status === 'rejected' && all.status === 'rejected') throw all.reason;
+    const list = [...(nl.status === 'fulfilled' ? nl.value.map(f => ({ ...f, nl: true })) : []),
+      ...(all.status === 'fulfilled' ? all.value : [])];
+    const seen = new Set();
+    return { status: 'ok', foods: list.filter(f => (seen.has(f.id) ? false : seen.add(f.id))) };
+  }
+
+  // sources: 'off', 'usda' or 'all'. → { foods, sources: { off?, usda? } }
+  async function search(q, { sources = 'all', limit = 40 } = {}) {
+    const key = `s:${sources}:${q}`;
+    const cached = cache.get(key);
+    if (cached) return { ...cached, cached: true };
+    const want = sources === 'all' ? ['off', 'usda'] : [sources];
+    const runs = await Promise.allSettled(want.map(name => (name === 'off' ? searchOff(q) : searchUsda(q))));
+    const status = {};
+    const lists = [];
+    runs.forEach((r, i) => {
+      const name = want[i];
+      if (r.status === 'fulfilled') {
+        status[name] = r.value.status;
+        lists.push(r.value.foods);
+      } else {
+        status[name] = 'error';
+        log.warn(`[food] ${name} search failed for "${q}": ${r.reason && r.reason.message}`);
+      }
+    });
+    const merged = foods.rankFoods(q, lists, limit);
+    const out = { foods: merged, sources: status };
+    // Only cache an answer from every source that's switched on, so a
+    // passing outage isn't remembered for a day.
+    if (!Object.values(status).includes('error')) cache.set(key, out, SEARCH_TTL_MS);
+    return out;
   }
 
   async function lookupOff(code) {
@@ -125,6 +167,22 @@ function createFoodRouter({
     return null;
   }
 
+  return { search, lookupOff, lookupUsda, cache, log };
+}
+
+// One searcher per server instance, so the search route and the AI assist
+// share a cache.
+let defaultSearcher = null;
+function getDefaultSearcher() {
+  if (!defaultSearcher) defaultSearcher = createFoodSearcher();
+  return defaultSearcher;
+}
+
+function createFoodRouter({ sendError, sendSuccess, searcher, ...opts } = {}) {
+  const router = express.Router();
+  const s = searcher || (Object.keys(opts).length ? createFoodSearcher(opts) : getDefaultSearcher());
+  const { cache, log } = s;
+
   router.get('/barcode/:code', async (req, res) => {
     const code = foods.normalizeBarcode(req.params.code);
     if (!code || !foods.validBarcode(code)) {
@@ -137,7 +195,7 @@ function createFoodRouter({
     }
     let food = null;
     let failed = 0;
-    for (const lookup of [lookupOff, lookupUsda]) {
+    for (const lookup of [s.lookupOff, s.lookupUsda]) {
       try {
         food = await lookup(code);
       } catch (err) {
@@ -153,37 +211,22 @@ function createFoodRouter({
     return sendSuccess(res, 200, { food });
   });
 
+  // ?source=off|usda searches one source, so the app can show Open Food
+  // Facts' results (fast) without waiting for USDA (slower); no source =
+  // both, merged.
   router.get('/search', async (req, res) => {
     const q = foods.normalizeQuery(req.query.q);
     if (q.length < 2) return sendError(res, 422, 'food.query_too_short', 'Type at least 2 characters.');
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || DEFAULT_LIMIT, 1), 40);
-
-    const cached = cache.get(`s:${q}`);
-    if (cached) return sendSuccess(res, 200, { foods: cached.foods.slice(0, limit), sources: cached.sources, cached: true });
-
-    const [usda, off] = await Promise.allSettled([searchUsda(q), searchOff(q)]);
-    const sources = {};
-    const lists = [];
-    for (const [name, r] of [['off', off], ['usda', usda]]) {
-      if (r.status === 'fulfilled') {
-        sources[name] = r.value.status;
-        lists.push(r.value.foods);
-      } else {
-        sources[name] = 'error';
-        log.warn(`[food] ${name} search failed for "${q}": ${r.reason && r.reason.message}`);
-      }
-    }
-    const merged = foods.rankFoods(q, lists, 40);
-    // Only cache an answer from every source that's switched on, so a
-    // passing outage isn't remembered for a day.
-    if (!Object.values(sources).includes('error')) cache.set(`s:${q}`, { foods: merged, sources }, SEARCH_TTL_MS);
-    if (!merged.length && Object.values(sources).every(s => s !== 'ok')) {
+    const sources = ['off', 'usda'].includes(req.query.source) ? req.query.source : 'all';
+    const r = await s.search(q, { sources });
+    if (!r.foods.length && Object.values(r.sources).every(v => v !== 'ok')) {
       return sendError(res, 502, 'food.search_unavailable', 'Food search is unavailable right now. Try again shortly, or add the food yourself.');
     }
-    return sendSuccess(res, 200, { foods: merged.slice(0, limit), sources });
+    return sendSuccess(res, 200, { foods: r.foods.slice(0, limit), sources: r.sources, ...(r.cached ? { cached: true } : {}) });
   });
 
   return router;
 }
 
-module.exports = { createFoodRouter, createCache, DEFAULT_USER_AGENT };
+module.exports = { createFoodRouter, createFoodSearcher, getDefaultSearcher, createCache, DEFAULT_USER_AGENT };

@@ -104,6 +104,14 @@ check('barcode: wrong length', !foods.validBarcode('12345'));
   check('rank: same barcode from both sources kept once', dupe.length === 1);
 }
 
+{
+  const mk = (id, name, extra = {}) => ({ id, source: 'off', name, brand: '', per100: { kcal: 1, protein: 0, carbs: 0, fat: 0 }, servings: [], nl: true, ...extra });
+  const r = foods.rankFoods('banaan', [[mk('off:1', 'Banaan speltpannenkoek'), mk('off:2', 'Hipro banaan'), mk('off:3', 'Banaan')]]);
+  check('rank: the plain food beats foods made with it', r[0].id === 'off:3', r.map(f => f.name));
+  const z = foods.rankFoods('zalm', [[mk('off:1', 'Eggwrap gerookte zalm'), mk('off:2', 'Zalm steak'), mk('off:3', 'Zalm')]]);
+  check('rank: exact name first, then names starting with it', z[0].id === 'off:3' && z[1].id === 'off:2', z.map(f => f.name));
+}
+
 // ── Cache ───────────────────────────────────────────────────────────────────
 {
   const c = createCache(2);
@@ -163,6 +171,17 @@ async function get(server, p) {
     check('route: 1-char query rejected', short.status === 422);
     const lim = await get(server, '/api/food/search?q=yoghurt&limit=1');
     check('route: limit honoured', lim.body.foods.length === 1);
+    server.close();
+  }
+  {
+    const f = fakeFetch(upstream);
+    const server = await serve(createFoodRouter({ sendError, sendSuccess, fetchFn: f, usdaKey: () => 'k', log: { warn() {} } }));
+    const r = await get(server, '/api/food/search?q=hagelslag&source=off');
+    check('route: source=off asks only Open Food Facts', r.status === 200 && !f.calls.some(c => c.url.includes('nal.usda.gov')) && Object.keys(r.body.sources).join() === 'off');
+    check('route: OFF asked twice, once limited to Dutch products', f.calls.filter(c => c.url.includes('openfoodfacts')).length === 2
+      && f.calls.some(c => decodeURIComponent(c.url).includes('countries_tags:"en:netherlands"')));
+    const u = await get(server, '/api/food/search?q=hagelslag&source=usda');
+    check('route: source=usda asks only USDA', u.status === 200 && Object.keys(u.body.sources).join() === 'usda');
     server.close();
   }
   {

@@ -3,6 +3,9 @@ const { providers, openModels, createMessage, perModelTimeoutMs, modelChain } = 
 const { TRAINING_KNOWLEDGE } = require('../knowledge/training-methodology');
 const { NUTRITION_KNOWLEDGE } = require('../knowledge/nutrition-methodology');
 const exerciseClassify = require('../coach/exerciseClassify');
+const { jsonOutput } = require('../coach/client');
+const { createSearchAssist, cleanQuery: cleanFoodQuery } = require('../nutrition/searchAssist');
+const { getDefaultSearcher } = require('./food');
 
 const router = express.Router();
 
@@ -342,6 +345,28 @@ router.post('/classify-exercises', async (req, res) => {
   } catch (err) {
     console.error('[AI classify-exercises]', err.message);
     return res.status(502).json({ success: false, error: 'AI request failed', details: err.message });
+  }
+});
+
+// POST /api/ai/food-search-assist — { q } → { rewrite: { corrected, english,
+// brand, alternatives } | null, foods, sources }. The app calls this when the
+// normal food search finds nothing good; see src/nutrition/searchAssist.js.
+let foodSearchAssist = null;
+router.post('/food-search-assist', async (req, res) => {
+  const q = cleanFoodQuery((req.body || {}).q);
+  if (!q) return res.status(422).json({ success: false, error: 'Type at least 2 characters.' });
+  try {
+    if (!foodSearchAssist) {
+      foodSearchAssist = createSearchAssist({
+        searcher: getDefaultSearcher(), createMessageFn: createMessage, jsonOutputFn: jsonOutput,
+        timeoutMs: perModelTimeoutMs(8000, 15000),
+      });
+    }
+    const out = await foodSearchAssist.assist(q);
+    return res.json({ success: true, ...out });
+  } catch (err) {
+    console.error('[AI food-search-assist]', err.message);
+    return res.status(502).json({ success: false, error: 'AI search is unavailable right now.' });
   }
 });
 
