@@ -652,6 +652,13 @@ setTimeout(() => {
     r = await req('GET', '/api/client/coach-assignment', tokClient);
     check('client reads the assigned program', r.body?.assignments?.[0]?.program?.title === 'Coach PPL');
 
+    r = await req('PATCH', '/api/coach/clients/uidClient456', tokCoach, { hideNutritionNumbers: true });
+    check('hide nutrition numbers reaches the client mirror', r.status === 200 && store['users/uidClient456/coachAssignment']?.uidABC123?.hideNutritionNumbers === true);
+    r = await req('PATCH', '/api/coach/clients/uidClient456', tokCoach, { hideNutritionNumbers: 'yes' });
+    check('hide nutrition numbers must be a boolean', r.status === 422);
+    await req('PATCH', '/api/coach/clients/uidClient456', tokCoach, { hideNutritionNumbers: false });
+    check('hide nutrition numbers can be switched off', store['users/uidClient456/coachAssignment']?.uidABC123?.hideNutritionNumbers === false);
+
     r = await req('POST', '/coach/workouts', tokCoach, { clientUid: 'uidClient456', date: today, workout: { sets: [{ exerciseName: 'Deadlift', weight: 140, reps: 3 }] } });
     check('log-for-client by uid via the Firestore link', r.status === 200 && store['users/uidClient456/workouts']?.[r.body?.recordId]?.workout?.loggedByCoach === 'migrateduser');
     r = await req('POST', '/coach/workouts', tokCoach, { clientUid: 'uidNobody', date: today, workout: { sets: [] } });
