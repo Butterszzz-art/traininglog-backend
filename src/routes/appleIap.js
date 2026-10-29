@@ -59,7 +59,10 @@ async function verifyWithAny(verifiers, method, jws) {
 // listed (SUBSCRIBED, DID_RENEW, DID_CHANGE_RENEWAL_STATUS, …) means "still
 // active" — the transaction's own expiresDate is what actually gates access.
 function entitlementFromNotification(notificationType) {
-  if (['EXPIRED', 'REFUND', 'REVOKE', 'GRACE_PERIOD_EXPIRED'].includes(notificationType)) {
+  if (['REFUND', 'REVOKE'].includes(notificationType)) {
+    return { plan: 'free', status: 'canceled', revoked: true };
+  }
+  if (['EXPIRED', 'GRACE_PERIOD_EXPIRED'].includes(notificationType)) {
     return { plan: 'free', status: 'canceled' };
   }
   if (notificationType === 'DID_FAIL_TO_RENEW') return { status: 'past_due' };
@@ -203,6 +206,7 @@ function createAppleIapRouter({
         periodEnd: tx.expiresDate ? new Date(Number(tx.expiresDate)).toISOString() : null,
         source: 'apple',
         sourceCustomerId: String(tx.originalTransactionId || ''),
+        revoked: derived.revoked === true,
       });
       return res.status(200).send();
     } catch (err) {
