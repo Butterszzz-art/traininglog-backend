@@ -16,6 +16,9 @@
 // so the resolver also counts the user doc's own userPlan as a source.
 const PLAN_RANK = { free: 0, pro: 1, coach: 2 };
 const SUBSCRIPTION_SOURCES = new Set(['stripe_sub', 'apple_sub']);
+// Access the user paid for themselves. At the same plan these win over
+// Client Pro (coach_client), so billing screens show the user's own source.
+const OWN_PAID_SOURCES = new Set(['stripe_sub', 'apple_sub', 'prep_pass', 'meet_pass', 'founder_lifetime']);
 const FREE = Object.freeze({ plan: 'free', source: null, expiresAt: null, status: 'none', id: null });
 
 function toDate(value) {
@@ -35,10 +38,14 @@ function isActive(ent, now) {
   return !expires || expires > now;
 }
 
-// Higher wins: plan first, then no expiry > later expiry > earlier expiry.
+// Higher wins: plan first; at the same plan the user's own paid access beats
+// coach-included access; then no expiry > later expiry > earlier expiry.
 function compare(a, b) {
   const byPlan = PLAN_RANK[a.plan] - PLAN_RANK[b.plan];
   if (byPlan) return byPlan;
+  const ownA = OWN_PAID_SOURCES.has(a.source), ownB = OWN_PAID_SOURCES.has(b.source);
+  if (a.source === 'coach_client' && ownB) return -1;
+  if (b.source === 'coach_client' && ownA) return 1;
   const ea = toDate(a.expiresAt), eb = toDate(b.expiresAt);
   if (!ea && !eb) return 0;
   if (!ea) return 1;
@@ -133,5 +140,5 @@ function createEntitlements({ db, clock = () => new Date(), log = console }) {
 
 module.exports = {
   createEntitlements, pickEffective, legacyEntitlement, isActive, toDate,
-  PLAN_RANK, SUBSCRIPTION_SOURCES,
+  PLAN_RANK, SUBSCRIPTION_SOURCES, OWN_PAID_SOURCES,
 };
