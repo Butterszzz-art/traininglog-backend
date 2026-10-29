@@ -9,11 +9,13 @@ test('cleanMeal keeps only the known fields and recomputes the totals', () => {
     totals: { kcal: 99999 },
     items: [
       { name: '  Chicken   breast ', amount: 200, unit: 'g', kcal: 330.4, protein: 62.04, carbs: 0, fat: 7.15, extra: 'x' },
-      { name: 'White rice', amount: 250, unit: 'g', kcal: 325, protein: 6, carbs: 70, fat: 1, fibre: 1.2 },
+      { name: 'White rice', amount: 1, unit: 'cup', grams: 250, kcal: 325, protein: 6, carbs: 70, fat: 1, fibre: 1.2 },
     ],
   });
   assert.deepEqual(meal.items[0], { name: 'Chicken breast', amount: 200, unit: 'g', kcal: 330, protein: 62, carbs: 0, fat: 7.2 });
   assert.equal(meal.items[1].fibre, 1.2);
+  assert.equal(meal.items[1].grams, 250);
+  assert.equal(meal.items[1].unit, 'cup');
   assert.deepEqual(meal.totals, { kcal: 655, protein: 68, carbs: 70, fat: 8.2 });
   assert.equal(meal.meal, 'lunch');
 });

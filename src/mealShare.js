@@ -26,7 +26,7 @@ function num(value, decimals = 1) {
   return Math.round(Math.min(n, NUM_MAX) * f) / f;
 }
 
-// { meal?, items: [{ name, amount?, unit?, kcal, protein, carbs, fat, fibre? }] }
+// { meal?, items: [{ name, amount?, unit?, grams?, kcal, protein, carbs, fat, fibre? }] }
 // → the cleaned meal with totals, or null when there is no food in it.
 function cleanMeal(value) {
   if (!value || typeof value !== 'object' || !Array.isArray(value.items)) return null;
@@ -46,6 +46,7 @@ function cleanMeal(value) {
     if (raw.amount != null && num(raw.amount) > 0) item.amount = num(raw.amount);
     const unit = cleanText(String(raw.unit ?? ''), UNIT_MAX);
     if (item.amount && unit) item.unit = unit;
+    if (raw.grams != null && num(raw.grams) > 0) item.grams = num(raw.grams);
     if (raw.fibre != null) item.fibre = num(raw.fibre);
     items.push(item);
   }
