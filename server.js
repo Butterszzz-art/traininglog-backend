@@ -11,6 +11,7 @@ const { router: aiRouter } = require('./src/routes/ai');
 const { createPremiumRouter } = require('./src/routes/premium');
 const { createProfilesRouter, deleteProfile, parseTerms: parseProfileTerms, containsObjectionable } = require('./src/routes/profiles');
 const { DEFAULT_OBJECTIONABLE_TERMS } = require('./src/objectionableTerms');
+const { normalizeExercise, exerciseFilter, addDays } = require('./src/activitySyncExercise');
 const { createAppleIapRouter, createAppleVerifiers } = require('./src/routes/appleIap');
 const { createPlanAccess, parseUsernames } = require('./src/planAccess');
 const { createEntitlements, pickEffective, legacyEntitlement, toDate, SUBSCRIPTION_SOURCES } = require('./src/entitlements');
@@ -2561,16 +2562,14 @@ app.get('/api/activity-sync/activity', authenticateToken, async (req, res) => {
 });
 
 // Sleep has no dailyRollUp (sessions can span midnight), so it's fetched via
-// dataPoints.list, filtered on sleep.interval.end_time (the one time filter
-// Google supports for sleep). "Last night" is attributed to the day the user
-// wakes up: sessions ending from noon the day before through noon of `date`.
-// The main overnight sleep wins over naps; otherwise the latest-ending one.
+// dataPoints.list, filtered on the session's local (civil) end time. "Last
+// night" is attributed to the day the user wakes up: sessions ending from
+// local noon the day before through local noon of `date`. The main overnight
+// sleep wins over naps; otherwise the latest-ending one.
 const SLEEP_ASLEEP_STAGES = ['LIGHT', 'DEEP', 'REM', 'ASLEEP', 'RESTLESS'];
 
 async function fetchSleepSession(accessToken, healthUserId, date) {
-  const windowEnd = new Date(date + 'T12:00:00Z');
-  const windowStart = new Date(windowEnd.getTime() - 24 * 60 * 60 * 1000);
-  const filter = `sleep.interval.end_time >= "${windowStart.toISOString()}" AND sleep.interval.end_time < "${windowEnd.toISOString()}"`;
+  const filter = `sleep.interval.civil_end_time >= "${addDays(date, -1)}T12:00:00" AND sleep.interval.civil_end_time < "${date}T12:00:00"`;
 
   const response = await fetch(
     `${GOOGLE_HEALTH_API_BASE}/users/${healthUserId}/dataTypes/sleep/dataPoints?`
@@ -2669,6 +2668,55 @@ app.get('/api/activity-sync/sleep', authenticateToken, async (req, res) => {
     return sendSuccess(res, 200, { sleep });
   } catch (err) {
     console.error('GET /api/activity-sync/sleep failed:', err);
+    return sendError(res, 500, 'activity_sync.server_error', String(err));
+  }
+});
+
+// GET /api/activity-sync/exercises?start=YYYY-MM-DD&end=YYYY-MM-DD — workouts
+// recorded by the user's tracker that started on local dates start..end
+// (inclusive; default: the 7 days ending `end`, which defaults to today).
+// The app merges these into its cardio log.
+const EXERCISE_MAX_RANGE_DAYS = 31;
+const EXERCISE_MAX_PAGES = 4; // Google caps exercise pages at 25 points
+
+app.get('/api/activity-sync/exercises', authenticateToken, async (req, res) => {
+  if (!activitySyncEnabled) return sendError(res, 503, 'activity_sync.disabled', 'Activity Sync is not configured.');
+  if (!req.user.uid) {
+    return sendError(res, 403, 'activity_sync.requires_firebase_auth', 'Please sign in again before syncing workouts.');
+  }
+
+  const isDate = v => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
+  const end = isDate(req.query.end) ? req.query.end : new Date().toISOString().slice(0, 10);
+  const start = isDate(req.query.start) ? req.query.start : addDays(end, -6);
+  const spanDays = (new Date(end) - new Date(start)) / 86400000;
+  if (!(spanDays >= 0 && spanDays < EXERCISE_MAX_RANGE_DAYS)) {
+    return sendError(res, 400, 'activity_sync.bad_range', `start must be on or before end, at most ${EXERCISE_MAX_RANGE_DAYS} days apart.`);
+  }
+
+  try {
+    const session = await getValidActivitySyncSession(req.user.uid);
+    if (!session) return sendError(res, 409, 'activity_sync.not_connected', 'Activity Sync is not connected.');
+
+    const points = [];
+    let pageToken = '';
+    for (let page = 0; page < EXERCISE_MAX_PAGES; page++) {
+      const params = new URLSearchParams({ filter: exerciseFilter(start, end), pageSize: '25' });
+      if (pageToken) params.set('pageToken', pageToken);
+      const response = await fetch(
+        `${GOOGLE_HEALTH_API_BASE}/users/${session.healthUserId}/dataTypes/exercise/dataPoints?${params}`,
+        { headers: { Authorization: `Bearer ${session.accessToken}` } }
+      );
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error?.message || 'exercise dataPoints.list failed');
+      points.push(...(data.dataPoints || []));
+      pageToken = data.nextPageToken || '';
+      if (!pageToken) break;
+    }
+
+    const exercises = points.map(normalizeExercise).filter(Boolean);
+    return sendSuccess(res, 200, { start, end, exercises });
+  } catch (err) {
+    console.error('GET /api/activity-sync/exercises failed:', err);
     return sendError(res, 500, 'activity_sync.server_error', String(err));
   }
 });
