@@ -201,9 +201,32 @@ const server = app.listen(0, async () => {
     r = await G('bob', 'GET', '/');
     check('bob now owner', r.body.groups[0].isOwner, r.body.groups[0]);
 
+    console.log('— group meals');
+    const jpeg = `data:image/jpeg;base64,${Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(64)]).toString('base64')}`;
+    const lunch = { meal: 'lunch', items: [{ name: 'Chicken', amount: 200, unit: 'g', kcal: 330, protein: 62, carbs: 0, fat: 7 }, { name: 'Rice', kcal: 325, protein: 6, carbs: 70, fat: 1 }] };
+    r = await G('bob', 'POST', `/${gid}/posts`, { text: 'lunch', share: { type: 'meal', name: 'Lunch', data: lunch }, photo: jpeg });
+    check('meal post with photo', r.status === 201 && r.body.post.share.type === 'meal' && r.body.post.share.data.totals.kcal === 655 && r.body.post.hasPhoto, r);
+    const mealPost = r.body.post.id;
+    check('photo stored apart from the post', store.has(`sharedMealPhotos/post_${mealPost}`) && !JSON.stringify(store.get(`groupPosts/${mealPost}`)).includes('base64'), [...store.keys()]);
+    r = await G('dave', 'GET', `/${gid}/posts/${mealPost}/photo`);
+    check('member reads the photo', r.status === 200 && r.body.photo.startsWith('data:image/jpeg;base64,'), r);
+    r = await G('zed', 'GET', `/${gid}/posts/${mealPost}/photo`);
+    check('non-member cannot read the photo', r.status === 403, r);
+    r = await G('bob', 'POST', `/${gid}/posts`, { text: 'pic', photo: jpeg });
+    check('photo without a meal rejected', r.status === 422 && r.body.error.code === 'groups.invalid_photo', r);
+    r = await G('bob', 'POST', `/${gid}/posts`, { share: { type: 'meal', name: 'Empty', data: { items: [] } } });
+    check('meal with no food rejected', r.status === 422, r);
+    r = await G('bob', 'POST', `/${gid}/posts`, { share: { type: 'meal', name: 'Snack', data: { items: [{ name: 'fuck nuts', kcal: 100 }] } } });
+    check('objectionable food name rejected', r.status === 422 && r.body.error.code === 'groups.objectionable', r);
+    r = await G('bob', 'DELETE', `/${gid}/posts/${mealPost}`);
+    check('deleting the post deletes its photo', r.status === 200 && !store.has(`sharedMealPhotos/post_${mealPost}`), [...store.keys()]);
+    r = await G('bob', 'POST', `/${gid}/posts`, { share: { type: 'meal', name: 'Dinner', data: lunch }, photo: jpeg });
+    const mealPost2 = r.body.post.id;
+
     r = await G('mod', 'DELETE', `/${gid}`);
     check('moderator deletes group', r.status === 200, r);
     check('group posts deleted', ![...store.keys()].some(k => k.startsWith('groupPosts/')), [...store.keys()]);
+    check('group meal photos deleted', !store.has(`sharedMealPhotos/post_${mealPost2}`), [...store.keys()]);
     r = await G('bob', 'GET', `/nope!/posts`);
     check('bad id 404', r.status === 404, r);
     console.log('— feed');
@@ -263,10 +286,31 @@ const server = app.listen(0, async () => {
     await S('Alice', 'DELETE', `/${shareId}`);
     r = await S('Alice', 'GET', '');
     check('recipient removes it', r.body.inbox.length === 0, r.body);
+    const photo = `data:image/jpeg;base64,${Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(64)]).toString('base64')}`;
+    const meal = { meal: 'dinner', items: [{ name: 'Salmon', amount: 150, unit: 'g', kcal: 310, protein: 31, carbs: 0, fat: 20 }] };
+    r = await S('Me_User', 'POST', '', { to: 'alice', type: 'meal', name: 'Dinner', data: meal, photo });
+    check('send a meal with a photo', r.status === 201 && r.body.share.hasPhoto, r);
+    r = await S('Alice', 'GET', '');
+    const mealShare = r.body.inbox[0];
+    check('meal arrives with totals', mealShare.type === 'meal' && mealShare.data.totals.protein === 31 && mealShare.hasPhoto && !('photo' in mealShare), mealShare);
+    r = await S('Alice', 'GET', `/${mealShare.id}/photo`);
+    check('recipient reads the photo', r.status === 200 && r.body.photo.startsWith('data:image/jpeg'), r);
+    r = await S('bob', 'GET', `/${mealShare.id}/photo`);
+    check('others cannot read the photo', r.status === 404, r);
+    r = await S('Me_User', 'POST', '', { to: 'alice', type: 'program', name: 'PPL', data: program, photo });
+    check('photo only allowed on meals', r.status === 422 && r.body.error.code === 'shares.invalid_photo', r);
+    r = await S('Me_User', 'POST', '', { to: 'alice', type: 'meal', name: 'x', data: meal, photo: 'data:image/jpeg;base64,AAAA' });
+    check('fake photo rejected', r.status === 422, r);
+    await S('Alice', 'DELETE', `/${mealShare.id}`);
+    check('dismissing deletes the photo', !store.has(`sharedMealPhotos/share_${mealShare.id}`), [...store.keys()]);
+
     await S('Me_User', 'POST', '', { to: 'bob', type: 'template', name: 'Legs', data: { exercises: [] } });
+    r = await S('Me_User', 'POST', '', { to: 'bob', type: 'meal', name: 'Dinner', data: meal, photo });
+    const bobMeal = r.body.share.id;
     await deleteShares(db, 'Me_User');
     r = await S('bob', 'GET', '');
     check('account deletion removes shares', r.body.inbox.length === 0, r.body);
+    check('account deletion removes share photos', !store.has(`sharedMealPhotos/share_${bobMeal}`), [...store.keys()]);
 
     console.log('— exercise leaderboard');
     const best = bestSetsByLift({ units: 'kg', log: [
