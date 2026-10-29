@@ -16,6 +16,8 @@ const { HEALTH_METRICS_SCOPE, RECOVERY_TYPES, recoveryFilter, mergeRecoveryPoint
 const { DAILY_VITALS, SCALE_SAMPLES, dailyFilter, sampleFilter, mergeDailyVitals, mergeWeighIns } = require('./src/activitySyncBody');
 const { createAppleIapRouter, createAppleVerifiers } = require('./src/routes/appleIap');
 const { createPlanAccess, parseUsernames } = require('./src/planAccess');
+const { createAiMeter } = require('./src/aiMeter');
+const AI_LIMITS = require('./src/config/aiLimits');
 const { createEntitlements, pickEffective, legacyEntitlement, toDate, SUBSCRIPTION_SOURCES } = require('./src/entitlements');
 const { createCoachCodes, formatCode } = require('./src/coachCode');
 const fs = require('fs');
@@ -301,6 +303,8 @@ app.use(cors({
   },
   credentials: true,
   allowedHeaders: ['Content-Type', 'Authorization'],
+  // The app reads the AI credits left after each AI call (src/aiMeter.js).
+  exposedHeaders: ['X-AI-Remaining'],
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
 }));
 
@@ -523,7 +527,7 @@ async function getUserPlanInfo(username, opts = {}) {
         usedReverseTrial: u.usedReverseTrial === true,
         lastMomentTrialAt: lastMoment ? lastMoment.toISOString() : null,
       },
-      ai: null, // filled in by PAY2-3 (AI metering)
+      ai: await aiUsageFor(uid, effective),
       coachPro, // { status: 'active' | 'paused' | 'revoked', coachUsername } or null
     };
   }
@@ -549,7 +553,6 @@ const planAccess = createPlanAccess({
   adminUsernames: parseUsernames(process.env.ADMIN_USERNAMES),
   sendError,
 });
-const requirePaidPlan = planAccess.requirePaidPlan;
 const requireCoachPlan = planAccess.requireCoachPlan;
 
 // Coach Pro codes (src/coachCode.js): a coach's code gives the athlete who
@@ -561,6 +564,31 @@ const coachCodes = createCoachCodes({
     return !!name && hasCoachAccess(name, { verifyCoachCode: false });
   },
 });
+
+// AI usage metering (src/aiMeter.js, limits in src/config/aiLimits.js):
+// replaces the old "AI = paid only" gate. Free accounts get a few AI uses a
+// month; paid plans get fair-use caps. Accounts not yet migrated to Firestore
+// are counted under their username.
+const aiMeter = createAiMeter({
+  db,
+  sendError,
+  isAdmin: planAccess.isAdmin,
+  resolvePlan: async req => {
+    const username = req.user && req.user.username;
+    const info = await getUserPlanInfo(username);
+    const uid = (req.user && req.user.uid) || (username ? await resolveFirestoreUid(username) : null);
+    return { plan: info.plan, source: info.planSource || null, userKey: uid || (username ? `name:${username}` : null) };
+  },
+});
+
+async function aiUsageFor(uid, effective) {
+  try {
+    return await aiMeter.getUsage(uid, effective.plan, effective.source);
+  } catch (err) {
+    console.error('[getUserPlanInfo] AI usage lookup failed:', err.message);
+    return null;
+  }
+}
 
 app.get('/api/user/plan', authenticateToken, async (req, res) => {
   try {
@@ -5156,7 +5184,7 @@ app.post('/mobility/sessions', authenticateToken, async (req, res) => {
 
 // POST /ai/chat — short general chat through the configured AI provider
 // (src/coach/client.js: Anthropic, or Ollama / OpenRouter).
-app.post('/ai/chat', authenticateToken, requirePaidPlan, async (req, res) => {
+app.post('/ai/chat', authenticateToken, aiMeter.meterAi(AI_LIMITS.FEATURES['/chat']), async (req, res) => {
   const aiClient = require('./src/coach/client');
   try {
     if (!aiClient.isConfigured()) {
@@ -5203,8 +5231,8 @@ const aiLimiter = rateLimit({
   message: { success: false, error: { code: 'ai.rate_limited', message: 'Too many AI requests. Try again shortly.' } }
 });
 
-// Every AI feature is Pro — see src/planAccess.js.
-app.use('/api/ai', authenticateToken, aiLimiter, requirePaidPlan, aiRouter);
+// Plan + monthly AI allowance per feature — see src/aiMeter.js.
+app.use('/api/ai', authenticateToken, aiLimiter, aiMeter.meterAi(), aiRouter);
 
 // Ebooks and the ready-made program library. Full content is only returned to
 // Pro/Coach accounts (checked per request); free accounts get teasers.
