@@ -507,7 +507,8 @@ app.get('/api/user/plan', authenticateToken, async (req, res) => {
     return res.json({ ...info, admin: planAccess.isAdmin(req.user?.username) });
   } catch (err) {
     console.error('[GET /api/user/plan]', err.message);
-    return res.json({ plan: 'free', status: 'none' });
+    // Not a 200 "free": the app would overwrite a paying user's cached plan.
+    return sendError(res, 503, 'plan.lookup_failed', 'Could not load your plan. Please try again.');
   }
 });
 
