@@ -13,6 +13,7 @@ const { createProfilesRouter, deleteProfile, parseTerms: parseProfileTerms, cont
 const { DEFAULT_OBJECTIONABLE_TERMS } = require('./src/objectionableTerms');
 const { createAppleIapRouter, createAppleVerifiers } = require('./src/routes/appleIap');
 const { createPlanAccess, parseUsernames } = require('./src/planAccess');
+const { createEntitlements, pickEffective, legacyEntitlement, toDate, SUBSCRIPTION_SOURCES } = require('./src/entitlements');
 const fs = require('fs');
 const path = require('path');
 const { createModerationNotifier } = require('./src/moderationEmail');
@@ -34,6 +35,9 @@ const { createExerciseBoardRouter, recordExerciseBests, forgetExerciseSession, d
 const { pairId: friendPairId } = require('./src/routes/friends');
 const { isBlockedEitherWay, profileKey } = require('./src/routes/profiles');
 const { auth: fbAuth, db, FieldValue, firebaseEnabled, projectId: firebaseProjectId, initError: firebaseInitError } = require('./firebaseAdmin');
+// Pro/Coach access from every source (subscriptions, passes, trials, …) —
+// see src/entitlements.js.
+const entitlements = createEntitlements({ db });
 const { berekenClient } = require('./src/intakeCalculations');
 const { compactWorkout, readStoredWorkout } = require('./workoutFormat');
 const { computeSessionVolume, safeDocId, naturalDocId, syncEntryDocId, saveWorkoutWithTotals, batchSetAll, queryHistoryPage } = require('./workoutStore');
@@ -464,14 +468,35 @@ async function getUserPlanInfo(username) {
   if (uid) {
     const snap = await db.collection('users').doc(uid).get();
     const u = snap.exists ? snap.data() : {};
+    // Effective plan across every entitlement source (src/entitlements.js).
+    // `plan`/`status` stay backward compatible: a subscription reports its own
+    // status; any other source (pass, trial, lifetime, …) reports 'active'.
+    let effective;
+    try {
+      effective = await entitlements.resolveEffectivePlan(uid, new Date(), u);
+    } catch (err) {
+      // Entitlements unreadable → fall back to the subscription fields alone.
+      console.error('[getUserPlanInfo] entitlements lookup failed:', err.message);
+      const legacy = legacyEntitlement(u);
+      effective = pickEffective(legacy ? [legacy] : []);
+    }
+    const fromSubscription = effective.plan === 'free' || SUBSCRIPTION_SOURCES.has(effective.source);
+    const lastMoment = toDate(u.lastMomentTrialAt);
     return {
-      plan: u.userPlan || 'free',
-      status: u.subStatus || 'none',
+      plan: effective.plan,
+      status: fromSubscription ? (u.subStatus || 'none') : 'active',
       periodEnd: u.subCurrentPeriodEnd || '',
       billingCycle: u.billingCycle || '',
-      source: u.subSource || '', // 'stripe' | 'apple' — which store manages it
+      source: u.subSource || '', // 'stripe' | 'apple' — which store manages the subscription
       referralCode: u.referralCode || '',
       referralCredits: Number(u.referralCredits) || 0,
+      planSource: effective.plan === 'free' ? null : effective.source,
+      planExpiresAt: effective.expiresAt ? effective.expiresAt.toISOString() : null,
+      trial: {
+        usedReverseTrial: u.usedReverseTrial === true,
+        lastMomentTrialAt: lastMoment ? lastMoment.toISOString() : null,
+      },
+      ai: null, // filled in by PAY2-3 (AI metering)
     };
   }
 
@@ -985,7 +1010,7 @@ async function updateUserPlan(recordId, fields) {
 // metadata carries username, not uid) OR `uid` directly (the Apple rail
 // resolves uid from the appAccountToken set at purchase time — see
 // payments.js — since Apple notifications don't carry a username at all).
-async function applyEntitlement({ username, uid, plan, status, periodEnd = null, billingCycle = null, source, sourceCustomerId = null }) {
+async function applyEntitlement({ username, uid, plan, status, periodEnd = null, billingCycle = null, source, sourceCustomerId = null, revoked = false }) {
   if (!firebaseEnabled) return false;
   let resolvedUid = uid || null;
   try {
@@ -1007,6 +1032,14 @@ async function applyEntitlement({ username, uid, plan, status, periodEnd = null,
     if (source === 'stripe' && sourceCustomerId) fields.stripeCustomerId = sourceCustomerId;
     if (source === 'apple' && sourceCustomerId) fields.appleOriginalTransactionId = sourceCustomerId;
     await db.collection('users').doc(resolvedUid).set(fields, { merge: true });
+
+    // Mirror into users/{uid}/entitlements. The user-doc fields above stay the
+    // source of truth for subscriptions, so a failed mirror is logged, not fatal.
+    try {
+      await entitlements.mirrorSubscription(resolvedUid, { plan, status, rail: source, ref: sourceCustomerId || '', revoked });
+    } catch (err) {
+      console.error('[applyEntitlement] entitlement mirror failed:', err.message);
+    }
 
     const { customClaims = {} } = await fbAuth.getUser(resolvedUid);
     await fbAuth.setCustomUserClaims(resolvedUid, { ...customClaims, tier: plan });

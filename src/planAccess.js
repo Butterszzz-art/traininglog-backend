@@ -5,6 +5,10 @@
 //
 // Admins (ADMIN_USERNAMES, comma-separated, case-insensitive) always have full
 // paid access whatever their plan.
+//
+// getPlanInfo (getUserPlanInfo in server.js) returns the *effective* plan from
+// src/entitlements.js resolveEffectivePlan, so every gate here counts passes,
+// trials and lifetime access, not just subscriptions.
 const PAID_PLANS = new Set(['pro', 'coach']);
 
 function parseUsernames(value) {
