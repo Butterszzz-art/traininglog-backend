@@ -19,6 +19,10 @@ module.exports = {
   },
   pro: { monthly: 150, programGenerator: 10, draftMessage: 0, background: 100 },
   coach: { monthly: 400, programGenerator: 100, draftMessage: 300, background: 100 },
+  // Client Pro (PAY2-9): Pro included by the client's coach, with a smaller
+  // AI allowance and no program generator. Used when the effective plan
+  // comes from source 'coach_client' (aiMeter tierFor).
+  coach_client: { monthly: 30, programGenerator: 0, draftMessage: 0, background: 100 },
 };
 
 // Every AI route → feature key. Paths are relative to /api/ai.
