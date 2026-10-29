@@ -1,7 +1,7 @@
 /* =============================================================
    POST /api/ai/coach — the AI coach conversation endpoint, plus
    /brief, /review and /body. Mounted inside src/routes/ai.js, so
-   authenticateToken, aiLimiter and requirePaidPlan from server.js
+   authenticateToken, aiLimiter and the AI meter (src/aiMeter.js) from server.js
    already apply; the guard below refuses requests if it is ever
    mounted without auth.
 
