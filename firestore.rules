@@ -136,6 +136,10 @@ service cloud.firestore {
     match /shares/{shareId} {
       allow read, write: if false;
     }
+    // Photos of meals sent to friends or posted in groups (src/mealShare.js).
+    match /sharedMealPhotos/{photoId} {
+      allow read, write: if false;
+    }
     match /exerciseBests/{bestId} {
       allow read, write: if false;
     }

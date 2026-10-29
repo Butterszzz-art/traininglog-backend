@@ -1,4 +1,4 @@
-// Community groups: create, join, post, share programs, report.
+// Community groups: create, join, post, share programs and meals, report.
 //
 // Groups used to live only in each device's localStorage (the app called
 // /community/groups routes that never existed), so nobody else ever saw a
@@ -9,7 +9,10 @@
 //   groups/{id}      { name, nameLower, goal, tags[], owner, members[],
 //                      memberNames{}, recentPostTimes[], createdAt,
 //                      lastActivityAt }
-//   groupPosts/{id}  { groupId, author, authorName, text, share?, createdAt }
+//   groupPosts/{id}  { groupId, author, authorName, text, share?, hasPhoto?,
+//                      createdAt }
+// A shared meal (src/mealShare.js) can carry a photo, kept in
+// sharedMealPhotos/post_<id> and fetched with GET /:id/posts/:postId/photo.
 //   groupReports/{…} { kind: 'post'|'group', groupId, postId?, target,
 //                      reporter, reason, note, status, createdAt }
 // `members`, `owner` and `author` are lowercase usernames (profileKey), so
@@ -24,6 +27,9 @@ const express = require('express');
 const { profileKey, cleanText, containsObjectionable, blockedBy, isBlockedEitherWay } = require('./profiles');
 const { pairId } = require('./friends');
 const { notify } = require('./notifications');
+const {
+  cleanMeal, mealText, parseMealPhoto, saveMealPhoto, readMealPhoto, deleteMealPhotos, postPhotoId,
+} = require('../mealShare');
 
 const NAME_MAX = 60;
 const GOAL_MAX = 80;
@@ -37,7 +43,7 @@ const DISCOVER_LIMIT = 50;
 const POSTS_PAGE = 50;
 const RECENT_TIMES_MAX = 30;
 const SHARE_MAX_BYTES = 60 * 1024;
-const SHARE_TYPES = new Set(['program', 'template']);
+const SHARE_TYPES = new Set(['program', 'template', 'meal']);
 const REPORT_REASONS = new Set(['inappropriate', 'harassment', 'spam', 'other']);
 
 function toIso(ts) {
@@ -72,7 +78,8 @@ function cleanShare(value) {
   if (!value || typeof value !== 'object') return null;
   if (!SHARE_TYPES.has(value.type)) return null;
   const name = cleanText(String(value.name ?? ''), NAME_MAX) || 'Untitled';
-  const data = value.data && typeof value.data === 'object' ? value.data : null;
+  let data = value.data && typeof value.data === 'object' ? value.data : null;
+  if (data && value.type === 'meal') data = cleanMeal(data);
   if (!data) return null;
   let json;
   try { json = JSON.stringify(data); } catch { return null; }
@@ -129,6 +136,7 @@ function createGroupsRouter({
       author: data.authorName || data.author,
       text: data.text || '',
       share: data.share || null,
+      hasPhoto: !!data.hasPhoto,
       date: toIso(data.createdAt),
       mine: data.author === me,
       canDelete: data.author === me || group.owner === me || isAdmin,
@@ -373,8 +381,9 @@ function createGroupsRouter({
     }
   });
 
-  // POST /:id/posts — body: { text, share?: { type, name, data } }. Members
-  // only. `share` attaches a program or template other members can save.
+  // POST /:id/posts — body: { text, share?: { type, name, data }, photo? }.
+  // Members only. `share` attaches a program, template or meal other members
+  // can save; `photo` (a JPEG data URL) goes with a meal only.
   router.post('/:id/posts', async (req, res) => {
     try {
       const me = req.me;
@@ -388,7 +397,13 @@ function createGroupsRouter({
       if (req.body?.share && !share) return sendError(res, 422, 'groups.invalid_share', 'That item can’t be shared.');
       if (share?.tooLarge) return sendError(res, 413, 'groups.share_too_large', 'That item is too large to share.');
       if (!text && !share) return sendError(res, 422, 'groups.empty_post', 'Write something first.');
-      if (objectionable(text, share?.name)) {
+      let photo = null;
+      if (req.body?.photo != null) {
+        photo = share?.type === 'meal' ? parseMealPhoto(req.body.photo) : null;
+        if (!photo) return sendError(res, 422, 'groups.invalid_photo', 'Only a shared meal can have a photo.');
+        if (photo.tooLarge) return sendError(res, 413, 'groups.photo_too_large', 'That photo is too large to share.');
+      }
+      if (objectionable(text, `${share?.name || ''} ${share?.type === 'meal' ? mealText(share.data) : ''}`)) {
         return sendError(res, 422, 'groups.objectionable', 'Your post contains language that isn’t allowed. Please edit it.');
       }
       const now = new Date();
@@ -400,7 +415,9 @@ function createGroupsRouter({
         createdAt: now,
       };
       if (share) data.share = share;
+      if (photo) data.hasPhoto = true;
       const ref = await posts().add(data);
+      if (photo) await saveMealPhoto(db, postPhotoId(ref.id), photo, me);
       const recent = [now.toISOString(), ...(group.data.recentPostTimes || [])].slice(0, RECENT_TIMES_MAX);
       await group.ref.update({ recentPostTimes: recent, lastActivityAt: now });
       await notify(db, {
@@ -412,6 +429,29 @@ function createGroupsRouter({
     } catch (err) {
       console.error('POST /api/groups/:id/posts failed:', err);
       return sendError(res, 500, 'groups.server_error', 'Could not post.');
+    }
+  });
+
+  // GET /:id/posts/:postId/photo — { photo: dataUrl }; members (and
+  // moderators) only, and not for a post by someone the viewer blocked.
+  router.get('/:id/posts/:postId/photo', async (req, res) => {
+    try {
+      const group = await loadGroup(req.params.id);
+      if (!group) return sendError(res, 404, 'groups.not_found', 'That group no longer exists.');
+      if (!(group.data.members || []).includes(req.me) && !req.isAdmin) {
+        return sendError(res, 403, 'groups.not_member', 'Join the group to see its posts.');
+      }
+      const snap = await posts().doc(String(req.params.postId)).get();
+      if (!snap.exists || snap.get('groupId') !== group.ref.id || !snap.get('hasPhoto')
+        || (await blockedBy(db, req.me)).includes(snap.get('author'))) {
+        return sendError(res, 404, 'groups.no_photo', 'That post has no photo.');
+      }
+      const photo = await readMealPhoto(db, postPhotoId(snap.id));
+      if (!photo) return sendError(res, 404, 'groups.no_photo', 'That post has no photo.');
+      return sendSuccess(res, 200, { photo });
+    } catch (err) {
+      console.error('GET /api/groups/:id/posts/:postId/photo failed:', err);
+      return sendError(res, 500, 'groups.server_error', 'Could not load the photo.');
     }
   });
 
@@ -427,6 +467,7 @@ function createGroupsRouter({
         return sendError(res, 403, 'groups.forbidden', 'You can only delete your own posts.');
       }
       await ref.delete();
+      await deleteMealPhotos(db, [postPhotoId(snap.id)]);
       return sendSuccess(res, 200, { deleted: true });
     } catch (err) {
       console.error('DELETE /api/groups/:id/posts/:postId failed:', err);
@@ -495,6 +536,7 @@ function createGroupsRouter({
 async function deleteGroupPosts(db, groupId) {
   const snap = await db.collection('groupPosts').where('groupId', '==', groupId).get();
   await Promise.all(snap.docs.map(d => d.ref.delete()));
+  await deleteMealPhotos(db, snap.docs.map(d => postPhotoId(d.id)));
 }
 
 // Called from account deletion: removes the user's posts and memberships.
@@ -504,6 +546,7 @@ async function removeUserFromGroups(db, username) {
   if (!key) return;
   const postSnap = await db.collection('groupPosts').where('author', '==', key).get();
   await Promise.all(postSnap.docs.map(d => d.ref.delete()));
+  await deleteMealPhotos(db, postSnap.docs.map(d => postPhotoId(d.id)));
   const groupSnap = await db.collection('groups').where('members', 'array-contains', key).get();
   for (const doc of groupSnap.docs) {
     const data = doc.data();

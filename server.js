@@ -21,6 +21,7 @@ const { createFriendsRouter, deleteFriendships } = require('./src/routes/friends
 const { createGroupsRouter, removeUserFromGroups } = require('./src/routes/groups');
 const { createFeedRouter, deleteFeedPosts } = require('./src/routes/feed');
 const { createSharesRouter, deleteShares } = require('./src/routes/shares');
+const { deleteUserMealPhotos } = require('./src/mealShare');
 const { createNotificationsRouter, notifyVolumePasses, deleteNotifications } = require('./src/routes/notifications');
 const coachNotifications = require('./src/coachNotifications');
 const { createSyncRouter, syncDocId } = require('./src/routes/sync');
@@ -748,6 +749,7 @@ async function deleteFirestoreAccount(uid, username, email) {
   await removeUserFromGroups(db, username);
   await deleteFeedPosts(db, username);
   await deleteShares(db, username);
+  await deleteUserMealPhotos(db, profileKey(username));
   await deleteExerciseBests(db, username);
   await deleteNotifications(db, username);
   forgetCachedUid(username);
