@@ -2506,12 +2506,10 @@ function civilDate(dateStr) {
   return { date: { year, month, day } };
 }
 
-async function fetchDailyRollup(accessToken, healthUserId, dataType, date) {
-  const start = civilDate(date);
-  const nextDay = new Date(date + 'T00:00:00Z');
-  nextDay.setUTCDate(nextDay.getUTCDate() + 1);
-  const end = civilDate(nextDay.toISOString().slice(0, 10));
-
+// One dailyRollUp call covering local dates start..endInclusive, returning
+// the rollup points keyed by their YYYY-MM-DD date. Google caps the range at
+// 14 days for active-minutes/total-calories and 90 for the rest.
+async function fetchRollupRange(accessToken, healthUserId, dataType, start, endInclusive) {
   const response = await fetch(
     `${GOOGLE_HEALTH_API_BASE}/users/${healthUserId}/dataTypes/${dataType}/dataPoints:dailyRollUp`,
     {
@@ -2520,12 +2518,28 @@ async function fetchDailyRollup(accessToken, healthUserId, dataType, date) {
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ range: { start, end }, windowSizeDays: 1 })
+      body: JSON.stringify({
+        range: { start: civilDate(start), end: civilDate(addDays(endInclusive, 1)) },
+        windowSizeDays: 1
+      })
     }
   );
   const data = await response.json();
   if (!response.ok) throw new Error(data?.error?.message || `dailyRollUp(${dataType}) failed`);
-  return data.rollupDataPoints?.[0] || null;
+  const byDate = {};
+  (data.rollupDataPoints || []).forEach((point, i) => {
+    const d = point?.civilStartTime?.date;
+    const key = d?.year && d?.month && d?.day
+      ? `${d.year}-${String(d.month).padStart(2, '0')}-${String(d.day).padStart(2, '0')}`
+      : addDays(start, i);
+    byDate[key] = point;
+  });
+  return byDate;
+}
+
+async function fetchDailyRollup(accessToken, healthUserId, dataType, date) {
+  const byDate = await fetchRollupRange(accessToken, healthUserId, dataType, date, date);
+  return byDate[date] || Object.values(byDate)[0] || null;
 }
 
 // GET /api/activity-sync/activity?date=YYYY-MM-DD — steps/activity summary
@@ -2563,6 +2577,55 @@ app.get('/api/activity-sync/activity', authenticateToken, async (req, res) => {
     return sendSuccess(res, 200, { activity });
   } catch (err) {
     console.error('GET /api/activity-sync/activity failed:', err);
+    return sendError(res, 500, 'activity_sync.server_error', String(err));
+  }
+});
+
+// GET /api/activity-sync/daily?start=YYYY-MM-DD&end=YYYY-MM-DD — steps,
+// distance, calories burned and active minutes for each local date in
+// start..end (inclusive, at most 14 days; default the 7 days ending today).
+// The app uses the history for a "calories burned per day" average.
+const DAILY_HISTORY_TYPES = ['steps', 'distance', 'active-minutes', 'total-calories'];
+const DAILY_HISTORY_MAX_DAYS = 14;
+
+app.get('/api/activity-sync/daily', authenticateToken, async (req, res) => {
+  if (!activitySyncEnabled) return sendError(res, 503, 'activity_sync.disabled', 'Activity Sync is not configured.');
+  if (!req.user.uid) {
+    return sendError(res, 403, 'activity_sync.requires_firebase_auth', 'Please sign in again before syncing activity.');
+  }
+
+  const isDate = v => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
+  const end = isDate(req.query.end) ? req.query.end : new Date().toISOString().slice(0, 10);
+  const start = isDate(req.query.start) ? req.query.start : addDays(end, -6);
+  const spanDays = (new Date(end) - new Date(start)) / 86400000;
+  if (!(spanDays >= 0 && spanDays < DAILY_HISTORY_MAX_DAYS)) {
+    return sendError(res, 400, 'activity_sync.bad_range', `start must be on or before end, at most ${DAILY_HISTORY_MAX_DAYS} days apart.`);
+  }
+
+  try {
+    const session = await getValidActivitySyncSession(req.user.uid);
+    if (!session) return sendError(res, 409, 'activity_sync.not_connected', 'Activity Sync is not connected.');
+
+    const results = await Promise.allSettled(DAILY_HISTORY_TYPES.map(dataType =>
+      fetchRollupRange(session.accessToken, session.healthUserId, dataType, start, end)));
+    const byType = {};
+    results.forEach((r, i) => {
+      if (r.status === 'fulfilled') byType[DAILY_HISTORY_TYPES[i]] = r.value;
+      else console.warn(`[ActivitySync] dailyRollUp(${DAILY_HISTORY_TYPES[i]}) history failed:`, r.reason?.message);
+    });
+    if (results.every(r => r.status === 'rejected')) throw results[0].reason;
+
+    const days = [];
+    for (let date = start; date <= end; date = addDays(date, 1)) {
+      const rollups = {};
+      DAILY_HISTORY_TYPES.forEach(t => { rollups[t] = byType[t]?.[date] || null; });
+      const hasData = DAILY_HISTORY_TYPES.some(t => rollups[t]);
+      const { sedentaryMinutes, ...summary } = buildActivitySummary(rollups);
+      days.push({ date, hasData, ...summary });
+    }
+    return sendSuccess(res, 200, { start, end, days });
+  } catch (err) {
+    console.error('GET /api/activity-sync/daily failed:', err);
     return sendError(res, 500, 'activity_sync.server_error', String(err));
   }
 });
