@@ -2500,6 +2500,12 @@ function buildActivitySummary(rollups) {
   };
 }
 
+// YYYY-MM-DD → the CivilDateTime shape dailyRollUp's range expects.
+function civilDate(dateStr) {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return { date: { year, month, day } };
+}
+
 async function fetchDailyRollup(accessToken, healthUserId, dataType, date) {
   const start = civilDate(date);
   const nextDay = new Date(date + 'T00:00:00Z');
