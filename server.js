@@ -13,6 +13,7 @@ const { createProfilesRouter, deleteProfile, parseTerms: parseProfileTerms, cont
 const { DEFAULT_OBJECTIONABLE_TERMS } = require('./src/objectionableTerms');
 const { normalizeExercise, exerciseFilter, addDays } = require('./src/activitySyncExercise');
 const { HEALTH_METRICS_SCOPE, RECOVERY_TYPES, recoveryFilter, mergeRecoveryPoints, hasHealthMetricsScope } = require('./src/activitySyncRecovery');
+const { DAILY_VITALS, SCALE_SAMPLES, dailyFilter, sampleFilter, mergeDailyVitals, mergeWeighIns } = require('./src/activitySyncBody');
 const { createAppleIapRouter, createAppleVerifiers } = require('./src/routes/appleIap');
 const { createPlanAccess, parseUsernames } = require('./src/planAccess');
 const { createEntitlements, pickEffective, legacyEntitlement, toDate, SUBSCRIPTION_SOURCES } = require('./src/entitlements');
@@ -2692,6 +2693,98 @@ app.get('/api/activity-sync/recovery', authenticateToken, async (req, res) => {
     return sendSuccess(res, 200, { start, end, days: mergeRecoveryPoints(pointsByType) });
   } catch (err) {
     console.error('GET /api/activity-sync/recovery failed:', err);
+    return sendError(res, 500, 'activity_sync.server_error', String(err));
+  }
+});
+
+// GET /api/activity-sync/body?start=YYYY-MM-DD&end=YYYY-MM-DD — everything
+// the Body tab's analysis needs for local dates start..end (inclusive, at
+// most 31 days; default the 30 days ending today):
+//   days:     daily vitals { date, restingHeartRate, hrvMs, spo2,
+//             respiratoryRate, skinTempDelta, vo2Max }
+//   weighIns: smart-scale readings { date, weightKg, bodyFatPercent }
+// Each data type is fetched on its own; a type the user's device doesn't
+// record just comes back empty. needsReconnect is true when Google refused a
+// type for lack of the health-metrics scope.
+const BODY_MAX_DAYS = 31;
+
+// dataPoints.list with each candidate filter in turn (Google's docs spell
+// the filter field two ways); only a 400 moves on to the next spelling.
+async function listWithFilters(session, dataType, filters) {
+  let lastError = null;
+  for (const filter of filters) {
+    const points = [];
+    let pageToken = '';
+    let ok = true;
+    for (let page = 0; page < 5; page++) {
+      const params = new URLSearchParams({ filter, pageSize: '100' });
+      if (pageToken) params.set('pageToken', pageToken);
+      const response = await fetch(
+        `${GOOGLE_HEALTH_API_BASE}/users/${session.healthUserId}/dataTypes/${dataType}/dataPoints?${params}`,
+        { headers: { Authorization: `Bearer ${session.accessToken}` } }
+      );
+      const data = await response.json();
+      if (!response.ok) {
+        lastError = Object.assign(new Error(data?.error?.message || `${dataType} list failed`), { status: response.status });
+        ok = false;
+        break;
+      }
+      points.push(...(data.dataPoints || []));
+      pageToken = data.nextPageToken || '';
+      if (!pageToken) break;
+    }
+    if (ok) return points;
+    if (lastError.status !== 400) break;
+  }
+  throw lastError;
+}
+
+app.get('/api/activity-sync/body', authenticateToken, async (req, res) => {
+  if (!activitySyncEnabled) return sendError(res, 503, 'activity_sync.disabled', 'Activity Sync is not configured.');
+  if (!req.user.uid) {
+    return sendError(res, 403, 'activity_sync.requires_firebase_auth', 'Please sign in again before syncing body data.');
+  }
+
+  const isDate = v => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
+  const end = isDate(req.query.end) ? req.query.end : new Date().toISOString().slice(0, 10);
+  const start = isDate(req.query.start) ? req.query.start : addDays(end, -29);
+  const spanDays = (new Date(end) - new Date(start)) / 86400000;
+  if (!(spanDays >= 0 && spanDays < BODY_MAX_DAYS)) {
+    return sendError(res, 400, 'activity_sync.bad_range', `start must be on or before end, at most ${BODY_MAX_DAYS} days apart.`);
+  }
+
+  try {
+    const session = await getValidActivitySyncSession(req.user.uid);
+    if (!session) return sendError(res, 409, 'activity_sync.not_connected', 'Activity Sync is not connected.');
+
+    const endExclusive = addDays(end, 1);
+    const jobs = [
+      ...DAILY_VITALS.map(t => ({ t, filters: t.filterNames.map(n => dailyFilter(n, start, endExclusive)) })),
+      ...SCALE_SAMPLES.map(t => ({ t, filters: t.filterNames.map(n => sampleFilter(n, start, endExclusive)) }))
+    ];
+    const results = await Promise.allSettled(jobs.map(j => listWithFilters(session, j.t.dataType, j.filters)));
+
+    const points = {};
+    let needsReconnect = false;
+    results.forEach((r, i) => {
+      const { dataType } = jobs[i].t;
+      if (r.status === 'fulfilled') points[dataType] = r.value;
+      else {
+        if (r.reason?.status === 403) needsReconnect = true;
+        console.warn(`[ActivitySync] ${dataType} list failed:`, r.reason?.message);
+      }
+    });
+    if (results.every(r => r.status === 'rejected') && !needsReconnect) throw results[0].reason;
+
+    return sendSuccess(res, 200, {
+      start,
+      end,
+      days: mergeDailyVitals(points),
+      weighIns: mergeWeighIns(points),
+      needsReconnect
+    });
+  } catch (err) {
+    console.error('GET /api/activity-sync/body failed:', err);
     return sendError(res, 500, 'activity_sync.server_error', String(err));
   }
 });
