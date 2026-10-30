@@ -28,9 +28,12 @@ directly (Google OAuth 2.0 via Google Cloud Console, not `dev.fitbit.com`).
    status, add your own Google account(s) as test users (required to
    complete consent until the app passes Google's verification review for
    >100 users).
-6. On the **Data Access** page, add both scopes:
-   `https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly`
-   and `https://www.googleapis.com/auth/googlehealth.sleep.readonly`.
+6. On the **Data Access** page, add these scopes:
+   `https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly`,
+   `https://www.googleapis.com/auth/googlehealth.sleep.readonly` and
+   `https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly`
+   (resting heart rate + HRV). Users who connected before the third scope
+   was added see "Reconnect" in Settings; `/status` returns `needsReconnect`.
 7. Copy the **Client ID** and **Client Secret**.
 
 ## 2. Firebase secrets
@@ -69,8 +72,13 @@ gets redirected back to after consent (`?activitySync=connected` /
   midday of `date`. Cached to `users/{uid}/activitySync/{date}.sleep`
   (merged into the same doc as `/activity`, not a separate collection).
 
-Heart rate and weight are not wired up yet — add scopes + new data-type
-fetches if/when those are needed.
+- `GET /api/activity-sync/exercises?start=&end=` → tracker workouts for the
+  cardio log (up to 31 days).
+- `GET /api/activity-sync/daily?start=&end=` → per-day steps, distance,
+  calories burned and active minutes (up to 14 days).
+- `GET /api/activity-sync/recovery?start=&end=` → daily resting heart rate and
+  HRV (up to 31 days); 403 `activity_sync.needs_reconnect` without the
+  health-metrics scope.
 
 Field names and request shapes were checked against Google's v4 reference
 (`*RollupValue` pages, `dataPoints.list`, `users.getIdentity`). int64 values
