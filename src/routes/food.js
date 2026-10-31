@@ -8,8 +8,9 @@
 //     far better Dutch/EU supermarket coverage. ODbL: the app shows
 //     "Data: Open Food Facts" next to OFF results.
 // Results are mapped onto one food shape (src/nutrition/foods.js), merged,
-// and cached in memory per instance, so the same query from many users only
-// reaches the upstream APIs once a day.
+// and cached: in memory per instance, and in Firestore shared by all
+// instances (src/nutrition/searchCache.js), so the same query from many
+// users only reaches the upstream APIs once a day, even after a cold start.
 //
 //   GET /search?q=<text>&limit=<n>
 //     → { foods: [...], sources: { usda: 'ok'|'error'|'disabled', off: ... },
@@ -32,6 +33,8 @@ const BARCODE_MISS_TTL_MS = 6 * 60 * 60 * 1000; // a product may be added to OFF
 const OFF_SEARCH_FIELDS = 'code,product_name,product_name_nl,product_name_en,generic_name,generic_name_nl,brands,nutriments,serving_size,serving_quantity,product_quantity,product_quantity_unit,quantity,countries_tags';
 const OFF_PRODUCT_FIELDS = 'code,product_name,product_name_nl,product_name_en,generic_name,generic_name_nl,brands,nutriments,serving_size,serving_quantity,product_quantity,product_quantity_unit,quantity,countries_tags';
 const CACHE_MAX = 800;
+// A Firestore hit is kept in memory this long (its own expiry isn't known).
+const MEMORY_REFILL_TTL_MS = 60 * 60 * 1000;
 const UPSTREAM_TIMEOUT_MS = 4500;
 const DEFAULT_LIMIT = 20;
 const USDA_PAGE = 15;
@@ -77,8 +80,25 @@ function createFoodSearcher({
   usdaKey = () => process.env.USDA_API_KEY || '',
   userAgent = () => process.env.OFF_USER_AGENT || DEFAULT_USER_AGENT,
   cache = createCache(),
+  store = null, // shared cache: { get(key), set(key, value, ttl) }, see searchCache.js
   log = console,
 } = {}) {
+  // Memory first, then the shared store. undefined = not cached; null is a
+  // cached "barcode not found".
+  async function cacheGet(key) {
+    const hit = cache.get(key);
+    if (hit !== undefined || !store) return hit;
+    let shared;
+    try { shared = await store.get(key); } catch (err) { log.warn(`[food] shared cache read failed: ${err.message}`); return undefined; }
+    if (shared !== undefined) cache.set(key, shared, MEMORY_REFILL_TTL_MS);
+    return shared;
+  }
+  function cacheSet(key, value, ttl) {
+    cache.set(key, value, ttl);
+    // Not awaited: the user's answer doesn't wait for the write.
+    if (store) Promise.resolve().then(() => store.set(key, value, ttl)).catch(() => {});
+  }
+
   async function searchUsda(q) {
     const key = usdaKey();
     if (!key || key === 'DEMO_KEY') return { status: 'disabled', foods: [] };
@@ -142,7 +162,7 @@ function createFoodSearcher({
   // sources: 'off', 'usda' or 'all'. → { foods, sources: { off?, usda? }, corrected? }
   async function search(q, { sources = 'all', limit = 40 } = {}) {
     const key = `s:${sources}:${q}`;
-    const cached = cache.get(key);
+    const cached = await cacheGet(key);
     if (cached) return { ...cached, cached: true };
     const want = sources === 'all' ? ['off', 'usda'] : [sources];
     let { foods: merged, status } = await ask(q, want, limit);
@@ -163,7 +183,7 @@ function createFoodSearcher({
     const out = { foods: merged, sources: status, ...(corrected ? { corrected } : {}) };
     // Only cache an answer from every source that's switched on, so a
     // passing outage isn't remembered for a day.
-    if (!Object.values(status).includes('error')) cache.set(key, out, SEARCH_TTL_MS);
+    if (!Object.values(status).includes('error')) cacheSet(key, out, SEARCH_TTL_MS);
     return out;
   }
 
@@ -194,28 +214,38 @@ function createFoodSearcher({
     return null;
   }
 
-  return { search, lookupOff, lookupUsda, cache, log };
+  return { search, lookupOff, lookupUsda, cache, cacheGet, cacheSet, log };
 }
 
 // One searcher per server instance, so the search route and the AI assist
 // share a cache.
 let defaultSearcher = null;
 function getDefaultSearcher() {
-  if (!defaultSearcher) defaultSearcher = createFoodSearcher();
+  if (!defaultSearcher) defaultSearcher = createFoodSearcher({ store: defaultStore() });
   return defaultSearcher;
+}
+
+// The shared Firestore cache when Firebase is set up, else memory only.
+function defaultStore() {
+  try {
+    const { db, firebaseEnabled } = require('../../firebaseAdmin');
+    return firebaseEnabled && db ? require('../nutrition/searchCache').createFirestoreStore(db) : null;
+  } catch {
+    return null;
+  }
 }
 
 function createFoodRouter({ sendError, sendSuccess, searcher, ...opts } = {}) {
   const router = express.Router();
   const s = searcher || (Object.keys(opts).length ? createFoodSearcher(opts) : getDefaultSearcher());
-  const { cache, log } = s;
+  const { log } = s;
 
   router.get('/barcode/:code', async (req, res) => {
     const code = foods.normalizeBarcode(req.params.code);
     if (!code || !foods.validBarcode(code)) {
       return sendError(res, 422, 'food.invalid_barcode', 'That barcode doesn’t look right. Try scanning again or type the numbers under it.');
     }
-    const cached = cache.get(`b:${code}`);
+    const cached = await s.cacheGet(`b:${code}`);
     if (cached !== undefined) {
       if (!cached) return sendError(res, 404, 'food.barcode_not_found', 'This product isn’t in the food databases yet. You can add it yourself.');
       return sendSuccess(res, 200, { food: cached, cached: true });
@@ -233,7 +263,7 @@ function createFoodRouter({ sendError, sendSuccess, searcher, ...opts } = {}) {
     }
     if (!food && failed === 2) return sendError(res, 502, 'food.lookup_unavailable', 'Barcode lookup is unavailable right now. Try again shortly, or add the food yourself.');
     // Only remember a miss when every source actually answered.
-    if (food || !failed) cache.set(`b:${code}`, food, food ? BARCODE_TTL_MS : BARCODE_MISS_TTL_MS);
+    if (food || !failed) s.cacheSet(`b:${code}`, food, food ? BARCODE_TTL_MS : BARCODE_MISS_TTL_MS);
     if (!food) return sendError(res, 404, 'food.barcode_not_found', 'This product isn’t in the food databases yet. You can add it yourself.');
     return sendSuccess(res, 200, { food });
   });
