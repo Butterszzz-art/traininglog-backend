@@ -12,7 +12,11 @@
 // reaches the upstream APIs once a day.
 //
 //   GET /search?q=<text>&limit=<n>
-//     → { foods: [...], sources: { usda: 'ok'|'error'|'disabled', off: ... } }
+//     → { foods: [...], sources: { usda: 'ok'|'error'|'disabled', off: ... },
+//         corrected? }  corrected: the words searched instead when the ones
+//         typed found nothing good and looked misspelt ("chiken" → "chicken").
+// USDA is asked in English (src/nutrition/searchTerms.js turns Dutch and
+// British food words into the American ones it uses).
 //   GET /barcode/:code      (EAN-8/13, UPC-A, GTIN-14 with a valid check digit)
 //     → { food } or 404 food.barcode_not_found. Open Food Facts' product API
 //     first (it has serving sizes), then USDA Branded by GTIN.
@@ -20,6 +24,7 @@
 
 const express = require('express');
 const foods = require('../nutrition/foods');
+const { toEnglish, correctTypos } = require('../nutrition/searchTerms');
 
 const SEARCH_TTL_MS = 24 * 60 * 60 * 1000;
 const BARCODE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -78,7 +83,7 @@ function createFoodSearcher({
     const key = usdaKey();
     if (!key || key === 'DEMO_KEY') return { status: 'disabled', foods: [] };
     const url = 'https://api.nal.usda.gov/fdc/v1/foods/search?' + new URLSearchParams({
-      query: q,
+      query: toEnglish(q).text,
       pageSize: String(USDA_PAGE),
       dataType: 'Foundation,SR Legacy,Survey (FNDDS),Branded',
       api_key: key,
@@ -113,12 +118,8 @@ function createFoodSearcher({
     return { status: 'ok', foods: list.filter(f => (seen.has(f.id) ? false : seen.add(f.id))) };
   }
 
-  // sources: 'off', 'usda' or 'all'. → { foods, sources: { off?, usda? } }
-  async function search(q, { sources = 'all', limit = 40 } = {}) {
-    const key = `s:${sources}:${q}`;
-    const cached = cache.get(key);
-    if (cached) return { ...cached, cached: true };
-    const want = sources === 'all' ? ['off', 'usda'] : [sources];
+  // One round of asking the sources. → { foods (ranked), status }
+  async function ask(q, want, limit) {
     const runs = await Promise.allSettled(want.map(name => (name === 'off' ? searchOff(q) : searchUsda(q))));
     const status = {};
     const lists = [];
@@ -132,8 +133,34 @@ function createFoodSearcher({
         log.warn(`[food] ${name} search failed for "${q}": ${r.reason && r.reason.message}`);
       }
     });
-    const merged = foods.rankFoods(q, lists, limit);
-    const out = { foods: merged, sources: status };
+    return { foods: foods.rankFoods(q, lists, limit, toEnglish(q).text), status };
+  }
+
+  // Weak when no top result has every word, in the words typed or in English.
+  const weak = (q, list) => foods.isWeakResult(q, list) && foods.isWeakResult(toEnglish(q).text, list);
+
+  // sources: 'off', 'usda' or 'all'. → { foods, sources: { off?, usda? }, corrected? }
+  async function search(q, { sources = 'all', limit = 40 } = {}) {
+    const key = `s:${sources}:${q}`;
+    const cached = cache.get(key);
+    if (cached) return { ...cached, cached: true };
+    const want = sources === 'all' ? ['off', 'usda'] : [sources];
+    let { foods: merged, status } = await ask(q, want, limit);
+    let corrected = null;
+    // Nothing good and a word looks misspelt: try the corrected words, and
+    // keep them only if they do better.
+    if (weak(q, merged)) {
+      const fix = correctTypos(q);
+      if (fix.changed && fix.text !== q) {
+        const again = await ask(fix.text, want, limit);
+        if (again.foods.length && !weak(fix.text, again.foods)) {
+          merged = again.foods;
+          status = again.status;
+          corrected = fix.text;
+        }
+      }
+    }
+    const out = { foods: merged, sources: status, ...(corrected ? { corrected } : {}) };
     // Only cache an answer from every source that's switched on, so a
     // passing outage isn't remembered for a day.
     if (!Object.values(status).includes('error')) cache.set(key, out, SEARCH_TTL_MS);
@@ -223,7 +250,10 @@ function createFoodRouter({ sendError, sendSuccess, searcher, ...opts } = {}) {
     if (!r.foods.length && Object.values(r.sources).every(v => v !== 'ok')) {
       return sendError(res, 502, 'food.search_unavailable', 'Food search is unavailable right now. Try again shortly, or add the food yourself.');
     }
-    return sendSuccess(res, 200, { foods: r.foods.slice(0, limit), sources: r.sources, ...(r.cached ? { cached: true } : {}) });
+    return sendSuccess(res, 200, {
+      foods: r.foods.slice(0, limit), sources: r.sources,
+      ...(r.corrected ? { corrected: r.corrected } : {}), ...(r.cached ? { cached: true } : {}),
+    });
   });
 
   return router;

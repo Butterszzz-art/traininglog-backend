@@ -48,7 +48,7 @@ const offBroken = { code: '123', product_name: 'x', nutriments: {} };
 // ── Mapping ─────────────────────────────────────────────────────────────────
 {
   const f = foods.mapUsdaFood(usdaSurvey);
-  check('usda: id/source/name', f.id === 'usda:2340762' && f.source === 'usda' && f.name === 'Yogurt, Greek, plain, nonfat');
+  check('usda: id/source/name', f.id === 'usda:2340762' && f.source === 'usda' && f.name === 'Greek yogurt, plain, nonfat');
   check('usda: core per100', f.per100.kcal === 59 && f.per100.protein === 10.2 && f.per100.fat === 0.4);
   check('usda: extended nutrients kept', f.per100.sodiumMg === 36 && f.per100.calciumMg === 110 && f.per100.b12Ug === 0.8 && f.per100.fiber === 0);
   check('usda: missing nutrient left out, not 0', f.per100.ironMg === undefined && f.per100.potassiumMg === undefined);
@@ -213,6 +213,40 @@ async function get(server, p) {
     const server = await serve(createFoodRouter({ sendError, sendSuccess, fetchFn: f, usdaKey: () => 'k', log: { warn() {} } }));
     const r = await get(server, '/api/food/search?q=yogurt');
     check('route: both down → 502', r.status === 502 && r.body.error.code === 'food.search_unavailable');
+    server.close();
+  }
+
+  // ── Dutch / British words and typos ─────────────────────────────────────
+  {
+    const f = fakeFetch(upstream);
+    const server = await serve(createFoodRouter({ sendError, sendSuccess, fetchFn: f, usdaKey: () => 'k', log: { warn() {} } }));
+    await get(server, '/api/food/search?q=magere%20kwark');
+    const usdaUrl = f.calls.find(c => c.url.includes('nal.usda.gov')).url;
+    const offUrls = f.calls.filter(c => c.url.includes('openfoodfacts')).map(c => new URL(c.url).searchParams.get('q'));
+    check('route: USDA asked in English (magere kwark → quark nonfat)', new URL(usdaUrl).searchParams.get('query') === 'quark nonfat');
+    check('route: Open Food Facts asked in the words typed', offUrls.every(q => q.startsWith('magere kwark')));
+    server.close();
+  }
+  {
+    // Only the correctly spelt word finds chicken.
+    const chicken = { fdcId: 77, description: 'Chicken, broilers or fryers, breast, meat only, cooked, roasted', dataType: 'SR Legacy',
+      foodNutrients: [{ nutrientId: 1008, value: 165 }, { nutrientId: 1003, value: 31 }, { nutrientId: 1005, value: 0 }, { nutrientId: 1004, value: 3.6 }] };
+    const calls = [];
+    const fetchFn = async (url) => {
+      calls.push(String(url));
+      const u = new URL(url);
+      const q = u.searchParams.get('query') || u.searchParams.get('q') || '';
+      if (u.host === 'api.nal.usda.gov') return { ok: true, status: 200, json: async () => ({ foods: /chicken/.test(q) ? [chicken] : [usdaKjOnly] }) };
+      return { ok: true, status: 200, json: async () => ({ hits: [] }) };
+    };
+    const server = await serve(createFoodRouter({ sendError, sendSuccess, fetchFn, usdaKey: () => 'k', log: { warn() {} } }));
+    const r = await get(server, '/api/food/search?q=chiken%20breast');
+    check('route: misspelt search retried with corrected words', r.status === 200 && r.body.corrected === 'chicken breast' && r.body.foods[0].name === 'Chicken breast, cooked, roasted');
+    const n = calls.length;
+    const good = await get(server, '/api/food/search?q=chicken%20breast');
+    check('route: a good search is not "corrected" and asks once', !good.body.corrected && calls.length - n === 3);
+    const brand = await get(server, '/api/food/search?q=optimel');
+    check('route: an unknown brand stays as typed', !brand.body.corrected);
     server.close();
   }
 
