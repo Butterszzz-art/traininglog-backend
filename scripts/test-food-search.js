@@ -250,6 +250,41 @@ async function get(server, p) {
     server.close();
   }
 
+  // ── Shared cache (Firestore in production) ──────────────────────────────
+  {
+    const shared = new Map();
+    const store = { get: async k => shared.get(k), set: async (k, v) => { shared.set(k, v); } };
+    const f1 = fakeFetch(upstream);
+    const s1 = await serve(createFoodRouter({ sendError, sendSuccess, fetchFn: f1, usdaKey: () => 'k', store, log: { warn() {} } }));
+    await get(s1, '/api/food/search?q=yoghurt');
+    await get(s1, '/api/food/barcode/96385074'); // miss on both sources (fake has no product)
+    s1.close();
+    await new Promise(r => setTimeout(r, 10)); // the write isn't awaited
+    // A new instance: empty memory cache, same shared store.
+    const f2 = fakeFetch(upstream);
+    const s2 = await serve(createFoodRouter({ sendError, sendSuccess, fetchFn: f2, usdaKey: () => 'k', store, log: { warn() {} } }));
+    const r = await get(s2, '/api/food/search?q=yoghurt');
+    check('shared cache: new instance answers without asking USDA/OFF', r.status === 200 && r.body.cached === true && f2.calls.length === 0 && r.body.foods.length > 0);
+    s2.close();
+  }
+  {
+    const store = { get: async () => { throw new Error('down'); }, set: async () => { throw new Error('down'); } };
+    const f = fakeFetch(upstream);
+    const server = await serve(createFoodRouter({ sendError, sendSuccess, fetchFn: f, usdaKey: () => 'k', store, log: { warn() {} } }));
+    const r = await get(server, '/api/food/search?q=yoghurt');
+    check('shared cache: a broken store never breaks search', r.status === 200 && r.body.foods.length > 0);
+    server.close();
+  }
+  {
+    const shared = new Map([['b:96385074', null]]);
+    const store = { get: async k => shared.get(k), set: async (k, v) => { shared.set(k, v); } };
+    const f = fakeFetch({});
+    const server = await serve(createFoodRouter({ sendError, sendSuccess, fetchFn: f, usdaKey: () => 'k', store, log: { warn() {} } }));
+    const r = await get(server, '/api/food/barcode/96385074');
+    check('shared cache: a remembered barcode miss is a 404 without lookups', r.status === 404 && f.calls.length === 0);
+    server.close();
+  }
+
   // ── Barcode ───────────────────────────────────────────────────────────────
   {
     const f = fakeFetch({
