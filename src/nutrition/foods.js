@@ -16,6 +16,8 @@
 // shows "no data" for it instead of a fake zero.
 'use strict';
 
+const { stem } = require('./searchTerms');
+
 const CORE = ['kcal', 'protein', 'carbs', 'fat'];
 const NUTRIENT_KEYS = [
   'kcal', 'protein', 'carbs', 'fat',
@@ -153,7 +155,7 @@ function mapUsdaFood(food) {
   return {
     id: `usda:${food.fdcId}`,
     source: 'usda',
-    name: tidyUsdaName(food.description),
+    name: branded ? tidyUsdaName(food.description) : shortUsdaName(food.description),
     brand: cleanText(food.brandName || food.brandOwner, 80),
     ...(barcode ? { barcode } : {}),
     dataType: cleanText(food.dataType, 30),
@@ -168,6 +170,53 @@ function tidyUsdaName(v) {
   const s = cleanText(v);
   if (s && s === s.toUpperCase() && /[A-Z]/.test(s)) return s.charAt(0) + s.slice(1).toLowerCase();
   return s;
+}
+
+// USDA's generic foods have catalogue names: "Chicken, broilers or fryers,
+// breast, meat only, cooked, roasted". This turns them into what a person
+// would type: "Chicken breast, cooked, roasted". Category prefixes
+// ("Cereals, oats" → "Oats") and filler segments go; a part or kind is
+// joined to the food ("Rice, white" → "White rice", "Chicken, breast" →
+// "Chicken breast"); cooking words stay after a comma.
+const USDA_CATEGORIES = new Set([
+  'cereals', 'cereals ready-to-eat', 'beverages', 'spices', 'snacks', 'candies', 'fish', 'nuts', 'seeds',
+  'vegetables', 'fruit', 'fruits', 'babyfood', 'alcoholic beverage', 'alcoholic beverages', 'fast foods',
+  'restaurant', 'legumes', 'cheese spread', 'game meat', 'crustaceans', 'mollusks',
+]);
+const USDA_FILLER = [
+  /^broilers or fryers$/, /^meat only$/, /^fluid$/, /^regular$/, /^enriched$/, /^unenriched$/, /^mature seeds$/,
+  /^not fortified$/, /^fortified$/, /^all commercial varieties$/, /^commercial$/, /^year round average$/,
+  /^salad or cooking$/, /^without salt$/, /^ns as to /, /^nfs$/, /^includes /, /^with added vitamin/,
+  /^solids and liquids$/, /^drained solids$/, /^usda commodity/, /^prepared from recipe$/, /^unprepared$/,
+];
+const USDA_PARTS = new Set([
+  'breast', 'thigh', 'thighs', 'leg', 'legs', 'wing', 'wings', 'drumstick', 'drumsticks', 'fillet', 'fillets', 'liver',
+  'steak', 'loin', 'tenderloin', 'chop', 'chops', 'ribs', 'shoulder', 'belly', 'juice', 'butter', 'oil', 'flour',
+  'sauce', 'milk', 'bread', 'powder',
+]);
+// "Egg, white" is an egg white, but "Rice, white" is white rice.
+const EGG_PARTS = new Set(['white', 'whites', 'yolk', 'yolks']);
+const USDA_STATES = /^(raw|cooked|boiled|baked|roasted|fried|grilled|broiled|braised|steamed|stewed|dried|dry|frozen|canned|fresh|toasted|microwaved|scrambled|poached|dry heat|moist heat|pan-fried|unheated|heated|ready-to-eat|ready-to-drink|prepared|with salt|without skin|skin not eaten|from raw|from frozen)(\s|$)/;
+
+function shortUsdaName(v) {
+  const full = tidyUsdaName(v);
+  let segs = full.split(/\s*,\s*/).filter(Boolean);
+  if (segs.length < 2) return full;
+  if (USDA_CATEGORIES.has(segs[0].toLowerCase()) && segs.length > 1) segs = segs.slice(1);
+  segs = segs.filter((seg, i) => i === 0 || !USDA_FILLER.some(re => re.test(seg.toLowerCase())));
+  let [head, ...rest] = segs;
+  const next = rest[0];
+  // Join a one-word food with a short kind/part that isn't a cooking word.
+  if (next && !/\s/.test(head) && next.split(/\s+/).length <= 2 && !USDA_STATES.test(next.toLowerCase()) && !/[\d%()/]/.test(next)) {
+    const kind = next.toLowerCase();
+    const noun = head.toLowerCase();
+    const last = kind.split(/\s+/).pop();
+    const isPart = USDA_PARTS.has(last) || (/^eggs?$/.test(noun) && EGG_PARTS.has(last));
+    head = isPart ? `${noun} ${kind}` : `${next} ${noun}`;
+    rest = rest.slice(1);
+  }
+  const name = [head, ...rest.slice(0, 4)].join(', ');
+  return name.charAt(0).toUpperCase() + name.slice(1);
 }
 
 // ── Open Food Facts ──────────────────────────────────────────────────────────
@@ -288,9 +337,11 @@ function validBarcode(v) {
 // foods (Foundation / SR Legacy / Survey) beat US branded products, which
 // Dutch users can't buy anyway.
 
+// Lowercase, accents and plurals folded ("Eggs" → "egg"), so "eggs" finds
+// "Egg, whole" and "tomato" finds "Tomatoes".
 function words(s) {
   return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .split(/[^a-z0-9%]+/).filter(Boolean);
+    .split(/[^a-z0-9%]+/).filter(Boolean).map(stem);
 }
 
 function scoreFood(food, queryWords, position) {
@@ -311,8 +362,11 @@ function scoreFood(food, queryWords, position) {
   return score - position * 0.25;
 }
 
-function rankFoods(query, lists, limit = 20) {
+// `alsoQuery`: the same search in other words (the English one sent to
+// USDA); a food scores by whichever of the two it matches best.
+function rankFoods(query, lists, limit = 20, alsoQuery = '') {
   const q = words(query);
+  const q2 = alsoQuery && alsoQuery !== query ? words(alsoQuery) : null;
   const seen = new Set();
   const scored = [];
   for (const list of lists) {
@@ -322,11 +376,23 @@ function rankFoods(query, lists, limit = 20) {
       const key = food.barcode ? `bc:${food.barcode}` : food.id;
       if (seen.has(key)) return;
       seen.add(key);
-      scored.push({ food, score: scoreFood(food, q, i) });
+      const score = q2 ? Math.max(scoreFood(food, q, i), scoreFood(food, q2, i)) : scoreFood(food, q, i);
+      scored.push({ food, score });
     });
   }
   scored.sort((a, b) => b.score - a.score);
   return scored.slice(0, limit).map(s => s.food);
+}
+
+// Whether any of the first few results has every word typed in its name or
+// brand (the app's isWeakSearch does the same on the phone).
+function isWeakResult(query, list, top = 5) {
+  const q = words(query);
+  if (!q.length) return false;
+  return !(list || []).slice(0, top).some(f => {
+    const w = words(`${f.name} ${f.brand || ''}`);
+    return q.every(x => w.some(y => y.startsWith(x)));
+  });
 }
 
 function normalizeQuery(q) {
@@ -340,6 +406,8 @@ module.exports = {
   normalizeBarcode,
   validBarcode,
   rankFoods,
+  isWeakResult,
+  shortUsdaName,
   normalizeQuery,
   finishPer100,
   parseQuantity,
