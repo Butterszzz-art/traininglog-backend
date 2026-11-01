@@ -338,6 +338,39 @@ async function run() {
     assert.strictEqual((await res.json()).message, "The AI models couldn't read this photo. Try a PDF, Excel or Word file instead.");
   }));
 
+  console.log('master plan import');
+
+  const postPlan = body => fetch(base + '/api/ai/coach/import-plan', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  });
+  const d = (kcal, proteinG, carbG, fatG) => ({ kcal, proteinG, carbG, fatG });
+  const N = d(null, null, null, null);
+
+  await t('plan PDF → phases with gaps filled as suggestions, PDF sent as a document', async () => {
+    script = [reply({
+      isPlan: true, name: '16-week plan', startDate: null, notes: 'Protein high every day.', warnings: [],
+      phases: [
+        { type: 'cut', weeks: 12, goal: 'Lose fat', averageKcal: 2200, trainingDay: d(2350, 165, 275, 65), restDay: d(2000, 165, 190, 65) },
+        { type: 'maintain', weeks: 3, goal: 'Break', averageKcal: 2700, trainingDay: N, restDay: N },
+      ],
+    })];
+    const res = await postPlan({ fileName: 'plan.pdf', data: Buffer.from('%PDF-1.7 plan').toString('base64') });
+    assert.strictEqual(res.status, 200);
+    const body = await res.json();
+    assert.strictEqual(calls[0].messages[0].content[0].type, 'document');
+    assert.strictEqual(calls[0].output_config.format.type, 'json_schema');
+    assert.strictEqual(body.isPdf, true);
+    assert.deepStrictEqual(body.plan.phases[1].trainingDay, d(2700, 165, 364, 65));
+    assert.strictEqual(body.plan.suggested, 8);
+  });
+
+  await t('a file that is not a plan → 422 with the reason', async () => {
+    script = [reply({ isPlan: false, name: '', startDate: null, notes: '', phases: [], warnings: ['This is a grocery list.'] })];
+    const res = await postPlan({ fileName: 'x.pdf', data: Buffer.from('%PDF-1.7 x').toString('base64') });
+    assert.strictEqual(res.status, 422);
+    assert.match((await res.json()).message, /grocery list/);
+  });
+
   console.log('import through Ollama + OpenRouter');
 
   const withBoth = fn => withOpenModels(['ollama', 'openrouter'], fn);

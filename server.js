@@ -397,6 +397,9 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
 // 256kb. express.json() skips bodies that are already parsed, so this runs first.
 // Program import carries the coach's file as base64 (8 MB cap → ~11 MB JSON).
 app.use('/api/ai/coach/import-program', express.json({ limit: '12mb' }));
+app.use('/api/ai/coach/import-plan', express.json({ limit: '12mb' }));
+// Creating a plan from an imported file may carry the PDF to attach (≤ 600 KB).
+app.use('/api/coach/plans', express.json({ limit: '2mb' }));
 app.use('/api/ai/coach', express.json({ limit: '1mb' }));
 app.use(express.json({ limit: '256kb' }));
 

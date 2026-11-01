@@ -641,6 +641,66 @@ router.post('/import-program', async (req, res) => {
   }
 });
 
+// ── POST /api/ai/coach/import-plan — read a coach's master plan document ────
+// Body: { fileName, data } (base64; PDF, Word, Excel, CSV or a photo).
+// Returns { plan: { name, startDate, phases, notes, suggested }, warnings }:
+// phases and nutrition as the document states them, with gaps filled and
+// listed as suggestions (src/plan/planImport.js). Nothing is saved; the
+// dashboard shows it for review, then POST /api/coach/plans { imported }
+// creates the draft.
+const { PLAN_IMPORT_SCHEMA, PLAN_IMPORT_INSTRUCTIONS, normalizeImportedPlan } = require('../plan/planImport');
+
+router.post('/import-plan', async (req, res) => {
+  let file;
+  try {
+    file = readImportFile(req.body || {});
+  } catch (err) {
+    if (err instanceof ImportError) return res.status(err.status).json({ error: err.code, message: err.message });
+    return res.status(400).json({ error: 'unreadable', message: 'That file looks damaged. Try saving it again, or export it as a PDF.' });
+  }
+  const open = openModels();
+  if (open && file.kind === 'pdf' && !providers().includes('openrouter')) {
+    return res.status(422).json({ error: 'unsupported', message: "PDFs can't be read right now. Export the plan as Word (.docx) and try again." });
+  }
+  const params = {
+    max_tokens: 8000,
+    ...fallbackParams(),
+    output_config: jsonOutput(PLAN_IMPORT_SCHEMA, 'medium'),
+    system: open
+      ? `${PLAN_IMPORT_INSTRUCTIONS}\n\nReply with only a JSON object, no other text, matching this JSON Schema:\n${JSON.stringify(PLAN_IMPORT_SCHEMA)}`
+      : PLAN_IMPORT_INSTRUCTIONS,
+    messages: [{ role: 'user', content: [...file.content, { type: 'text', text: 'Read this master plan.' }] }],
+    ...(open && file.kind === 'pdf' ? { plugins: [{ id: 'file-parser', pdf: { engine: 'cloudflare-ai' } }] } : {}),
+  };
+  const ctrl = new AbortController();
+  res.on('close', () => { if (!res.writableEnded) ctrl.abort(); });
+  try {
+    const { reply } = await streamMessage(IMPORT_MODEL, params, {
+      signal: ctrl.signal,
+      deadlineMs: 240000,
+      idleMs: perModelTimeoutMs(90000, 120000),
+      accept: r => r.stop_reason === 'refusal' || r.stop_reason === 'max_tokens' || parseJsonObject(replyText(r)) !== null,
+      skipStatuses: open ? [400, 404, 413, 422] : [],
+    });
+    if (reply.stop_reason === 'refusal' || reply.stop_reason === 'max_tokens') {
+      return res.status(422).json({ error: 'unreadable', message: "The AI couldn't read this file as a plan." });
+    }
+    const obj = parseJsonObject(replyText(reply));
+    const plan = normalizeImportedPlan(obj);
+    if (!plan) {
+      const why = obj && Array.isArray(obj.warnings) && typeof obj.warnings[0] === 'string' ? ` ${obj.warnings[0].slice(0, 200)}` : '';
+      return res.status(422).json({ error: 'no_plan', message: `No plan with phases was found in this file.${why}` });
+    }
+    const { warnings, ...rest } = plan;
+    return res.json({ plan: rest, warnings, isPdf: file.kind === 'pdf' });
+  } catch (err) {
+    if (ctrl.signal.aborted || res.headersSent || res.destroyed) return undefined;
+    logError('[AI import-plan]', err);
+    const busy = !(err instanceof Anthropic.APIError) || err.status === 429 || err.status >= 500;
+    return res.status(502).json({ error: 'ai_failed', message: busy ? 'The AI is busy right now. Try again later.' : "Couldn't read the plan. Try a PDF or Word file." });
+  }
+});
+
 router.parseBrief = parseBrief;
 router.proposalsToCards = proposalsToCards;
 module.exports = router;

@@ -36,6 +36,9 @@ const { generatePlan } = require('../plan/generator');
 const lifecycle = require('../plan/lifecycle');
 const schema = require('../plan/schema');
 const coachShare = require('../coachShare');
+const { sanitizeImported } = require('../plan/planImport');
+
+const MAX_ATTACHMENT_BYTES = 600 * 1024;
 
 const PLAN_ID_RE = /^pln_[0-9a-f-]{36}$/;
 const PROGRAM_ID_RE = /^[a-zA-Z0-9_-]{1,64}$/;
@@ -155,6 +158,38 @@ function createCoachPlansRouter({ db, FieldValue, registry, sendError, sendSucce
     }
   }
 
+  // A draft from the coach's own plan document (POST /api/ai/coach/import-plan, reviewed).
+  function fromImport(body, coachUid, clientUid, by) {
+    const imported = sanitizeImported(body.imported);
+    if (!imported) throw Object.assign(new Error('The imported plan has no phases.'), { status: 422, code: 'plan.invalid_input' });
+    try {
+      return schema.planFromImport({
+        registry, imported, startDate: body.startDate, tier: body.tier, client: { uid: clientUid, coachUid },
+        now: now(), fileName: typeof body.fileName === 'string' ? body.fileName.slice(0, 120) : '', by,
+      });
+    } catch (err) {
+      throw Object.assign(err, { status: 422, code: 'plan.invalid_input' });
+    }
+  }
+
+  // The coach's PDF, shown to the client next to the plan once published.
+  // Stored as base64 in its own doc (plans stay small); PDFs only, ≤ 600 KB.
+  async function storeAttachment(coachUid, attachment) {
+    if (!attachment) return null;
+    const data = typeof attachment.data === 'string' ? attachment.data : '';
+    const buf = Buffer.from(data, 'base64');
+    if (!buf.length || buf.subarray(0, 5).toString('latin1') !== '%PDF-') {
+      throw Object.assign(new Error('Only a PDF can be attached for the client.'), { status: 422, code: 'plan.attachment_type' });
+    }
+    if (buf.length > MAX_ATTACHMENT_BYTES) {
+      throw Object.assign(new Error('That PDF is over 600 KB, too large to attach. The plan can still be imported without it.'), { status: 413, code: 'plan.attachment_too_large' });
+    }
+    const fileId = `pf_${crypto.randomUUID()}`;
+    const fileName = (typeof attachment.fileName === 'string' && attachment.fileName.trim().slice(0, 120)) || 'plan.pdf';
+    await db.collection(`coaches/${coachUid}/planFiles`).doc(fileId).set({ fileName, mime: 'application/pdf', size: buf.length, data: buf.toString('base64'), createdAt: FieldValue.serverTimestamp() });
+    return { fileId, fileName, mime: 'application/pdf', size: buf.length };
+  }
+
   const fail = (res, err, where) => {
     if (err.status) return sendError(res, err.status, err.code, err.message);
     console.error(`${where} failed:`, err);
@@ -180,6 +215,7 @@ function createCoachPlansRouter({ db, FieldValue, registry, sendError, sendSucce
       if (!coachUid) return;
       const body = req.body || {};
       if (body.blank) return sendSuccess(res, 200, { plan: blank(body, coachUid, body.clientUid || null) });
+      if (body.imported) return sendSuccess(res, 200, { plan: fromImport(body, coachUid, body.clientUid || null, req.user.username) });
       const input = await buildInput(coachUid, body);
       return sendSuccess(res, 200, { plan: generate(input, body, coachUid, body.clientUid) });
     } catch (err) { return fail(res, err, 'POST /api/coach/plans/preview'); }
@@ -193,7 +229,11 @@ function createCoachPlansRouter({ db, FieldValue, registry, sendError, sendSucce
       if (!(await onRoster(coachUid, body.clientUid))) {
         return sendError(res, 404, 'coach.not_linked', 'This client is not linked to your roster.');
       }
-      const plan = body.blank ? blank(body, coachUid, body.clientUid) : generate(await buildInput(coachUid, body), body, coachUid, body.clientUid);
+      const plan = body.imported ? fromImport(body, coachUid, body.clientUid, req.user.username)
+        : body.blank ? blank(body, coachUid, body.clientUid)
+          : generate(await buildInput(coachUid, body), body, coachUid, body.clientUid);
+      const attachment = await storeAttachment(coachUid, body.attachment);
+      if (attachment) plan.attachment = attachment;
       await db.collection(`coaches/${coachUid}/plans`).doc(plan.planId).set({ ...plan, clientUid: body.clientUid, updatedAt: FieldValue.serverTimestamp() });
       return sendSuccess(res, 201, { plan });
     } catch (err) { return fail(res, err, 'POST /api/coach/plans'); }
@@ -314,6 +354,10 @@ function createCoachPlansRouter({ db, FieldValue, registry, sendError, sendSucce
         ref.name = stored.name || ref.name;
       }
       plan.programs = programs;
+      const attachmentFile = plan.attachment
+        ? await db.collection(`coaches/${own.coachUid}/planFiles`).doc(plan.attachment.fileId).get()
+        : null;
+      if (attachmentFile && !attachmentFile.exists) delete plan.attachment; // removed meanwhile
 
       // The client's previous published plan from this coach is superseded.
       const clientPlans = db.collection(`users/${own.clientUid}/plans`);
@@ -333,6 +377,7 @@ function createCoachPlansRouter({ db, FieldValue, registry, sendError, sendSucce
       const programFields = firstRef ? { program: programs[firstRef.programId], currentProgramId: firstRef.programId } : {};
       batch.set(own.ref, { ...plan, clientUid: own.clientUid, updatedAt: FieldValue.serverTimestamp() });
       batch.set(clientPlans.doc(plan.planId), clientView(plan));
+      if (plan.attachment && attachmentFile) batch.set(db.collection(`users/${own.clientUid}/planFiles`).doc(plan.attachment.fileId), attachmentFile.data());
       batch.set(db.collection(`coaches/${own.coachUid}/clients`).doc(own.clientUid), { ...fields, ...(firstRef ? { currentProgramId: firstRef.programId } : {}), currentPlanId: plan.planId, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
       batch.set(db.collection(`users/${own.clientUid}/coachAssignment`).doc(own.coachUid), { coachUsername: req.user.username, ...fields, ...programFields, currentPlanId: plan.planId, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
       await batch.commit();
@@ -347,6 +392,22 @@ function createCoachPlansRouter({ db, FieldValue, registry, sendError, sendSucce
 
 function createClientPlanRouter({ db, sendError, sendSuccess, resolveCallerUid }) {
   const router = express.Router();
+  // GET /file/:fileId — the coach's plan PDF attached to the client's published plan.
+  router.get('/file/:fileId', async (req, res) => {
+    try {
+      const uid = await resolveCallerUid(req.user);
+      const fileId = String(req.params.fileId || '');
+      if (!uid || !/^pf_[0-9a-f-]{36}$/.test(fileId)) return sendError(res, 404, 'plan.file_not_found', 'File not found.');
+      const snap = await db.collection(`users/${uid}/planFiles`).doc(fileId).get();
+      if (!snap.exists) return sendError(res, 404, 'plan.file_not_found', 'File not found.');
+      const { fileName, mime, size, data } = snap.data();
+      return sendSuccess(res, 200, { file: { fileId, fileName, mime, size, data } });
+    } catch (err) {
+      console.error('GET /api/client/plan/file failed:', err);
+      return sendError(res, 500, 'plan.server_error', 'Could not load the file.');
+    }
+  });
+
   router.get('/', async (req, res) => {
     try {
       const uid = await resolveCallerUid(req.user);

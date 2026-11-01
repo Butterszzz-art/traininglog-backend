@@ -228,9 +228,22 @@ function applyOp(plan, op, log) {
       dayTypes.forEach(d => {
         const before = { ...(p.nutrition[d] || schema.emptyDay()) };
         p.nutrition[d] = { ...before, ...values };
+        // A value the import suggested counts as the coach's once they change it.
+        if (Array.isArray(p.nutrition.suggested)) {
+          p.nutrition.suggested = p.nutrition.suggested.filter(s => {
+            const [dt, key] = s.split('.');
+            return !(dt === d && key in values && values[key] !== before[key]);
+          });
+        }
         log({ op: 'setNutrition', phaseId: p.phaseId, dayType: d, from: before, to: { ...p.nutrition[d] } });
       });
       p.nutrition.source = 'coach';
+      return;
+    }
+    case 'removeAttachment': {
+      if (!plan.attachment) throw planError('plan.invalid_op', 'This plan has no attached file.');
+      log({ op: 'removeAttachment', from: plan.attachment.fileName, to: null });
+      delete plan.attachment;
       return;
     }
     case 'linkProgram': {
