@@ -8,7 +8,18 @@
 // Only a published plan is ever mirrored to the client.
 'use strict';
 
+const schema = require('./schema');
+
 const ADJUSTMENT_TYPES = ['adhoc_client', 'coach_initiated', 'phase_transition', 'correction'];
+
+function planError(code, message) {
+  return Object.assign(new Error(message), { code });
+}
+
+// Every manual change on a /2 plan carries the coach's reason.
+function requireReason(reason) {
+  if (typeof reason !== 'string' || !reason.trim()) throw planError('plan.reason_required', 'Give a reason for this change; it is kept in the plan’s change log.');
+}
 
 function clone(plan) {
   return JSON.parse(JSON.stringify(plan));
@@ -61,8 +72,15 @@ function applyOverride(plan, { path, value, by, reason, at = new Date() }) {
   if (!sameKind || (typeof value === 'number' && !Number.isFinite(value))) {
     throw Object.assign(new Error(`Field "${path}" expects a ${typeof from}.`), { code: 'plan.field_type' });
   }
+  if (next.schema === schema.PLAN_SCHEMA) requireReason(reason);
   parent[leaf] = value;
   next.overrides = [...(next.overrides || []), { at: at.toISOString(), by, path, from, to: value, reason: reason || '' }];
+  if (next.schema === schema.PLAN_SCHEMA) {
+    const phase = Number.isInteger(segments[1]) ? next.phases[segments[1]] : null;
+    if (phase && segments[2] === 'caps' && segments[3] === 'maxWeeks') phase.weeks = value;
+    if (phase && segments[2] === 'nutrition') phase.nutrition.source = 'coach';
+    schema.derive(next);
+  }
   if (next.status === 'approved') {
     next.status = 'draft';
     next.approval = { ...next.approval, approvedAt: null, approvedBy: null };
@@ -118,4 +136,159 @@ function adjustmentQuota(plan, registry, at = new Date()) {
   return { tier: plan.package.tier, billingMonth: month, cap, used, remaining: cap === null ? null : Math.max(0, cap - used) };
 }
 
-module.exports = { applyOverride, approve, publish, recordAdjustment, adjustmentQuota, billingMonthFor, parsePath, ADJUSTMENT_TYPES };
+// ── Structural edits (plan/2) ───────────────────────────────────────────────
+// ops: [{ op, ... }], one reason for the batch. Each op lands in overrides[]
+// as { at, by, op, phaseId, from, to, reason }. Phases stay contiguous; dates
+// and start weeks are re-derived after every op.
+
+const NUTRITION_LIMITS = { kcal: [800, 6000], proteinG: [0, 400], carbG: [0, 1000], fatG: [0, 300] };
+
+function findPhase(plan, phaseId) {
+  const i = plan.phases.findIndex(p => p.phaseId === phaseId);
+  if (i === -1) throw planError('plan.phase_missing', `Phase "${phaseId}" does not exist.`);
+  return i;
+}
+
+function intIn(value, min, max, label) {
+  if (!Number.isInteger(value) || value < min || value > max) throw planError('plan.invalid_op', `${label} must be a whole number from ${min} to ${max}.`);
+  return value;
+}
+
+function phaseSummary(p) {
+  return { type: p.type, weeks: p.weeks, goalText: p.goalText };
+}
+
+function nextPhaseId(plan) {
+  const max = plan.phases.reduce((m, p) => Math.max(m, Number(String(p.phaseId).replace(/\D/g, '')) || 0), 0);
+  return `ph${max + 1}`;
+}
+
+function applyOp(plan, op, log) {
+  switch (op && op.op) {
+    case 'addPhase': {
+      if (plan.phases.length >= schema.MAX_PHASES) throw planError('plan.invalid_op', `A plan has at most ${schema.MAX_PHASES} phases.`);
+      if (!schema.PHASE_TYPES.includes(op.type)) throw planError('plan.invalid_op', `Phase type must be one of ${schema.PHASE_TYPES.join(', ')}.`);
+      const weeks = intIn(op.weeks, 1, schema.MAX_WEEKS_PER_PHASE, 'Weeks');
+      const after = op.afterPhaseId ? findPhase(plan, op.afterPhaseId) : plan.phases.length - 1;
+      const phase = schema.newPhase({ phaseId: nextPhaseId(plan), type: op.type, weeks, goalText: String(op.goalText || '').slice(0, 300), like: plan.phases[after] });
+      plan.phases.splice(after + 1, 0, phase);
+      log({ op: 'addPhase', phaseId: phase.phaseId, from: null, to: phaseSummary(phase) });
+      return;
+    }
+    case 'removePhase': {
+      const i = findPhase(plan, op.phaseId);
+      if (plan.phases.length === 1) throw planError('plan.invalid_op', 'A plan needs at least one phase.');
+      const [gone] = plan.phases.splice(i, 1);
+      log({ op: 'removePhase', phaseId: gone.phaseId, from: phaseSummary(gone), to: null });
+      return;
+    }
+    case 'movePhase': {
+      const i = findPhase(plan, op.phaseId);
+      const to = intIn(op.toIndex, 0, plan.phases.length - 1, 'toIndex');
+      const [p] = plan.phases.splice(i, 1);
+      plan.phases.splice(to, 0, p);
+      log({ op: 'movePhase', phaseId: p.phaseId, from: i, to });
+      return;
+    }
+    case 'setPhase': {
+      const p = plan.phases[findPhase(plan, op.phaseId)];
+      const from = phaseSummary(p);
+      if (op.type !== undefined) {
+        if (!schema.PHASE_TYPES.includes(op.type)) throw planError('plan.invalid_op', `Phase type must be one of ${schema.PHASE_TYPES.join(', ')}.`);
+        p.type = op.type;
+        p.goal = schema.GOAL_BY_TYPE[op.type];
+        // A bodyweight target only makes sense for a cut.
+        if (op.type !== 'cut') p.endCriteria.any = (p.endCriteria.any || []).filter(c => c.kind !== 'target');
+      }
+      if (op.weeks !== undefined) p.weeks = intIn(op.weeks, 1, schema.MAX_WEEKS_PER_PHASE, 'Weeks');
+      if (op.goalText !== undefined) p.goalText = String(op.goalText || '').slice(0, 300);
+      log({ op: 'setPhase', phaseId: p.phaseId, from, to: phaseSummary(p) });
+      return;
+    }
+    case 'setNutrition': {
+      const p = plan.phases[findPhase(plan, op.phaseId)];
+      const dayTypes = op.dayType === 'both' ? ['trainingDay', 'restDay'] : [op.dayType];
+      if (!dayTypes.every(d => d === 'trainingDay' || d === 'restDay')) throw planError('plan.invalid_op', 'dayType must be trainingDay, restDay or both.');
+      const values = {};
+      for (const [key, [min, max]] of Object.entries(NUTRITION_LIMITS)) {
+        if (op[key] === undefined) continue;
+        const v = op[key];
+        if (v !== null && (typeof v !== 'number' || !Number.isFinite(v) || v < min || v > max)) throw planError('plan.invalid_op', `${key} must be between ${min} and ${max}.`);
+        values[key] = v === null ? null : Math.round(v * 10) / 10;
+      }
+      if (!Object.keys(values).length) throw planError('plan.invalid_op', 'Send at least one of kcal, proteinG, carbG, fatG.');
+      dayTypes.forEach(d => {
+        const before = { ...(p.nutrition[d] || schema.emptyDay()) };
+        p.nutrition[d] = { ...before, ...values };
+        log({ op: 'setNutrition', phaseId: p.phaseId, dayType: d, from: before, to: { ...p.nutrition[d] } });
+      });
+      p.nutrition.source = 'coach';
+      return;
+    }
+    case 'linkProgram': {
+      const p = plan.phases[findPhase(plan, op.phaseId)];
+      const from = p.training.programRef || null;
+      if (op.programId === null || op.programId === '') {
+        p.training.programRef = null;
+      } else {
+        // The route resolves the program from the coach's library and passes it as op.program.
+        if (!op.program || typeof op.program.name !== 'string') throw planError('plan.program_missing', 'That program is not in your library.');
+        p.training.programRef = {
+          programId: String(op.programId),
+          name: op.program.name,
+          rev: op.program.rev || null,
+          weekOffset: op.weekOffset === undefined ? 0 : intIn(op.weekOffset, 0, 51, 'Week offset'),
+        };
+      }
+      log({ op: 'linkProgram', phaseId: p.phaseId, from, to: p.training.programRef });
+      return;
+    }
+    case 'setStart': {
+      if (!schema.isIsoDate(op.startDate) || new Date(`${op.startDate}T00:00:00Z`).getUTCDay() !== 1) {
+        throw planError('plan.invalid_op', 'The plan starts on a Monday (YYYY-MM-DD).');
+      }
+      log({ op: 'setStart', from: plan.startDate, to: op.startDate });
+      plan.startDate = op.startDate;
+      return;
+    }
+    default:
+      throw planError('plan.invalid_op', `Unknown op "${op && op.op}".`);
+  }
+}
+
+function applyOps(plan, ops, { by, reason, at = new Date() }) {
+  if (plan.status === 'published' || plan.status === 'superseded') {
+    throw planError('plan.not_editable', 'A published plan cannot be edited; make a new version.');
+  }
+  requireReason(reason);
+  if (!Array.isArray(ops) || !ops.length || ops.length > 50) throw planError('plan.invalid_payload', 'Send 1–50 ops.');
+  const next = schema.upgradePlan(plan);
+  const entries = [];
+  const log = entry => entries.push({ at: at.toISOString(), by, ...entry, reason: reason.trim().slice(0, 500) });
+  ops.forEach(op => { applyOp(next, op, log); schema.derive(next); });
+  next.overrides = [...(next.overrides || []), ...entries];
+  if (next.status === 'approved') {
+    next.status = 'draft';
+    next.approval = { ...next.approval, approvedAt: null, approvedBy: null };
+  }
+  return next;
+}
+
+/** A new draft version of a published plan; publishing it supersedes this one. */
+function revise(plan, { by, newPlanId, at = new Date() }) {
+  if (plan.status !== 'published') throw planError('plan.not_published', 'Only a published plan can get a new version.');
+  const next = schema.upgradePlan(plan);
+  next.planId = newPlanId;
+  next.status = 'draft';
+  next.version = (plan.version || 1) + 1;
+  next.supersedes = plan.planId;
+  delete next.programs; // snapshotted again when this version is published
+  next.approval = { generatedAt: at.toISOString(), generatedBy: `revision of ${plan.planId}`, approvedAt: null, approvedBy: null, publishedAt: null };
+  next.overrides = [...(next.overrides || []), { at: at.toISOString(), by, op: 'revise', from: plan.planId, to: newPlanId, reason: `New version ${next.version}` }];
+  return next;
+}
+
+module.exports = {
+  applyOverride, applyOps, revise, approve, publish, recordAdjustment, adjustmentQuota, billingMonthFor, parsePath,
+  ADJUSTMENT_TYPES, NUTRITION_LIMITS,
+};
