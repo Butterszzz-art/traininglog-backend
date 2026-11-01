@@ -33,6 +33,9 @@ const resendApiKey = defineSecret('RESEND_API_KEY');
 // USDA FoodData Central key for food search (src/routes/food.js). Free from
 // https://fdc.nal.usda.gov/api-key-signup — set it before deploying.
 const usdaApiKey = defineSecret('USDA_API_KEY');
+// APNs .p8 key for iPhone push notifications (src/push.js). APNS_KEY_ID and
+// APNS_TEAM_ID are plain settings in .env.
+const apnsKey = defineSecret('APNS_KEY');
 
 const app = require('./server');
 
@@ -48,7 +51,7 @@ exports.api = onRequest({
   secrets: [
     jwtSecret, ollamaApiKey, groqApiKey, openRouterApiKey, intakeCoachUsername,
     googleHealthClientId, googleHealthClientSecret, googleHealthRedirectUri,
-    resendApiKey, usdaApiKey
+    resendApiKey, usdaApiKey, apnsKey
   ]
 }, app);
 

@@ -648,7 +648,7 @@ if (appleIapEnabled) {
       // Apple Root CA - G3, from https://www.apple.com/certificateauthority/
       // (SHA-256 63:34:3A:BF:…:3E:91:79).
       rootCertificates: [fs.readFileSync(path.join(__dirname, 'certs', 'AppleRootCA-G3.cer'))],
-      bundleId: process.env.APPLE_BUNDLE_ID || 'com.pocketcoach.app',
+      bundleId: process.env.APPLE_BUNDLE_ID || 'org.pocketcoachcoms.app',
       appAppleId: process.env.APPLE_APP_ID,
     });
   } catch (err) {

@@ -19,6 +19,7 @@
 // adding a row, so a busy group is one line, not fifty.
 const express = require('express');
 const { profileKey, blockedBy } = require('./profiles');
+const push = require('../push');
 
 const CATEGORIES = ['friends', 'shares', 'groups', 'feed', 'leaderboard', 'coaching'];
 const TYPE_CATEGORY = {
@@ -101,6 +102,7 @@ async function notify(db, opts) {
         wanted.slice(i, i + BATCH_MAX).forEach(to => batch.set(col.doc(), { ...base, to, count: 1, read: false, createdAt: now }));
         await batch.commit();
       }
+      await pushFor(db, wanted, base, null);
       return wanted.length;
     }
 
@@ -118,11 +120,25 @@ async function notify(db, opts) {
       });
       await batch.commit();
     }
+    await pushFor(db, wanted, base, opts.collapseKey);
     return wanted.length;
   } catch (err) {
     console.error(`[notifications] ${opts?.type} failed:`, err.message);
     return 0;
   }
+}
+
+// The phone push for a notification just written (see src/push.js). The text
+// reads as a sentence after the name ("Sam sent you a friend request"), and a
+// collapsible kind replaces its earlier banner instead of stacking up.
+async function pushFor(db, users, base, collapseKey) {
+  const body = base.text ? `${base.actorName} ${base.text}` : '';
+  await push.getSender().sendToUsers(db, users, {
+    body,
+    threadId: base.category,
+    collapseId: collapseKey ? safeKey(collapseKey) : undefined,
+    data: { type: base.type, category: base.category },
+  });
 }
 
 // Volume leaderboard (users/{uid}.totalVolume, top 100 — see leaderboard.js):
@@ -226,6 +242,35 @@ function createNotificationsRouter({ db, firebaseEnabled, sendError, sendSuccess
     }
   });
 
+  // POST /push-token — body: { token, platform: 'ios' }. The app sends its
+  // APNs device token after the user allows notifications, and on each launch.
+  router.post('/push-token', async (req, res) => {
+    try {
+      const token = String(req.body?.token || '').trim();
+      const platform = String(req.body?.platform || 'ios');
+      if (platform !== 'ios') return sendError(res, 400, 'notifications.bad_platform', 'Only iOS push is supported.');
+      if (!push.isValidToken(token)) return sendError(res, 400, 'notifications.bad_token', 'That push token is not valid.');
+      await push.saveToken(db, req.me, token, platform);
+      return sendSuccess(res, 200, { saved: true, pushEnabled: push.getSender().enabled });
+    } catch (err) {
+      console.error('POST /api/notifications/push-token failed:', err);
+      return sendError(res, 500, 'notifications.server_error', 'Could not save the push token.');
+    }
+  });
+
+  // DELETE /push-token — body: { token }. Sent on sign-out so this phone stops
+  // getting the account's pushes.
+  router.delete('/push-token', async (req, res) => {
+    try {
+      const token = String(req.body?.token || '').trim();
+      if (push.isValidToken(token)) await push.removeToken(db, req.me, token);
+      return sendSuccess(res, 200, { removed: true });
+    } catch (err) {
+      console.error('DELETE /api/notifications/push-token failed:', err);
+      return sendError(res, 500, 'notifications.server_error', 'Could not remove the push token.');
+    }
+  });
+
   // DELETE /:id — dismiss one.
   router.delete('/:id', async (req, res) => {
     try {
@@ -275,6 +320,7 @@ async function deleteNotifications(db, username) {
   const snap = await db.collection('notifications').where('to', '==', key).get();
   await Promise.all(snap.docs.map(d => d.ref.delete()));
   await db.collection('notificationPrefs').doc(key).delete();
+  await push.deleteTokensFor(db, key);
 }
 
 module.exports = { createNotificationsRouter, notify, notifyVolumePasses, collapsedRef, deleteNotifications, CATEGORIES, TYPE_CATEGORY };
