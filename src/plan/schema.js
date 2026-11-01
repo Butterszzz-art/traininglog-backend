@@ -149,6 +149,42 @@ function blankPlan({ registry, packageId, startDate, tier, client = {}, now = ne
   return derive(plan);
 }
 
+/**
+ * A draft from an imported plan document (src/plan/planImport.js
+ * sanitizeImported): the coach's own phases and nutrition, no generator.
+ * Values the import filled in are kept in phase.nutrition.suggested until
+ * the coach edits them.
+ */
+function planFromImport({ registry, imported, startDate, tier, client = {}, now = new Date(), planId, fileName = '', by = 'coach' }) {
+  if (!isIsoDate(startDate)) throw new Error('startDate must be YYYY-MM-DD');
+  const caps = registry.params('pkg.tier.adjustment_caps').caps;
+  if (!(tier in caps)) throw new Error(`Unknown tier: ${tier}`);
+  if (!imported || !Array.isArray(imported.phases) || !imported.phases.length) throw new Error('The imported plan has no phases.');
+  const phases = imported.phases.map((p, i) => {
+    const phase = newPhase({ phaseId: `ph${i + 1}`, type: p.type, weeks: p.weeks, goalText: p.goalText });
+    phase.nutrition = { source: 'coach', trainingDay: { ...p.trainingDay }, restDay: { ...p.restDay }, suggested: p.suggested || [] };
+    return phase;
+  });
+  const plan = {
+    schema: PLAN_SCHEMA,
+    planId: planId || `pln_${require('crypto').randomUUID()}`,
+    status: 'draft',
+    version: 1,
+    supersedes: null,
+    client: { uid: client.uid || null, coachUid: client.coachUid || null, leadId: null },
+    package: { id: 'import', name: imported.name || 'Coach plan', tier, totalWeeks: 0, billing: { blockWeeks: 4, blocks: 0, startDate } },
+    startDate,
+    notes: imported.notes || '',
+    ruleVersion: `pocketcoach-rules@${registry.version}`,
+    unverifiedRules: [],
+    phases,
+    overrides: [{ at: now.toISOString(), by, op: 'import', from: null, to: fileName || 'file', reason: `Imported from ${fileName || 'a plan file'}` }],
+    adjustments: [],
+    approval: { generatedAt: now.toISOString(), generatedBy: 'import', approvedAt: null, approvedBy: null, publishedAt: null },
+  };
+  return derive(plan);
+}
+
 /** The phase whose dates contain `isoDate`, or null. */
 function phaseOn(plan, isoDate) {
   return (plan.phases || []).find(p => (p.actualStart || p.plannedStart) <= isoDate && isoDate <= (p.actualEnd || p.plannedEnd)) || null;
@@ -156,5 +192,5 @@ function phaseOn(plan, isoDate) {
 
 module.exports = {
   PLAN_SCHEMA, PLAN_SCHEMA_V1, PHASE_TYPES, GOAL_BY_TYPE, MAX_WEEKS_PER_PHASE, MAX_PHASES,
-  upgradePlan, derive, newPhase, blankPlan, phaseOn, addDays, isIsoDate, emptyDay,
+  upgradePlan, derive, newPhase, blankPlan, planFromImport, phaseOn, addDays, isIsoDate, emptyDay,
 };
