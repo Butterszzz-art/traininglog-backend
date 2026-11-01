@@ -160,6 +160,13 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Calendar feeds — server-only, see src/routes/calendar.js.
+    match /calendarFeeds/{token} {
+      allow read, write: if false;
+    }
+    match /calendarFeedOwners/{user} {
+      allow read, write: if false;
+    }
     // Everything else: deny by default.
     match /{document=**} {
       allow read, write: if false;

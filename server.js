@@ -24,6 +24,7 @@ const { createFriendsRouter, deleteFriendships } = require('./src/routes/friends
 const { createGroupsRouter, removeUserFromGroups } = require('./src/routes/groups');
 const { createFeedRouter, deleteFeedPosts } = require('./src/routes/feed');
 const { createSharesRouter, deleteShares } = require('./src/routes/shares');
+const { createCalendarRouter, createCalendarFeedHandler, deleteCalendarFeed } = require('./src/routes/calendar');
 const { deleteUserMealPhotos } = require('./src/mealShare');
 const { createNotificationsRouter, notifyVolumePasses, deleteNotifications } = require('./src/routes/notifications');
 const coachNotifications = require('./src/coachNotifications');
@@ -755,6 +756,7 @@ async function deleteFirestoreAccount(uid, username, email) {
   await deleteUserMealPhotos(db, profileKey(username));
   await deleteExerciseBests(db, username);
   await deleteNotifications(db, username);
+  await deleteCalendarFeed(db, username);
   forgetCachedUid(username);
 }
 
@@ -4944,6 +4946,26 @@ app.use('/api/feed', authenticateToken, socialLimiter, socialWriteLimiter, creat
   objectionableTerms: OBJECTIONABLE_TERMS,
   notifyModerators,
 }));
+// Calendar sync: program days as a subscribable .ics feed — see
+// src/routes/calendar.js. The feed URL itself is public (calendar apps can't
+// send a login), protected by its secret token.
+const calendarLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: { code: 'calendar.rate_limited', message: 'Too many requests. Try again shortly.' } }
+});
+const calendarFeedLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api/calendar', authenticateToken, calendarLimiter, createCalendarRouter({
+  db, FieldValue, firebaseEnabled, sendError, sendSuccess,
+}));
+app.get('/cal/:file', calendarFeedLimiter, createCalendarFeedHandler({ db, firebaseEnabled }));
 app.use('/api/shares', authenticateToken, socialLimiter, socialWriteLimiter, createSharesRouter({
   db, firebaseEnabled, sendError, sendSuccess, objectionableTerms: OBJECTIONABLE_TERMS,
 }));

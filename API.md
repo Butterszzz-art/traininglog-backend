@@ -303,3 +303,30 @@ Draft → approved → published. Publishing does three things:
 
 ### `GET /api/client/plan`
 Returns the signed-in client's current published plan, or `{ plan: null }`.
+
+## Calendar sync (program days as a calendar feed)
+
+The app works out which program session falls on which date and uploads the
+days from two weeks ago to twelve weeks ahead. They are served as an iCalendar
+feed at a secret link that Apple Calendar, Google Calendar or Outlook subscribe
+to. Server-only storage: `calendarFeeds/{token}`, `calendarFeedOwners/{user}`.
+See `src/routes/calendar.js`; tests in `scripts/test-calendar.js`.
+
+### `GET /api/calendar`
+`{ enabled, path }`: `path` is `/cal/<token>.ics` when the feed exists.
+
+### `PUT /api/calendar`
+Body `{ programName, events: [{ date: 'YYYY-MM-DD', title, description }] }`
+(max 120 events). Creates the feed on first call and replaces its events after
+that. Returns `{ path, count }`.
+
+### `POST /api/calendar/reset`
+New secret link, same events. The old link stops working.
+
+### `DELETE /api/calendar`
+Removes the feed. Also removed on account deletion.
+
+### `GET /cal/:token.ics` (public)
+The feed itself, `text/calendar`. No login (calendar apps can't send one); the
+unguessable token is the protection. All-day events with one stable UID per
+date, so a changed day updates in place.
