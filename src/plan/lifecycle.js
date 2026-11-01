@@ -170,7 +170,15 @@ function applyOp(plan, op, log) {
       if (!schema.PHASE_TYPES.includes(op.type)) throw planError('plan.invalid_op', `Phase type must be one of ${schema.PHASE_TYPES.join(', ')}.`);
       const weeks = intIn(op.weeks, 1, schema.MAX_WEEKS_PER_PHASE, 'Weeks');
       const after = op.afterPhaseId ? findPhase(plan, op.afterPhaseId) : plan.phases.length - 1;
-      const phase = schema.newPhase({ phaseId: nextPhaseId(plan), type: op.type, weeks, goalText: String(op.goalText || '').slice(0, 300), like: plan.phases[after] });
+      // The editor may name the new phase so later ops in the same batch can point at it.
+      let phaseId = nextPhaseId(plan);
+      if (op.phaseId !== undefined) {
+        if (typeof op.phaseId !== 'string' || !/^ph[a-z0-9_-]{1,24}$/i.test(op.phaseId) || plan.phases.some(p => p.phaseId === op.phaseId)) {
+          throw planError('plan.invalid_op', 'phaseId must look like "ph…" and be new.');
+        }
+        phaseId = op.phaseId;
+      }
+      const phase = schema.newPhase({ phaseId, type: op.type, weeks, goalText: String(op.goalText || '').slice(0, 300), like: plan.phases[after] });
       plan.phases.splice(after + 1, 0, phase);
       log({ op: 'addPhase', phaseId: phase.phaseId, from: null, to: phaseSummary(phase) });
       return;

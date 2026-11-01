@@ -64,6 +64,13 @@ test('ops: add, move, bad input; editing an approved plan sends it back to draft
   let p = schema.blankPlan({ registry, packageId: 'physique_28', startDate: '2026-11-09', tier: 'medium' });
   p = lifecycle.applyOps(p, [{ op: 'addPhase', type: 'deload', weeks: 1, afterPhaseId: 'ph1' }], { by: 'c', reason: 'x' });
   assert.deepEqual(p.phases.map(x => [x.phaseId, x.type]), [['ph1', 'build'], ['ph4', 'deload'], ['ph2', 'maintain'], ['ph3', 'cut']]);
+  const named = lifecycle.applyOps(p, [
+    { op: 'addPhase', phaseId: 'ph_new1', type: 'maintain', weeks: 2 },
+    { op: 'setNutrition', phaseId: 'ph_new1', dayType: 'both', kcal: 2500, proteinG: 160, carbG: 300, fatG: 70 },
+  ], { by: 'c', reason: 'x' });
+  assert.equal(named.phases.at(-1).phaseId, 'ph_new1');
+  assert.equal(named.phases.at(-1).nutrition.restDay.kcal, 2500);
+  assert.throws(() => lifecycle.applyOps(p, [{ op: 'addPhase', phaseId: 'ph1', type: 'cut', weeks: 2 }], { by: 'c', reason: 'x' }), { code: 'plan.invalid_op' });
   p = lifecycle.applyOps(p, [{ op: 'movePhase', phaseId: 'ph4', toIndex: 3 }], { by: 'c', reason: 'x' });
   assert.equal(p.phases[3].phaseId, 'ph4');
   assert.equal(p.phases[3].startWeek, 29);
