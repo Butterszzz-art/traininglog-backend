@@ -534,14 +534,27 @@ router.post('/body', async (req, res) => {
 // ── POST /api/ai/coach/import-program — import a coach's own program file ───
 // Body: { fileName, data } where data is the file as base64 (Excel .xlsx,
 // Word .docx, PDF, CSV/text, or a photo). See src/coach/programImport.js.
-// Returns { program, warnings }: program is a Library-shaped program document
-// the phone saves with programBuilderV2Core.importLibraryProgram().
+// Returns { program, warnings, source }: program is a Library-shaped program
+// document the phone saves with programBuilderV2Core.importLibraryProgram().
+// With target: 'coach' (the coach dashboard) program is pocketcoach.program/2
+// instead, plus rowWarnings pinned to week/day/exercise.
+// A sheet laid out as a Week | Day | Exercise | Sets | Reps | … table is read
+// directly (src/coach/tableImport.js, no AI); anything else goes to the AI.
 // Errors: { error: code, message } with 400 / 413 / 422 / 502.
 
 const { ImportError, readImportFile, IMPORT_SCHEMA, IMPORT_INSTRUCTIONS, toProgramDoc } = require('../coach/programImport');
+const { parseTables } = require('../coach/tableImport');
+const programModel = require('../programs/model');
 
 const IMPORT_MODEL = process.env.COACH_IMPORT_MODEL || COACH_MODEL;
 const IMPORT_TIMEOUT_MS = 480000; // the function itself times out at 540 s
+
+// A v2 program in the Library document shape the phone's import expects.
+function v2ToImportDoc(program) {
+  const lib = programModel.toLibrary(program, { id: `import-${String(program.name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'program'}` });
+  const weeks = lib.weeks || [{ week: 1, label: 'Week 1', phase: '', days: lib.days }];
+  return { ...lib, kind: 'program', goal: 'general', archetype: 'general', durationWeeks: weeks.length, weeks };
+}
 
 router.post('/import-program', async (req, res) => {
   let file;
@@ -551,6 +564,17 @@ router.post('/import-program', async (req, res) => {
     if (err instanceof ImportError) return res.status(err.status).json({ error: err.code, message: err.message });
     // A truncated or malformed zip fails inside Buffer reads.
     return res.status(400).json({ error: 'unreadable', message: 'That file looks damaged. Try saving it again, or export it as a PDF.' });
+  }
+  const forCoach = req.body?.target === 'coach';
+
+  if (file.sheets) {
+    const table = parseTables(file.sheets, { fileName: file.fileName });
+    if (table) {
+      const warnings = [...table.warnings, ...(forCoach ? [] : table.rowWarnings.map(w => w.message))].slice(0, 40);
+      return res.json(forCoach
+        ? { program: table.program, warnings: table.warnings, rowWarnings: table.rowWarnings, source: 'table' }
+        : { program: v2ToImportDoc(table.program), warnings, source: 'table' });
+    }
   }
 
   const open = openModels();
@@ -599,7 +623,12 @@ router.post('/import-program', async (req, res) => {
       const why = obj && Array.isArray(obj.warnings) && typeof obj.warnings[0] === 'string' ? ` ${obj.warnings[0].slice(0, 200)}` : '';
       return res.status(422).json({ error: 'no_program', message: `No training program was found in this file.${why}` });
     }
-    return res.json(result);
+    if (forCoach) {
+      const program = programModel.readProgram(result.program);
+      if (!program) return res.status(422).json({ error: 'no_program', message: 'No training program was found in this file.' });
+      return res.json({ program, warnings: result.warnings, rowWarnings: programModel.validate(program), source: 'ai' });
+    }
+    return res.json({ ...result, source: 'ai' });
   } catch (err) {
     if (ctrl.signal.aborted || res.headersSent || res.destroyed) return undefined;
     logError('[AI import-program]', err);
