@@ -3712,16 +3712,23 @@ app.get('/api/coach/clients/:clientUid', authenticateToken, requireCoachPlan, as
 });
 
 // ── Coach program library ────────────────────────────────────────────────────
-// coaches/{coachUid}/programs/{programId}: { name, notes, days: { Mon: [{ name,
-// sets, reps, repsMax? }] } }. Shared by the mobile builder and the desktop
-// console (they used to keep separate localStorage lists that never met).
+// coaches/{coachUid}/programs/{programId}: "pocketcoach.program/2"
+// (src/programs/model.js): weeks → days → rows. Older single-week docs
+// ({ name, days: { Mon: [...] } }) are read as one repeating week. Shared by
+// the mobile builder and the desktop console.
 app.get('/api/coach/programs', authenticateToken, requireCoachPlan, async (req, res) => {
   if (!firebaseEnabled) return sendError(res, 503, 'coach.firebase_disabled', 'Coach programs require a migrated (Firebase) account.');
   try {
     const coachUid = await resolveCallerUid(req.user);
     if (!coachUid) return sendError(res, 409, 'coach.not_migrated', 'Your account needs to complete migration first. Contact support.');
     const snap = await db.collection(`coaches/${coachUid}/programs`).get();
-    const programs = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    // Older docs are the single-week { name, days: { Mon: [...] } } shape:
+    // always answer in the current shape (v2 plus the legacy `days` view).
+    const programs = snap.docs.map(d => {
+      const raw = d.data() || {};
+      const p = coachShare.sanitizeCoachProgram(raw);
+      return p ? { id: d.id, ...p, updatedAt: raw.updatedAt || null } : null;
+    }).filter(Boolean)
       .sort((a, b) => String(a.name).localeCompare(String(b.name)));
     return sendSuccess(res, 200, { programs });
   } catch (err) {
@@ -3742,8 +3749,18 @@ app.put('/api/coach/programs/:id', authenticateToken, requireCoachPlan, coachInv
     if (!program) return sendError(res, 422, 'coach.invalid_payload', 'Program name is required.');
     const coachUid = await resolveCallerUid(req.user);
     if (!coachUid) return sendError(res, 409, 'coach.not_migrated', 'Your account needs to complete migration first. Contact support.');
+    const ref = db.collection(`coaches/${coachUid}/programs`).doc(id);
+    // An older app build only knows one week: don't let it flatten a
+    // multi-week program by saving over it.
+    if (coachShare.isV1ProgramBody(req.body)) {
+      const existing = await ref.get();
+      const prev = existing.exists ? coachShare.sanitizeCoachProgram(existing.data()) : null;
+      if (prev && prev.weekCount > 1) {
+        return sendError(res, 409, 'coach.program_multi_week', 'This program has several weeks. Edit it in the coach dashboard.');
+      }
+    }
     const saved = { ...program, updatedAt: new Date().toISOString() };
-    await db.collection(`coaches/${coachUid}/programs`).doc(id).set(saved);
+    await ref.set(saved);
     return sendSuccess(res, 200, { program: { id, ...saved } });
   } catch (err) {
     console.error('PUT /api/coach/programs/:id failed:', err);
