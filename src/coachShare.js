@@ -231,72 +231,41 @@ function computeClientAlerts(doc, now = new Date()) {
 }
 
 // ── Coach program library ────────────────────────────────────────────────────
-// Coach programs are a simple weekly split: days.{Mon..Sun} = [{ name, sets,
-// reps, repsMax? }]. Older mobile saves stored plain exercise-name strings.
+// Stored as "pocketcoach.program/2" (src/programs/model.js, shared with the
+// app): weeks → days (weekday + label) → rows with sets, rep range, RIR,
+// last-set RIR, rest and type. Older saves ({ name, days: { Mon: [...] } },
+// sometimes plain exercise-name strings) read as one repeating week.
 
-const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const programModel = require('./programs/model');
 
-function sanitizeCoachExercise(ex) {
-  const src = typeof ex === 'string' ? { name: ex } : (ex && typeof ex === 'object' ? ex : null);
-  if (!src) return null;
-  const name = text(src.name, 80);
-  if (!name) return null;
-  const sets = Math.round(num(src.sets, 1, 20) || 3);
-  const reps = Math.round(num(src.reps, 1, 100) || 10);
-  const repsMaxRaw = num(src.repsMax, 1, 100);
-  const out = { name, sets, reps };
-  if (repsMaxRaw !== null && repsMaxRaw > reps) out.repsMax = Math.round(repsMaxRaw);
-  const notes = text(src.notes, 200);
-  if (notes) out.notes = notes;
-  return out;
-}
-
+// v2 program + the counts the lists show, plus `days` (week 1 as the old
+// { Mon: [...] } map) for app builds that only read that.
 function sanitizeCoachProgram(program) {
-  const p = program && typeof program === 'object' ? program : {};
-  const name = text(p.name, 80);
-  if (!name) return null;
-  const days = {};
-  let total = 0;
-  for (const day of WEEKDAYS) {
-    const list = Array.isArray(p.days && p.days[day]) ? p.days[day] : [];
-    days[day] = list.map(sanitizeCoachExercise).filter(Boolean).slice(0, 20);
-    total += days[day].length;
-  }
-  return { name, notes: text(p.notes, 2000), days, exerciseCount: total };
+  const p = programModel.readProgram(program);
+  if (!p) return null;
+  const s = programModel.stats(p);
+  return { ...p, exerciseCount: s.exerciseCount, weekCount: s.weekCount, dayCount: s.dayCount, days: programModel.toV1Days(p) };
 }
 
-function slug(value) {
-  return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'ex';
+// True when the body is the old single-week shape (no weeks, no schema).
+function isV1ProgramBody(body) {
+  return !!(body && typeof body === 'object' && !body.schema && !Array.isArray(body.weeks));
 }
 
 // Converts a coach program into the app's program format (same shape the
 // premium library uses) so the client can import it with one tap.
 function toClientProgram(program, meta = {}) {
-  const p = sanitizeCoachProgram(program);
+  const p = programModel.readProgram(program);
   if (!p) return null;
-  const trainingDays = WEEKDAYS.filter(d => p.days[d].length);
-  const days = trainingDays.map((day, i) => ({
-    dayId: `d${i + 1}`,
-    name: day,
-    exercises: p.days[day].map((ex, j) => ({
-      exerciseId: `d${i + 1}-${j + 1}-${slug(ex.name)}`,
-      name: ex.name,
-      ...(ex.notes ? { notes: ex.notes } : {}),
-      sets: Array.from({ length: ex.sets }, () => ({ reps: ex.reps, ...(ex.repsMax ? { repsMax: ex.repsMax } : {}), restSec: 120 })),
-    })),
-  }));
-  return {
-    id: `coach-${slug(meta.coachUsername)}-${slug(meta.programId || p.name)}`,
-    title: p.name,
-    summary: p.notes,
-    frequency: trainingDays,
-    schedule: { startDate: '', weekdays: trainingDays.map(d => WEEKDAYS.indexOf(d) + 1) },
-    split: { type: 'custom', name: p.name, daysPerWeek: trainingDays.length },
-    progressionType: 'double-progression',
-    days,
-    assignedBy: meta.coachUsername || '',
-    rev: meta.rev || null,
-  };
+  return programModel.toLibrary(p, {
+    id: `coach-${slugify(meta.coachUsername)}-${slugify(meta.programId || p.name)}`,
+    coachUsername: meta.coachUsername,
+    rev: meta.rev,
+  });
+}
+
+function slugify(value) {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'ex';
 }
 
 function sanitizeMacroTargets(value) {
@@ -362,6 +331,7 @@ module.exports = {
   weeklyChangePercent,
   weekStartOf,
   sanitizeCoachProgram,
+  isV1ProgramBody,
   toClientProgram,
   sanitizeMacroTargets,
   sanitizeMacroPlan,

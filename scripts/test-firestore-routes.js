@@ -642,6 +642,26 @@ setTimeout(() => {
     await req('PUT', '/api/coach/programs/empty', tokCoach, { name: 'Empty', days: {} });
     r = await req('GET', '/api/coach/programs', tokCoach);
     check('GET /api/coach/programs lists them', r.body?.programs?.length === 2);
+    check('GET /api/coach/programs answers in program/2 with the legacy days view',
+      r.body?.programs?.find(p => p.id === 'p1')?.schema === 'pocketcoach.program/2'
+      && r.body.programs.find(p => p.id === 'p1').weeks?.[0]?.days?.length === 2
+      && r.body.programs.find(p => p.id === 'p1').days?.Mon?.length === 2);
+
+    const v2 = {
+      schema: 'pocketcoach.program/2', name: 'Two weeks',
+      weeks: [
+        { days: [{ weekday: 1, label: 'Lower A', exercises: [{ name: 'Hack squat', sets: 2, repsMin: 6, repsMax: 10, rir: 3, restSec: 120, restSecMax: 180, type: 'compound' }] }] },
+        { days: [{ weekday: 1, label: 'Lower A', exercises: [{ name: 'Hack squat', sets: 2, repsMin: 6, repsMax: 10, rir: 2, lastSetRir: 1, restSec: 120, type: 'compound' }] }] },
+      ],
+    };
+    r = await req('PUT', '/api/coach/programs/p2', tokCoach, v2);
+    check('PUT a multi-week program/2 keeps its weeks', r.status === 200 && store['coaches/uidABC123/programs']?.p2?.weekCount === 2 && store['coaches/uidABC123/programs'].p2.weeks[1].days[0].exercises[0].lastSetRir === 1);
+    r = await req('PUT', '/api/coach/programs/p2', tokCoach, { name: 'Two weeks', days: { Mon: ['Squat'] } });
+    check('an old single-week save cannot flatten a multi-week program -> 409', r.status === 409 && store['coaches/uidABC123/programs'].p2.weekCount === 2);
+    r = await req('PATCH', '/api/coach/clients/uidClient456', tokCoach, { programId: 'p2' });
+    const asn2 = store['users/uidClient456/coachAssignment']?.uidABC123?.program;
+    check('assigning a multi-week program sends weeks with per-set RIR', r.status === 200 && asn2?.weeks?.length === 2 && JSON.stringify(asn2.weeks[1].days[0].exercises[0].sets.map(s => s.rir)) === '[2,1]' && asn2.days[0].weekday === 1);
+    await req('DELETE', '/api/coach/programs/p2', tokCoach);
 
     r = await req('PATCH', '/api/coach/clients/uidClient456', tokCoach, { programId: 'empty' });
     check('assigning an empty program -> 422', r.status === 422);
