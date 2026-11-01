@@ -106,8 +106,8 @@ function cellRef(ref) {
 }
 const colName = c => { let s = ''; c += 1; while (c > 0) { const r = (c - 1) % 26; s = String.fromCharCode(65 + r) + s; c = Math.floor((c - 1) / 26); } return s; };
 
-/** Every sheet of an .xlsx as a text table: one line per row, cells tab-separated. */
-function xlsxToText(zip) {
+/** Every visible sheet of an .xlsx as { name, grid } (grid[row][col] = trimmed text). */
+function xlsxSheets(zip) {
   const read = name => (zip.get(name) ? zip.get(name)() : '');
   const workbook = read('xl/workbook.xml');
   if (!workbook) throw new ImportError('unsupported', "That doesn't look like an Excel workbook. Export it as .xlsx or PDF and try again.");
@@ -120,7 +120,7 @@ function xlsxToText(zip) {
   const shared = (read('xl/sharedStrings.xml').match(/<si>[\s\S]*?<\/si>/g) || [])
     .map(si => textRuns(si.replace(/<rPh\b[\s\S]*?<\/rPh>/g, ''), 't'));
 
-  const parts = [];
+  const sheets = [];
   (workbook.match(/<sheet\b[^>]*>/g) || []).forEach(tag => {
     if (attr(tag, 'state') === 'hidden' || attr(tag, 'state') === 'veryHidden') return;
     const xml = read(rels[attr(tag, 'r:id')] || '');
@@ -149,16 +149,48 @@ function xlsxToText(zip) {
       if (!value) return;
       for (let r = a.row; r <= b.row; r++) for (let c = a.col; c <= b.col; c++) put(r, c, value);
     });
+    sheets.push({ name: attr(tag, 'name') || 'Sheet', grid });
+  });
+  return sheets;
+}
+
+/** Every sheet of an .xlsx as a text table: one line per row, cells tab-separated. */
+function xlsxToText(zip, sheets = xlsxSheets(zip)) {
+  const parts = [];
+  sheets.forEach(({ name, grid }) => {
     const lines = [];
     grid.forEach((cells, r) => {
       if (!cells || !cells.some(Boolean)) return;
       const first = cells.findIndex(Boolean);
       lines.push(`${r + 1}\t${colName(first)}: ` + Array.from(cells.slice(first), x => x || '').join('\t'));
     });
-    if (lines.length) parts.push(`## Sheet "${attr(tag, 'name') || 'Sheet'}" (each line: row number, first filled column, then tab-separated cells)\n` + lines.join('\n'));
+    if (lines.length) parts.push(`## Sheet "${name}" (each line: row number, first filled column, then tab-separated cells)\n` + lines.join('\n'));
   });
   if (!parts.length) throw new ImportError('empty', 'That workbook has no filled cells.');
   return parts.join('\n\n');
+}
+
+/** CSV / TSV text → grid. Quotes ("a, b" and "" for a quote) are handled; delimiter is guessed. */
+function delimitedToGrid(text) {
+  const firstLine = text.split(/\r?\n/, 1)[0] || '';
+  const delim = firstLine.includes('\t') ? '\t' : (firstLine.split(';').length > firstLine.split(',').length ? ';' : ',');
+  const grid = [];
+  let row = [];
+  let cell = '';
+  let quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (quoted) {
+      if (ch === '"' && text[i + 1] === '"') { cell += '"'; i++; } else if (ch === '"') quoted = false; else cell += ch;
+    } else if (ch === '"' && cell === '') quoted = true;
+    else if (ch === delim) { row.push(cell.trim()); cell = ''; }
+    else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && text[i + 1] === '\n') i++;
+      row.push(cell.trim()); grid.push(row); row = []; cell = '';
+    } else cell += ch;
+  }
+  if (cell || row.length) { row.push(cell.trim()); grid.push(row); }
+  return grid;
 }
 
 /** A .docx as text: paragraphs as lines, table rows as tab-separated cells. */
@@ -215,21 +247,27 @@ function readImportFile({ fileName, data } = {}) {
   if (kind && kind.startsWith('image/')) {
     return { kind: 'image', content: [{ type: 'image', source: { type: 'base64', media_type: kind, data: buf.toString('base64') } }] };
   }
+  let sheets = null; // tables we can read without AI (see tableImport.js)
   if (kind === 'zip') {
     const zip = readZip(buf);
-    if (zip.has('xl/workbook.xml')) text = xlsxToText(zip);
-    else if (zip.has('word/document.xml')) text = docxToText(zip);
+    if (zip.has('xl/workbook.xml')) {
+      const read = name => (zip.get(name) ? zip.get(name)() : '');
+      if (!read('xl/workbook.xml')) throw new ImportError('unsupported', "That doesn't look like an Excel workbook. Export it as .xlsx or PDF and try again.");
+      sheets = xlsxSheets(zip);
+      text = xlsxToText(zip, sheets);
+    } else if (zip.has('word/document.xml')) text = docxToText(zip);
     else throw new ImportError('unsupported', 'That file type is not supported. Use Excel (.xlsx), Word (.docx), PDF, CSV or a photo.');
   } else if (kind === 'legacy-office') {
     throw new ImportError('unsupported', 'Old .xls / .doc files are not supported. Save it as .xlsx / .docx (or PDF) and try again.');
   } else if (kind === 'text') {
     text = buf.toString('utf8').replace(/^﻿/, '');
+    if (/\.(csv|tsv|txt)$/i.test(name)) sheets = [{ name: name.replace(/\.[^.]+$/, ''), grid: delimitedToGrid(text) }];
   } else {
     throw new ImportError('unsupported', 'That file type is not supported. Use Excel (.xlsx), Word (.docx), PDF, CSV or a photo.');
   }
   if (!text.trim()) throw new ImportError('empty', 'That file has no text in it.');
   if (text.length > MAX_TEXT_CHARS) throw new ImportError('too_large', 'That file is too long to import in one go. Import one month at a time.', 413);
-  return { kind: 'text', content: [{ type: 'text', text: `File: ${name}\n\n${text}` }] };
+  return { kind: 'text', fileName: name, sheets, content: [{ type: 'text', text: `File: ${name}\n\n${text}` }] };
 }
 
 // ── what Claude fills in ────────────────────────────────────────────────────
@@ -460,6 +498,6 @@ function toProgramDoc(obj, fileName) {
 }
 
 module.exports = {
-  ImportError, readImportFile, readZip, xlsxToText, docxToText,
+  ImportError, readImportFile, readZip, xlsxSheets, xlsxToText, delimitedToGrid, docxToText,
   IMPORT_SCHEMA, IMPORT_INSTRUCTIONS, toProgramDoc, MAX_FILE_BYTES,
 };
