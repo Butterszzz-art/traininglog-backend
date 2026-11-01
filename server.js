@@ -3359,6 +3359,7 @@ function coachClientSummary(id, data, now = new Date()) {
     alerts,
     currentNutritionSummary: data.nutritionSummary || '',
     macroTargets: data.macroTargets || null,
+    macroPlan: data.macroPlan || null,
     hideNutritionNumbers: data.hideNutritionNumbers === true,
     latestCheckInData: data.latestCheckInJson ?? null,
     compliancePercent: data.compliancePercent ?? null,
@@ -3852,6 +3853,10 @@ app.delete('/api/client/coaches/:coachUid', authenticateToken, async (req, res) 
 //     Its full content is converted to the app's program format and copied to
 //     the client's assignment, so they can import it; '' clears it.
 //   macroTargets: { calories, protein, carbs, fat } the client can apply.
+//   macroPlan: { days: { training, rest?, high?, low? } (grams each),
+//     schedule: { mon..sun: day type }, note? } — goes live in the client's
+//     Macros tab. Also fills macroTargets with the training day for older
+//     app versions. null clears it.
 app.patch('/api/coach/clients/:clientUid', authenticateToken, requireCoachPlan, coachInviteLimiter, async (req, res) => {
   if (!firebaseEnabled) return sendError(res, 503, 'coach.firebase_disabled', 'Client linking requires a migrated (Firebase) account.');
   try {
@@ -3870,10 +3875,18 @@ app.patch('/api/coach/clients/:clientUid', authenticateToken, requireCoachPlan, 
       }
       fields.macroTargets = targets;
     }
+    if (req.body?.macroPlan !== undefined) {
+      const plan = req.body.macroPlan === null ? null : coachShare.sanitizeMacroPlan(req.body.macroPlan);
+      if (req.body.macroPlan !== null && !plan) {
+        return sendError(res, 422, 'coach.invalid_macro_plan', 'macroPlan needs protein, carbs and fat for the training day, and for every other day type filled in.');
+      }
+      fields.macroPlan = plan;
+      if (plan && req.body.macroTargets === undefined) fields.macroTargets = { ...plan.days.training };
+    }
     if (typeof req.body?.hideNutritionNumbers === 'boolean') fields.hideNutritionNumbers = req.body.hideNutritionNumbers;
     const programId = typeof req.body?.programId === 'string' ? req.body.programId.trim() : null;
     if (!Object.keys(fields).length && programId === null) {
-      return sendError(res, 422, 'coach.invalid_payload', 'Provide at least one of currentProgram, programId, nutritionSummary, macroTargets, trainingMode, hideNutritionNumbers.');
+      return sendError(res, 422, 'coach.invalid_payload', 'Provide at least one of currentProgram, programId, nutritionSummary, macroTargets, macroPlan, trainingMode, hideNutritionNumbers.');
     }
 
     const coachUid = await resolveCallerUid(req.user);

@@ -310,6 +310,46 @@ function sanitizeMacroTargets(value) {
   return out;
 }
 
+// A coach's macro plan by day type: grams per day type (calories derived from
+// them) and which day type each weekday is, so the client's Macros tab can
+// pick today's target on its own. Training is required; the others are
+// optional (the client falls back to training). A weekday without a valid
+// day type stays null, meaning the client picks that day by hand.
+const MACRO_DAY_TYPES = ['training', 'rest', 'high', 'low'];
+const MACRO_WEEKDAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+
+function sanitizeMacroDay(value) {
+  if (!value || typeof value !== 'object') return null;
+  const out = {};
+  for (const [key, max] of [['protein', 1000], ['carbs', 2000], ['fat', 1000]]) {
+    const v = num(value[key], 0, max);
+    if (v === null) return null;
+    out[key] = Math.round(v);
+  }
+  out.calories = out.protein * 4 + out.carbs * 4 + out.fat * 9;
+  return out.calories > 0 ? out : null;
+}
+
+function sanitizeMacroPlan(value) {
+  if (!value || typeof value !== 'object') return null;
+  const days = {};
+  for (const type of MACRO_DAY_TYPES) {
+    const raw = value.days && value.days[type];
+    if (raw == null) continue;
+    const day = sanitizeMacroDay(raw);
+    if (!day) return null; // a half-filled day is a mistake, not "skip this day"
+    days[type] = day;
+  }
+  if (!days.training) return null;
+  const schedule = {};
+  for (const wd of MACRO_WEEKDAYS) {
+    const type = value.schedule && value.schedule[wd];
+    schedule[wd] = days[type] ? type : null;
+  }
+  const note = typeof value.note === 'string' ? value.note.trim().slice(0, 300) : '';
+  return { days, schedule, note };
+}
+
 module.exports = {
   SHARING_KEYS,
   SHARE_FIELDS,
@@ -324,4 +364,7 @@ module.exports = {
   sanitizeCoachProgram,
   toClientProgram,
   sanitizeMacroTargets,
+  sanitizeMacroPlan,
+  MACRO_DAY_TYPES,
+  MACRO_WEEKDAYS,
 };
