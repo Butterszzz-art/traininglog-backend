@@ -74,7 +74,7 @@ async function notifyCoachNote(db, { coachUsername, clientUsername }) {
 async function notifyCoachPlan(db, { coachUsername, clientUsername, fields = {} }) {
   const parts = [];
   if (fields.currentProgram) parts.push('program');
-  if (fields.nutritionSummary) parts.push('nutrition');
+  if (fields.nutritionSummary || fields.macroPlan) parts.push('nutrition');
   if (fields.trainingMode && !parts.length) parts.push('training plan');
   if (!parts.length) return 0;
   return notify(db, {

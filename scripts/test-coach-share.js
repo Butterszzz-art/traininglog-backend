@@ -103,6 +103,27 @@ test('sanitizeMacroTargets needs all four numbers', () => {
   assert.strictEqual(cs.sanitizeMacroTargets({ calories: 2400 }), null);
 });
 
+test('sanitizeMacroPlan derives calories and keeps the weekly pattern', () => {
+  const p = cs.sanitizeMacroPlan({
+    days: { training: { protein: 180, carbs: '250', fat: 70 }, rest: { protein: 180, carbs: 150, fat: 75 }, high: null },
+    schedule: { mon: 'training', tue: 'rest', wed: 'high', thu: 'nonsense' },
+    note: '  refeed on Saturdays  ',
+  });
+  assert.deepStrictEqual(p.days.training, { protein: 180, carbs: 250, fat: 70, calories: 2350 });
+  assert.strictEqual(p.days.rest.calories, 180 * 4 + 150 * 4 + 75 * 9);
+  assert.strictEqual(p.days.high, undefined);
+  // A weekday pointing at a day type with no targets is left for the client to pick.
+  assert.deepStrictEqual(p.schedule, { mon: 'training', tue: 'rest', wed: null, thu: null, fri: null, sat: null, sun: null });
+  assert.strictEqual(p.note, 'refeed on Saturdays');
+});
+
+test('sanitizeMacroPlan rejects a plan without training or with a half-filled day', () => {
+  assert.strictEqual(cs.sanitizeMacroPlan({ days: { rest: { protein: 1, carbs: 1, fat: 1 } } }), null);
+  assert.strictEqual(cs.sanitizeMacroPlan({ days: { training: { protein: 180, carbs: 250, fat: 70 }, low: { protein: 180 } } }), null);
+  assert.strictEqual(cs.sanitizeMacroPlan({ days: { training: { protein: 0, carbs: 0, fat: 0 } } }), null);
+  assert.strictEqual(cs.sanitizeMacroPlan('nope'), null);
+});
+
 for (const r of results) console.log((r.pass ? 'PASS' : 'FAIL') + ' - ' + r.label + (r.err ? '\n   ' + r.err.message : ''));
 const failed = results.filter(r => !r.pass).length;
 console.log(`\n${results.length - failed}/${results.length} passed`);
