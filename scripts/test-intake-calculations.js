@@ -58,7 +58,7 @@ function run(fns) {
   if (process.argv[2] === '--update') {
     const src = process.argv[3];
     if (!src) { console.error('--update needs the path to ClientIntake/calculations.js'); process.exit(1); }
-    const ci = await import(path.resolve(src));
+    const ci = await import(require('url').pathToFileURL(path.resolve(src)).href);
     fs.writeFileSync(FIXTURES, JSON.stringify(run(ci), null, 2) + '\n');
     console.log('Wrote', path.relative(process.cwd(), FIXTURES));
     return;
