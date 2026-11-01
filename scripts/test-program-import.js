@@ -359,6 +359,33 @@ async function run() {
     assert.deepStrictEqual(calls[0].plugins, [{ id: 'file-parser', pdf: { engine: 'cloudflare-ai' } }]);
   }));
 
+  console.log('table import (no AI)');
+
+  const sheet = require('fs').readFileSync(require('path').join(__dirname, '..', 'tests', 'fixtures', 'gael-xframe-weeks-1-4.xlsx')).toString('base64');
+
+  await t('Week | Day | Exercise table → program without an AI call (phone shape)', async () => {
+    const res = await post({ fileName: 'xframe.xlsx', data: sheet });
+    assert.strictEqual(res.status, 200);
+    const body = await res.json();
+    assert.strictEqual(calls.length, 0);
+    assert.strictEqual(body.source, 'table');
+    assert.strictEqual(body.program.kind, 'program');
+    assert.strictEqual(body.program.weeks.length, 4);
+    assert.deepStrictEqual(body.program.schedule.weekdays, [1, 2, 4, 5]);
+    const raise = body.program.weeks[2].days[1].exercises.find(e => /Cable lateral/.test(e.name));
+    assert.deepStrictEqual(raise.sets.map(s => s.rir), [2, 2, 2, 1]);
+  });
+
+  await t('target: coach → program/2 with row warnings', async () => {
+    const csv = Buffer.from('Week,Day,Exercise,Sets,Reps,RIR,Rest,Notes\nWeek 1,Mon - Lower A,Squat,3,6-8,2,3 min,\n,,Leg curl,lots,10-15,2,90s,\n').toString('base64');
+    const res = await post({ fileName: 'p.csv', data: csv, target: 'coach' });
+    const body = await res.json();
+    assert.strictEqual(calls.length, 0);
+    assert.strictEqual(body.program.schema, 'pocketcoach.program/2');
+    assert.strictEqual(body.program.weeks[0].days[0].exercises.length, 2, 'blank Week/Day repeat the row above');
+    assert.ok(body.rowWarnings.some(w => w.row === 3 && /sets "lots"/.test(w.message) && w.exerciseId));
+  });
+
   await t('PDF with only Ollama configured → 422 before any AI call', () => withOpenModels(['ollama'], async () => {
     const res = await post(pdf);
     assert.strictEqual(res.status, 422);

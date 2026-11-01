@@ -148,6 +148,16 @@
     return row;
   }
 
+  /** Best guess at compound / isolation / core from the exercise name; the coach can change it. */
+  function guessType(name) {
+    const n = String(name || '').toLowerCase();
+    if (/\b(ab[- ]?wheel|roll-?out|plank|crunch|sit-?up|pallof|hanging (leg|knee) raise|leg raise|dead ?bug|hollow|side bend|woodchop|ab |abs\b|core)/.test(n)) return 'core';
+    if (/(pressdown|push-?down|kickback|fly|flye|pec-?deck|raise|curl|extension|pullover|shrug|calf|adduct|abduct|face pull)/.test(n)
+      && !/(hip thrust|back extension or|or hip thrust)/.test(n)) return 'isolation';
+    if (/(squat|deadlift|\brdl\b|lunge|leg press|hip thrust|good ?morning|press|row|pulldown|pull-?down|pull-?up|chin-?up|dip|clean|snatch|step-?up|hack)/.test(n)) return 'compound';
+    return 'isolation';
+  }
+
   // ── normalisation ─────────────────────────────────────────────────────────
 
   function normalizeExercise(src, fallbackId) {
@@ -450,6 +460,6 @@
     SCHEMA, WEEKDAYS, TYPES, LIMITS,
     readProgram, weekDays, stats, validate, copyWeek, toLibrary, toV1Days,
     parseQuickEntry, parseReps, parseRir, parseRest, parseDayLabel, parseWeek,
-    formatRow, formatRest, weekdayNumber,
+    formatRow, formatRest, weekdayNumber, guessType,
   };
 });
