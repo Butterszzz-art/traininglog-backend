@@ -132,12 +132,22 @@ function onderhoudsinnamePerDag(totaalTrainingsdag, ree, trainingsdagenPerWeek) 
   return (totaalTrainingsdag * trainingsdagenPerWeek + ree * (7 - trainingsdagenPerWeek)) / 7;
 }
 
-function beoogdeInnameRustdag(onderhoudPerDag, energiebalansFactor) {
-  return onderhoudPerDag * energiebalansFactor;
+// Each day type gets its own maintenance × the energy-balance factor.
+// (Until Nov 2026 the rest day was onderhoudPerDag × factor and the training
+// day that plus EE. onderhoudPerDag already contains the training energy, so
+// EE was counted twice: the weekly average came out ~+15% instead of the
+// intended factor.)
+function beoogdeInnameRustdag(ree, energiebalansFactor) {
+  return ree * energiebalansFactor;
 }
 
-function beoogdeInnameTrainingsdag(beoogdeInnameRustdagKcal, ee) {
-  return beoogdeInnameRustdagKcal + ee;
+function beoogdeInnameTrainingsdag(totaalTrainingsdag, energiebalansFactor) {
+  return totaalTrainingsdag * energiebalansFactor;
+}
+
+// Weekly average of the two targets; equals onderhoudPerDag × factor.
+function beoogdeInnameGemiddeld(beoogdeRustdag, beoogdeTrainingsdag, trainingsdagenPerWeek) {
+  return (beoogdeTrainingsdag * trainingsdagenPerWeek + beoogdeRustdag * (7 - trainingsdagenPerWeek)) / 7;
 }
 
 function eiwitGrammen(gewicht, factor = 1.8) {
@@ -393,7 +403,9 @@ function genereerRodeVlaggen(intake, calculations) {
 
   const p = intake.persoonsgegevens ?? {};
   const maxTekort = tekortBereik(p.vetpercentage, p.geslacht).max;
-  const tekort = 1 - calculations.beoogdeInnameRustdag / calculations.onderhoudPerDag;
+  // Compare like with like: the weekly average target against weekly maintenance.
+  const gemiddeld = calculations.beoogdeInnameGemiddeld ?? calculations.beoogdeInnameRustdag;
+  const tekort = 1 - gemiddeld / calculations.onderhoudPerDag;
   if (tekort > maxTekort) {
     vlaggen.push({
       niveau: 'rood',
@@ -476,8 +488,9 @@ function berekenClient(intake, instellingen = {}) {
   const ree = energieverbruikRustdag(bmr, pal, tef);
   const totaalTrainingsdag = totaalEnergieTrainingsdag(ree, ee, tef);
   const onderhoudPerDag = onderhoudsinnamePerDag(totaalTrainingsdag, ree, trainingsdagenPerWeek);
-  const beoogdeRustdag = beoogdeInnameRustdag(onderhoudPerDag, energiebalansFactor);
-  const beoogdeTrainingsdag = beoogdeInnameTrainingsdag(beoogdeRustdag, ee);
+  const beoogdeRustdag = beoogdeInnameRustdag(ree, energiebalansFactor);
+  const beoogdeTrainingsdag = beoogdeInnameTrainingsdag(totaalTrainingsdag, energiebalansFactor);
+  const beoogdeGemiddeld = beoogdeInnameGemiddeld(beoogdeRustdag, beoogdeTrainingsdag, trainingsdagenPerWeek);
 
   const eiwit = eiwitGrammen(gewicht, eiwitFactor);
   const vet = vetGrammen(ree, percentageVetVanREE);
@@ -518,6 +531,7 @@ function berekenClient(intake, instellingen = {}) {
     onderhoudPerDag: round(onderhoudPerDag, 0),
     beoogdeInnameRustdag: round(beoogdeRustdag, 0),
     beoogdeInnameTrainingsdag: round(beoogdeTrainingsdag, 0),
+    beoogdeInnameGemiddeld: round(beoogdeGemiddeld, 0),
     macros,
     bereiken: {
       eiwit: eiwitBereik(gewicht),
@@ -578,6 +592,7 @@ module.exports = {
   onderhoudsinnamePerDag,
   beoogdeInnameRustdag,
   beoogdeInnameTrainingsdag,
+  beoogdeInnameGemiddeld,
   eiwitGrammen,
   vetGrammen,
   koolhydratenGrammen,
