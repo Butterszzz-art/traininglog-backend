@@ -15,7 +15,7 @@
 //                 (a Firebase secret in production)
 //   APNS_KEY_ID   the key's 10-character Key ID
 //   APNS_TEAM_ID  the Apple Developer Team ID
-//   APNS_BUNDLE_ID (optional, defaults to APPLE_BUNDLE_ID / com.pocketcoach.app)
+//   APNS_BUNDLE_ID (optional, defaults to APPLE_BUNDLE_ID / org.pocketcoachcoms.app)
 const http2 = require('http2');
 const jwt = require('jsonwebtoken');
 
@@ -34,7 +34,7 @@ function readConfig(env = process.env) {
   const key = String(env.APNS_KEY || '').replace(/\\n/g, '\n').trim();
   const keyId = String(env.APNS_KEY_ID || '').trim();
   const teamId = String(env.APNS_TEAM_ID || '').trim();
-  const bundleId = String(env.APNS_BUNDLE_ID || env.APPLE_BUNDLE_ID || 'com.pocketcoach.app').trim();
+  const bundleId = String(env.APNS_BUNDLE_ID || env.APPLE_BUNDLE_ID || 'org.pocketcoachcoms.app').trim();
   return { key, keyId, teamId, bundleId, enabled: Boolean(key && keyId && teamId) };
 }
 

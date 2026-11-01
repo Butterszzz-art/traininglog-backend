@@ -39,7 +39,7 @@ firebase deploy --only functions,firestore
 
 ## 3. The App ID and the build
 
-- The App ID `com.pocketcoach.app` needs **Push Notifications** ticked.
+- The App ID `org.pocketcoachcoms.app` needs **Push Notifications** ticked.
 - After ticking it, fetch the App Store provisioning profile again in
   Codemagic, so the profile includes push.
 - The app's entitlements are written during the Codemagic build by

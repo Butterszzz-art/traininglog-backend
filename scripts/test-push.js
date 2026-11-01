@@ -72,7 +72,7 @@ const config = {
   key: privateKey.export({ type: 'pkcs8', format: 'pem' }),
   keyId: 'ABC123DEFG',
   teamId: 'WD37WHSYG7',
-  bundleId: 'com.pocketcoach.app',
+  bundleId: 'org.pocketcoachcoms.app',
 };
 push.setSender(push.createPushSender({ config, transport: fakeTransport }));
 
@@ -123,7 +123,7 @@ const server = app.listen(0, async () => {
     const first = sent[0];
     check('reads as a sentence', first.payload.aps.alert.body === 'Alice sent you a friend request', first.payload);
     check('carries type for the tap', first.payload.type === 'friend_request' && first.payload.category === 'friends');
-    check('topic is the bundle id', first.headers['apns-topic'] === 'com.pocketcoach.app');
+    check('topic is the bundle id', first.headers['apns-topic'] === 'org.pocketcoachcoms.app');
     const decoded = jwt.verify(first.headers.authorization.replace('bearer ', ''), publicKey, { algorithms: ['ES256'], complete: true });
     check('signed ES256 with the key id and team', decoded.header.kid === 'ABC123DEFG' && decoded.payload.iss === 'WD37WHSYG7');
     check('sandbox token remembered after the first send', store.get(`pushTokens/${tok('b')}`)?.env === 'sandbox');
