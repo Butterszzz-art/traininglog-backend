@@ -658,7 +658,9 @@ setTimeout(() => {
     check('PUT a multi-week program/2 keeps its weeks', r.status === 200 && store['coaches/uidABC123/programs']?.p2?.weekCount === 2 && store['coaches/uidABC123/programs'].p2.weeks[1].days[0].exercises[0].lastSetRir === 1);
     r = await req('PUT', '/api/coach/programs/p2', tokCoach, { name: 'Two weeks', days: { Mon: ['Squat'] } });
     check('an old single-week save cannot flatten a multi-week program -> 409', r.status === 409 && store['coaches/uidABC123/programs'].p2.weekCount === 2);
-    r = await req('PATCH', '/api/coach/clients/uidClient456', tokCoach, { programId: 'p2' });
+    r = await req('PATCH', '/api/coach/clients/uidClient456', tokCoach, { programId: 'p2', message: 'Lower days first.' });
+    const ann = store['users/uidClient456/coachAssignment']?.uidABC123?.programAnnouncement;
+    check('assigning a program leaves an announcement with the coach note', ann?.title === 'Two weeks' && ann?.message === 'Lower days first.' && /^program:p2:/.test(ann?.key || ''));
     const asn2 = store['users/uidClient456/coachAssignment']?.uidABC123?.program;
     check('assigning a multi-week program sends weeks with per-set RIR', r.status === 200 && asn2?.weeks?.length === 2 && JSON.stringify(asn2.weeks[1].days[0].exercises[0].sets.map(s => s.rir)) === '[2,1]' && asn2.days[0].weekday === 1);
     await req('DELETE', '/api/coach/programs/p2', tokCoach);
