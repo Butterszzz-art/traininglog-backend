@@ -342,23 +342,134 @@ function buildBodyFacts(pack) {
     else if (phase && phase.dir < 0) out.push({ key: 'cardio', tone: 'info', text: `${mins} min of cardio this week. A couple of 20–30 min walks would help the cut.` });
   }
 
-  const hasData = Boolean(facts.weight || facts.nutrition || facts.sleep || facts.cardio);
-  const takeaways = out
-    .map((x, i) => ({ ...x, i }))
-    .sort((a, b) => TONE_ORDER[a.tone] - TONE_ORDER[b.tone] || a.i - b.i)
-    .slice(0, 3)
-    .map(({ key, text, tone }) => ({ key, text, tone }));
+  const rec = recoveryTakeaways(p, facts, phase, unit, toUnit);
 
-  const watches = out.filter(x => x.tone === 'watch').length;
+  const hasData = Boolean(facts.weight || facts.nutrition || facts.sleep || facts.cardio || facts.vitals || facts.composition);
+  const rank = list => list
+    .map((x, i) => ({ ...x, i }))
+    .sort((a, b) => TONE_ORDER[a.tone] - TONE_ORDER[b.tone] || a.i - b.i);
+  const takeaways = rank(out).slice(0, 3).map(({ key, text, tone }) => ({ key, text, tone }));
+  const recovery = rank(rec).slice(0, 2).map(({ key, text, tone }) => ({ key, text, tone }));
+
+  const watches = out.filter(x => x.tone === 'watch').length + rec.filter(x => x.tone === 'watch').length;
+  const strained = facts.vitals && facts.vitals.status === 'strained';
   const headline = !hasData
     ? 'Log your weight, meals or sleep and your coach will pull out what matters here.'
-    : watches === 0
-      ? 'Your body data is trending the right way. Keep doing what you are doing.'
-      : watches === 1
-        ? 'One thing to adjust this week. The rest is on track.'
-        : `${watches} things worth adjusting this week, most important first.`;
+    : strained
+      ? 'Your recovery signals are off today. Train lighter and sleep more before changing anything else.'
+      : watches === 0
+        ? 'Your body data is trending the right way. Keep doing what you are doing.'
+        : watches === 1
+          ? 'One thing to adjust this week. The rest is on track.'
+          : `${watches} things worth adjusting this week, most important first.`;
 
-  return { facts, headline, takeaways, hasData };
+  return { facts, headline, takeaways, recovery, hasData };
 }
+
+// Tracker vitals and scale body composition → facts.vitals / facts.composition
+// plus up to a few { key, text, tone } recovery takeaways.
+function recoveryTakeaways(p, facts, phase, unit, toUnit) {
+  const out = [];
+  const metrics = arr(p.vitals && p.vitals.metrics).filter(m => m && m.key && num(m.value) != null);
+  const fmt = (m, v) => {
+    const dp = m.key === 'restingHeartRate' || m.key === 'hrvMs' ? 0 : 1;
+    const s = num(v).toFixed(dp);
+    return m.signed && num(v) > 0 ? `+${s}` : s;
+  };
+  const withUnit = (m, v) => (m.unit === '%' || m.unit.startsWith('/') ? `${fmt(m, v)}${m.unit}` : `${fmt(m, v)} ${m.unit}`.trim());
+  const usual = m => (num(m.usualLow) != null && num(m.usualHigh) != null
+    ? (m.signed ? `±${fmt({ ...m, signed: false }, m.usualHigh)}` : `${fmt(m, m.usualLow)}–${fmt(m, m.usualHigh)}`)
+    : null);
+  const name = m => (m.key === 'vo2Max' ? 'VO₂ max' : m.label);
+
+  if (metrics.length) {
+    facts.vitals = {
+      status: (p.vitals.status && p.vitals.status.level) || null,
+      metrics: metrics.map(m => ({
+        name: name(m), value: num(m.value), unit: m.unit,
+        usualRange: usual(m), flag: m.flag || null,
+        ...(m.fresh ? {} : { lastReading: m.date }),
+        ...(m.key === 'vo2Max' && num(m.change30) != null ? { change30d: num(m.change30) } : {}),
+      })),
+    };
+  }
+
+  const fresh = metrics.filter(m => m.fresh && m.key !== 'vo2Max');
+  const flagged = fresh.filter(m => m.flag);
+  const shortSleep = facts.sleep && facts.sleep.avgHours < 7;
+  const by = k => fresh.find(m => m.key === k);
+
+  if (flagged.length >= 2) {
+    const list = flagged.map(m => `${m.label} ${withUnit(m, m.value)}`);
+    const joined = list.length > 2 ? `${list.slice(0, -1).join(', ')} and ${list[list.length - 1]}` : list.join(' and ');
+    out.push({ key: 'vitals', tone: 'watch',
+      text: `${joined} are off your usual. Make today lighter: one fewer set per lift, RPE 7 max${shortSleep ? ', and get to bed earlier' : ''}.` });
+  } else if (flagged.length === 1) {
+    const m = flagged[0];
+    const range = usual(m);
+    const vsUsual = range ? `${m.flag === 'high' ? 'above' : 'below'} your usual ${range}` : '';
+    const v = withUnit(m, m.value);
+    const text = {
+      restingHeartRate: `Resting HR ${v}, ${vsUsual}. Keep top sets at RPE 7–8 today and skip alcohol tonight.`,
+      hrvMs: `HRV ${v}, ${vsUsual}. Train as planned but leave 2–3 reps in reserve, and get to bed early.`,
+      spo2: `Blood oxygen ${v} overnight, ${range && m.value >= 95 ? vsUsual : 'under the usual 95–100%'}. If it stays low for a few nights, check with a doctor.`,
+      respiratoryRate: `Breathing rate ${v}, ${vsUsual}. That is often an early sign of illness or fatigue, so go easier today.`,
+      skinTempDelta: m.flag === 'high'
+        ? `Skin temp ${v} vs your baseline. If you feel run down, swap today's session for a walk.`
+        : `Skin temp ${v} vs your baseline, usually just a cool room. Nothing to change.`,
+    }[m.key];
+    if (text) out.push({ key: 'vitals', tone: m.key === 'skinTempDelta' && m.flag === 'low' ? 'info' : 'watch', text });
+  } else if (fresh.length) {
+    const inRange = ['restingHeartRate', 'hrvMs'].map(by).filter(m => m && usual(m));
+    if (inRange.length) {
+      const what = inRange.map(m => `${m.label} ${withUnit(m, m.value)}`).join(' and ');
+      out.push({ key: 'vitals', tone: 'good', text: `${what} ${inRange.length > 1 ? 'are' : 'is'} in your usual range. You're recovered, so push today's top sets.` });
+    } else if (!fresh.some(m => usual(m) && m.key !== 'skinTempDelta')) {
+      const have = Math.max(0, ...fresh.map(m => m.baselineDays || 0));
+      const left = Math.max(1, 5 - have);
+      out.push({ key: 'vitals', tone: 'info', text: `${left} more night${left === 1 ? '' : 's'} of tracker data and your coach can read your resting HR and HRV against your normal.` });
+    }
+  } else if (metrics.some(m => m.key !== 'vo2Max')) {
+    const last = metrics.filter(m => m.key !== 'vo2Max').map(m => m.date).sort().pop();
+    out.push({ key: 'vitals', tone: 'info', text: `No overnight vitals since ${last}. Wear your watch to bed so your coach can read your recovery.` });
+  }
+
+  const vo2 = metrics.find(m => m.key === 'vo2Max');
+  if (vo2 && num(vo2.change30) != null && Math.abs(vo2.change30) >= 0.5) {
+    const delta = Math.abs(num(vo2.change30)).toFixed(1);
+    out.push(vo2.change30 > 0
+      ? { key: 'vo2', tone: 'good', text: `VO₂ max up ${delta} in 30 days to ${fmt(vo2, vo2.value)}. Your cardio is working, keep it in.` }
+      : { key: 'vo2', tone: 'info', text: `VO₂ max down ${delta} in 30 days to ${fmt(vo2, vo2.value)}. One 30-min easy (zone 2) session a week will turn it around.` });
+  }
+
+  // Body composition: only the scale's own change over 2+ weeks says anything.
+  const c = p.composition;
+  if (c && num(c.bodyFatPercent)) {
+    const ch = c.change && num(c.change.days) >= 14 ? c.change : null;
+    facts.composition = {
+      bodyFatPercent: num(c.bodyFatPercent), source: c.from || null,
+      fat: num(c.fatKg) == null ? null : r1(toUnit(c.fatKg)), lean: num(c.leanKg) == null ? null : r1(toUnit(c.leanKg)),
+      ...(ch ? { change: { days: ch.days, fat: r1(toUnit(ch.fatKg)), lean: r1(toUnit(ch.leanKg)) } } : {}),
+    };
+    if (ch) {
+      const fat = r1(toUnit(ch.fatKg)), lean = r1(toUnit(ch.leanKg));
+      const sg = v => `${v > 0 ? '+' : v < 0 ? '−' : '±'}${Math.abs(v).toFixed(1)} ${unit}`;
+      const pair = `fat ${sg(fat)}, lean ${sg(lean)} over ${ch.days} days`;
+      if (phase && phase.dir < 0 && lean < -0.5 && lean < fat) {
+        out.push({ key: 'composition', tone: 'watch', text: `Scale shows ${pair}. Keep protein high and don't cut lifting volume to hold on to muscle.` });
+      } else if (phase && phase.dir < 0 && fat < 0) {
+        out.push({ key: 'composition', tone: 'good', text: `Scale shows ${pair}. The cut is taking fat, not muscle.` });
+      } else if (phase && phase.dir > 0 && fat > 0.5 && fat > lean) {
+        out.push({ key: 'composition', tone: 'watch', text: `Scale shows ${pair}. Ease off ~150 kcal a day to make the gain leaner.` });
+      } else if (phase && phase.dir > 0 && lean > 0) {
+        out.push({ key: 'composition', tone: 'good', text: `Scale shows ${pair}. Most of the gain is lean, stay the course.` });
+      } else {
+        out.push({ key: 'composition', tone: 'info', text: `Scale shows ${pair}. Judge it on the trend, single readings swing.` });
+      }
+    }
+  }
+  return out;
+}
+
 
 module.exports = { buildBriefDigest, buildBodyFacts };

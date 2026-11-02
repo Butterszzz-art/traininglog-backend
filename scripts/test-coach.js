@@ -514,7 +514,29 @@ async function run() {
     assert.deepStrictEqual(body.bullets, [{ text: 'Get to bed 30 min earlier', tone: 'watch' }]);
     const sent = JSON.parse(calls[0].messages[0].content);
     assertMatch(sent.facts.sleep, { nights7d: 2, avgHours: 6.2 });
-    assert.strictEqual(sent.draft[0].tone, 'watch');
+    assert.strictEqual(sent.draft.bullets[0].tone, 'watch');
+    assert.deepStrictEqual(body.recovery, []);
+  });
+
+  await t('tracker vitals reach the AI and come back as recovery lines', async () => {
+    const line = { text: 'HRV 34 ms is under your usual 45–55. Cap top sets at RPE 7 today.', tone: 'watch' };
+    script = [endTurn(JSON.stringify({ headline: 'Recovery is the lever today.', bullets: [{ text: 'Get to bed 30 min earlier', tone: 'watch' }], recovery: [line] }))];
+    const vitals = { status: { level: 'watch', title: 'Worth watching' }, metrics: [
+      { key: 'hrvMs', label: 'HRV', unit: 'ms', value: 34, date: '2026-09-23', fresh: true, usualLow: 45, usualHigh: 55, baselineDays: 12, flag: 'low', change30: null },
+    ] };
+    const body = await (await post('/api/ai/coach/body', { data: { ...bodyPack, vitals } })).json();
+    assert.deepStrictEqual(body.recovery, [line]);
+    const sent = JSON.parse(calls[0].messages[0].content);
+    assertMatch(sent.facts.vitals.metrics[0], { name: 'HRV', value: 34, usualRange: '45–55', flag: 'low' });
+    assert.match(sent.draft.recovery[0].text, /^HRV 34 ms, below your usual 45–55/);
+  });
+
+  await t('an AI reply without recovery lines falls back to the rules ones', async () => {
+    script = [endTurn('{"headline":"Sleep is the lever this week.","bullets":[{"text":"Get to bed 30 min earlier","tone":"watch"}]}')];
+    const vitals = { status: null, metrics: [{ key: 'hrvMs', label: 'HRV', unit: 'ms', value: 34, fresh: true, usualLow: 45, usualHigh: 55, flag: 'low' }] };
+    const body = await (await post('/api/ai/coach/body', { data: { ...bodyPack, vitals } })).json();
+    assert.strictEqual(body.source, 'ai');
+    assert.match(body.recovery[0].text, /^HRV 34 ms, below your usual/);
   });
 
   await t('no data or a failed AI call returns the rules takeaways', async () => {
