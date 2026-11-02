@@ -1,24 +1,49 @@
 [
   {
     "id": "train.volume.henselmans",
-    "version": 1,
+    "version": 2,
     "domain": "training",
-    "statement": "Optimal weekly sets per muscle group = (f<3 ? f : 2.5) × 5 × recovery × energy-balance factor × √training status (+3 for women).",
+    "statement": "Weekly direct sets per muscle group (indirect sets count about half). Butters University sets the band: beginner 8–12 (coach default), intermediate 10–15, advanced 10–20, age 60+ at most 12. Inside that band, Menno Henselmans formula personalises the number: (f<3 ? f : 2.5) × 5 × recovery × energy-balance factor × √training status (+3 for women), clamped to the band.",
     "params": {
       "formula": "trainingsvolumeAdvies",
       "recovery": {
         "min": 0.5,
-        "default": 1.0,
+        "default": 1,
         "max": 1.2
+      },
+      "bands": {
+        "1": {
+          "min": 8,
+          "max": 12
+        },
+        "2": {
+          "min": 10,
+          "max": 15
+        },
+        "3": {
+          "min": 10,
+          "max": 20
+        }
+      },
+      "olderAdults": {
+        "fromAge": 60,
+        "max": 12
+      },
+      "setCounting": {
+        "direct": 1,
+        "indirect": 0.5
       }
     },
     "evidenceGrade": "unrated",
     "sources": [
       {
-        "label": "ClientIntake calculations.js (trainingsvolumeAdvies)"
+        "label": "Butters University README — Training intensity, volume & frequency (band, set counting, older adults)"
       },
       {
-        "label": "Menno Henselmans volume model"
+        "label": "ClientIntake calculations.js (trainingsvolumeBand, trainingsvolumeMenno, trainingsvolumeAdvies)"
+      },
+      {
+        "label": "Menno Henselmans volume model (personalisation inside the band only)"
       }
     ],
     "moduleRef": "BU: Training intensity, volume & frequency",
@@ -26,10 +51,12 @@
       "section": "Training intensity, volume & frequency",
       "status": "match",
       "quotes": [
-        "volume 10–30 sets/week/muscle depending on recovery capacity",
-        "Anchor around 10–15 direct sets/week/muscle if intermediate, and move up cautiously"
+        "Anchor around 10–15 direct sets/week/muscle if intermediate, and move up cautiously",
+        "Push past ~20 direct sets only if recovery markers and continued strength progress support it",
+        "weighting indirect sets at roughly half",
+        "If you're training an older client (60+), the evidence points the other way"
       ],
-      "note": "Same 10–30 range scaled by recovery. BU adds that sets should be counted as direct, with indirect sets at about half, and that older clients do better on lower volume."
+      "note": "Band follows BU: intermediate 10–15 direct sets, past ~20 only with evidence, older clients lower. BU gives no beginner number (only that moderate beat high volume in untrained women), so 8–12 for beginners is a coaching default. Menno's formula alone ran above BU (e.g. 17.7 for an intermediate on 3 full-body days, 20.7 for a woman), so it is clamped to the band."
     },
     "lastReviewed": null,
     "verified": false
