@@ -661,6 +661,17 @@ setTimeout(() => {
     r = await req('PATCH', '/api/coach/clients/uidClient456', tokCoach, { programId: 'p2', message: 'Lower days first.' });
     const ann = store['users/uidClient456/coachAssignment']?.uidABC123?.programAnnouncement;
     check('assigning a program leaves an announcement with the coach note', ann?.title === 'Two weeks' && ann?.message === 'Lower days first.' && /^program:p2:/.test(ann?.key || ''));
+
+    const meal = { name: 'Oats & whey', items: [{ food: { name: 'Oats', per100: { protein: 13, carbs: 60, fat: 7 } }, grams: 80 }] };
+    r = await req('PATCH', '/api/coach/clients/uidClient456', tokCoach, { mealPlan: { days: { training: { breakfast: [meal] } } }, message: 'Follow these, swap if needed.' });
+    const mp = store['users/uidClient456/coachAssignment']?.uidABC123?.mealPlan;
+    check('a meal plan reaches the client (both day types) with the note; the coach doc keeps a summary',
+      r.status === 200 && mp?.days?.rest?.breakfast?.[0]?.name === 'Oats & whey' && mp.note === 'Follow these, swap if needed.'
+      && /^Training day \d+ kcal/.test(store['coaches/uidABC123/clients'].uidClient456.mealPlanSummary || '') && !store['coaches/uidABC123/clients'].uidClient456.mealPlan);
+    r = await req('PATCH', '/api/coach/clients/uidClient456', tokCoach, { mealPlan: { days: { training: { lunch: [{ name: '', items: [] }] } } } });
+    check('an invalid meal plan -> 422', r.status === 422);
+    r = await req('PATCH', '/api/coach/clients/uidClient456', tokCoach, { mealPlan: null });
+    check('a meal plan can be cleared', r.status === 200 && store['users/uidClient456/coachAssignment'].uidABC123.mealPlan === null);
     const asn2 = store['users/uidClient456/coachAssignment']?.uidABC123?.program;
     check('assigning a multi-week program sends weeks with per-set RIR', r.status === 200 && asn2?.weeks?.length === 2 && JSON.stringify(asn2.weeks[1].days[0].exercises[0].sets.map(s => s.rir)) === '[2,1]' && asn2.days[0].weekday === 1);
     await req('DELETE', '/api/coach/programs/p2', tokCoach);
