@@ -3707,7 +3707,8 @@ app.get('/api/coach/clients/:clientUid', authenticateToken, requireCoachPlan, as
       ...coachClientSummary(clientUid, data),
       checkIns: Array.isArray(data.checkIns) ? data.checkIns : [],
       bodyweight: Array.isArray(data.bodyweight) ? data.bodyweight : [],
-      weeklyWorkouts: Array.isArray(data.weeklyWorkouts) ? data.weeklyWorkouts : []
+      weeklyWorkouts: Array.isArray(data.weeklyWorkouts) ? data.weeklyWorkouts : [],
+      mealPlan: data.mealPlan || null
     };
     return sendSuccess(res, 200, { client });
   } catch (err) {
@@ -3908,16 +3909,16 @@ app.patch('/api/coach/clients/:clientUid', authenticateToken, requireCoachPlan, 
       if (plan && req.body.macroTargets === undefined) fields.macroTargets = { ...plan.days.training };
     }
     if (typeof req.body?.hideNutritionNumbers === 'boolean') fields.hideNutritionNumbers = req.body.hideNutritionNumbers;
-    // Meal plan (src/routes/coachMeals.js): the full plan goes to the client's
-    // mirror only; the coach's doc keeps a one-line summary.
+    // Meal plan (src/routes/coachMeals.js): on both docs, so the coach can
+    // open and change it later; client lists only carry the one-line summary.
     if (req.body?.mealPlan !== undefined) {
       if (req.body.mealPlan === null) {
-        clientOnly.mealPlan = null;
+        fields.mealPlan = null;
         fields.mealPlanSummary = '';
       } else {
         const r = coachMeals.sanitizeMealPlan({ ...req.body.mealPlan, note: req.body.message ?? req.body.mealPlan.note });
         if (r.error) return sendError(res, 422, 'coach.invalid_meal_plan', r.error);
-        clientOnly.mealPlan = r.plan;
+        fields.mealPlan = r.plan;
         fields.mealPlanSummary = r.summary;
       }
     }
@@ -3971,7 +3972,7 @@ app.patch('/api/coach/clients/:clientUid', authenticateToken, requireCoachPlan, 
     await batch.commit();
     if (existing.get('status') === 'active') {
       const a = clientOnly.programAnnouncement;
-      const mp = clientOnly.mealPlan;
+      const mp = fields.mealPlan;
       await coachNotifications.notifyCoachPlan(db, {
         coachUsername: req.user.username, clientUsername: existing.get('athleteDisplayName') || await usernameForUid(clientUid), fields,
         announce: a ? { kind: 'program', name: a.title, message: a.message, key: a.key }

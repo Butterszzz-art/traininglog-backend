@@ -667,7 +667,7 @@ setTimeout(() => {
     const mp = store['users/uidClient456/coachAssignment']?.uidABC123?.mealPlan;
     check('a meal plan reaches the client (both day types) with the note; the coach doc keeps a summary',
       r.status === 200 && mp?.days?.rest?.breakfast?.[0]?.name === 'Oats & whey' && mp.note === 'Follow these, swap if needed.'
-      && /^Training day \d+ kcal/.test(store['coaches/uidABC123/clients'].uidClient456.mealPlanSummary || '') && !store['coaches/uidABC123/clients'].uidClient456.mealPlan);
+      && /^Training day \d+ kcal/.test(store['coaches/uidABC123/clients'].uidClient456.mealPlanSummary || '') && store['coaches/uidABC123/clients'].uidClient456.mealPlan?.key === mp.key);
     r = await req('PATCH', '/api/coach/clients/uidClient456', tokCoach, { mealPlan: { days: { training: { lunch: [{ name: '', items: [] }] } } } });
     check('an invalid meal plan -> 422', r.status === 422);
     r = await req('PATCH', '/api/coach/clients/uidClient456', tokCoach, { mealPlan: null });
