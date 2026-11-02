@@ -106,7 +106,12 @@ function generatePlan({ intake, instellingen = {}, packageId, startDate, tier, c
 
     const splitDef = calc.bepaalSplitsdagen(sessions);
     const muscleFrequency = split.muscleFrequency[String(splitDef.dagen.length)] ?? 2;
-    const weeklySets = calc.trainingsvolumeAdvies(status, female, recovery, energy.value, muscleFrequency);
+    // Butters University sets the band (direct sets/week/muscle); Menno's
+    // formula only picks the personal number inside it.
+    const age = intake.persoonsgegevens.leeftijd ?? null;
+    const mennoSets = calc.trainingsvolumeMenno(status, female, recovery, energy.value, muscleFrequency);
+    const volumeBand = calc.trainingsvolumeBand(status, age);
+    const weeklySets = calc.trainingsvolumeAdvies(status, female, recovery, energy.value, muscleFrequency, age);
     const setsPerSession = Math.round((weeklySets / muscleFrequency) * 10) / 10;
 
     const plannedStart = cursor;
@@ -157,9 +162,16 @@ function generatePlan({ intake, instellingen = {}, packageId, startDate, tier, c
       training: {
         split: { ...splitDef, sessionsPerWeek: sessions, muscleFrequency, ruleId: 'train.split.by_frequency' },
         weeklySetsPerMuscle: Object.fromEntries(MUSCLES.map(m => [m, Math.round(weeklySets)])),
+        setCounting: { direct: 1, indirect: 0.5, ruleId: 'train.volume.henselmans' },
+        volumeBand: { min: volumeBand.min, max: volumeBand.max },
         setsPerSession,
         provenance: {
-          weeklySetsPerMuscle: { ...registry.cite('train.volume.henselmans', weeklySets), inputs: { status, female, recovery, energyFactor: energy.value, muscleFrequency } },
+          weeklySetsPerMuscle: {
+            ...registry.cite('train.volume.henselmans', weeklySets),
+            inputs: { status, female, recovery, energyFactor: energy.value, muscleFrequency, age },
+            mennoSets,
+            buBand: volumeBand,
+          },
           status: registry.cite('train.status.from_experience', status),
         },
         progression: { ...progression, ruleId: 'train.progression.scheme' },

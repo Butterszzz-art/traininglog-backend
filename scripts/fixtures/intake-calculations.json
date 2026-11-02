@@ -1369,6 +1369,79 @@
         0.8,
         3
       ],
+      "result": 15
+    },
+    {
+      "args": [
+        3,
+        0,
+        1.2,
+        1.1,
+        4
+      ],
+      "result": 20
+    },
+    {
+      "args": [
+        0,
+        0,
+        2,
+        1,
+        1
+      ],
+      "result": 10
+    },
+    {
+      "args": [
+        2,
+        0,
+        1,
+        1,
+        3
+      ],
+      "result": 15
+    },
+    {
+      "args": [
+        3,
+        1,
+        1,
+        1.1,
+        3,
+        65
+      ],
+      "result": 12
+    },
+    {
+      "args": [
+        1,
+        0,
+        1,
+        0.7,
+        2
+      ],
+      "result": 8
+    }
+  ],
+  "trainingsvolumeMenno": [
+    {
+      "args": [
+        1,
+        0,
+        1,
+        1,
+        2
+      ],
+      "result": 10
+    },
+    {
+      "args": [
+        2,
+        1,
+        0.9,
+        0.8,
+        3
+      ],
       "result": 15.7
     },
     {
@@ -1383,13 +1456,78 @@
     },
     {
       "args": [
-        0,
-        0,
         2,
+        0,
         1,
+        1,
+        3
+      ],
+      "result": 17.7
+    }
+  ],
+  "trainingsvolumeBand": [
+    {
+      "args": [
         1
       ],
-      "result": 6
+      "result": {
+        "min": 8,
+        "max": 12,
+        "bron": "coach-standaard (BU: matig volume voor ongetrainden)"
+      }
+    },
+    {
+      "args": [
+        2
+      ],
+      "result": {
+        "min": 10,
+        "max": 15,
+        "bron": "BU: Training intensity, volume & frequency"
+      }
+    },
+    {
+      "args": [
+        3
+      ],
+      "result": {
+        "min": 10,
+        "max": 20,
+        "bron": "BU: Training intensity, volume & frequency"
+      }
+    },
+    {
+      "args": [
+        2,
+        60
+      ],
+      "result": {
+        "min": 10,
+        "max": 12,
+        "bron": "BU: Training intensity, volume & frequency; 60+ max 12 (BU)"
+      }
+    },
+    {
+      "args": [
+        3,
+        72
+      ],
+      "result": {
+        "min": 10,
+        "max": 12,
+        "bron": "BU: Training intensity, volume & frequency; 60+ max 12 (BU)"
+      }
+    },
+    {
+      "args": [
+        2,
+        null
+      ],
+      "result": {
+        "min": 10,
+        "max": 15,
+        "bron": "BU: Training intensity, volume & frequency"
+      }
     }
   ],
   "rm1VrijGewicht": [
