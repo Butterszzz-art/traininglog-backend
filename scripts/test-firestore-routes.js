@@ -668,6 +668,9 @@ setTimeout(() => {
     check('a meal plan reaches the client (both day types) with the note; the coach doc keeps a summary',
       r.status === 200 && mp?.days?.rest?.breakfast?.[0]?.name === 'Oats & whey' && mp.note === 'Follow these, swap if needed.'
       && /^Training day \d+ kcal/.test(store['coaches/uidABC123/clients'].uidClient456.mealPlanSummary || '') && store['coaches/uidABC123/clients'].uidClient456.mealPlan?.key === mp.key);
+    check('sending a meal plan to an active client says whether they were notified', r.body?.linkStatus === 'active' && ['notified', 'muted'].includes(r.body?.delivery));
+    r = await req('PATCH', '/api/coach/clients/uidPending', tokCoach, { mealPlan: { days: { training: { breakfast: [meal] } } } });
+    check('sending to a client who has not accepted yet -> delivery not_linked', r.status === 200 && r.body?.delivery === 'not_linked' && r.body?.linkStatus === 'pending');
     r = await req('PATCH', '/api/coach/clients/uidClient456', tokCoach, { mealPlan: { days: { training: { lunch: [{ name: '', items: [] }] } } } });
     check('an invalid meal plan -> 422', r.status === 422);
     r = await req('PATCH', '/api/coach/clients/uidClient456', tokCoach, { mealPlan: null });

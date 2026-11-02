@@ -3970,17 +3970,23 @@ app.patch('/api/coach/clients/:clientUid', authenticateToken, requireCoachPlan, 
       updatedAt: now
     }, { merge: true });
     await batch.commit();
-    if (existing.get('status') === 'active') {
+    // Tells the dashboard whether the client was told, so the coach isn't
+    // left guessing: 'notified', 'not_linked' (invite not accepted yet) or
+    // 'muted' (coaching notifications off, or nothing to announce).
+    const linkStatus = existing.get('status') || 'pending';
+    let delivery = linkStatus === 'active' ? 'muted' : 'not_linked';
+    if (linkStatus === 'active') {
       const a = clientOnly.programAnnouncement;
       const mp = fields.mealPlan;
-      await coachNotifications.notifyCoachPlan(db, {
+      const sent = await coachNotifications.notifyCoachPlan(db, {
         coachUsername: req.user.username, clientUsername: existing.get('athleteDisplayName') || await usernameForUid(clientUid), fields,
         announce: a ? { kind: 'program', name: a.title, message: a.message, key: a.key }
           : mp ? { kind: 'meals', name: 'meal plan', message: mp.note, key: mp.key } : null,
       });
+      if (sent > 0) delivery = 'notified';
     }
 
-    return sendSuccess(res, 200, { clientUid, ...fields });
+    return sendSuccess(res, 200, { clientUid, ...fields, linkStatus, delivery });
   } catch (err) {
     console.error('PATCH /api/coach/clients/:clientUid failed:', err);
     return sendError(res, 500, 'coach.server_error', String(err));
