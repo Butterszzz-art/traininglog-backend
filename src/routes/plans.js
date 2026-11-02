@@ -370,6 +370,10 @@ function createCoachPlansRouter({ db, FieldValue, registry, sendError, sendSucce
         if (!plan.supersedes) plan.supersedes = doc.id;
         plan.version = Math.max(plan.version || 1, (Number(doc.get('version')) || 1) + 1);
       }
+      // The coach's optional note, shown at the top of the client's "New from
+      // your coach" sheet and in the notification. One announcement per version.
+      const message = typeof req.body?.message === 'string' ? req.body.message.trim().slice(0, 500) : '';
+      plan.announcement = { message, at: now().toISOString(), version: plan.version || 1, key: `plan:${plan.planId}` };
       const fields = assignmentFields(plan);
       // Older app builds only know coachAssignment.program: give them the
       // first phase's program so their Start button follows the plan too.
@@ -381,7 +385,8 @@ function createCoachPlansRouter({ db, FieldValue, registry, sendError, sendSucce
       batch.set(db.collection(`coaches/${own.coachUid}/clients`).doc(own.clientUid), { ...fields, ...(firstRef ? { currentProgramId: firstRef.programId } : {}), currentPlanId: plan.planId, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
       batch.set(db.collection(`users/${own.clientUid}/coachAssignment`).doc(own.coachUid), { coachUsername: req.user.username, ...fields, ...programFields, currentPlanId: plan.planId, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
       await batch.commit();
-      await notifyPlanPublished({ coachUsername: req.user.username, clientUid: own.clientUid, fields }).catch(err =>
+      const announce = { kind: 'plan', name: plan.package?.name || '', version: plan.version || 1, message, key: plan.announcement.key };
+      await notifyPlanPublished({ coachUsername: req.user.username, clientUid: own.clientUid, fields, announce }).catch(err =>
         console.warn('[plans] publish notification failed:', err.message));
       return sendSuccess(res, 200, { plan });
     } catch (err) { return fail(res, err, 'POST /api/coach/plans/:planId/publish'); }

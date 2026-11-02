@@ -3937,6 +3937,9 @@ app.patch('/api/coach/clients/:clientUid', authenticateToken, requireCoachPlan, 
       fields.currentProgram = program.title;
       fields.currentProgramId = programId;
       clientOnly.program = program;
+      // What the client's "New from your coach" sheet shows, with the coach's optional note.
+      const note = typeof req.body?.message === 'string' ? req.body.message.trim().slice(0, 500) : '';
+      clientOnly.programAnnouncement = { programId, title: program.title, message: note, at: new Date().toISOString(), key: `program:${programId}:${Date.now().toString(36)}` };
     }
 
     const now = FieldValue.serverTimestamp();
@@ -3952,8 +3955,10 @@ app.patch('/api/coach/clients/:clientUid', authenticateToken, requireCoachPlan, 
     }, { merge: true });
     await batch.commit();
     if (existing.get('status') === 'active') {
+      const a = clientOnly.programAnnouncement;
       await coachNotifications.notifyCoachPlan(db, {
         coachUsername: req.user.username, clientUsername: existing.get('athleteDisplayName') || await usernameForUid(clientUid), fields,
+        announce: a ? { kind: 'program', name: a.title, message: a.message, key: a.key } : null,
       });
     }
 
@@ -5080,9 +5085,9 @@ const planLimiter = rateLimit({
 });
 const coachPlansRouter = planRegistry && createCoachPlansRouter({
   db, FieldValue, registry: planRegistry, sendError, sendSuccess, resolveCallerUid,
-  notifyPlanPublished: async ({ coachUsername, clientUid, fields }) => {
+  notifyPlanPublished: async ({ coachUsername, clientUid, fields, announce }) => {
     const clientUsername = await usernameForUid(clientUid);
-    if (clientUsername) await coachNotifications.notifyCoachPlan(db, { coachUsername, clientUsername, fields });
+    if (clientUsername) await coachNotifications.notifyCoachPlan(db, { coachUsername, clientUsername, fields, announce });
   },
 });
 const clientPlanRouter = createClientPlanRouter({ db, sendError, sendSuccess, resolveCallerUid });

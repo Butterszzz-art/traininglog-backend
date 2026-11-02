@@ -71,7 +71,28 @@ async function notifyCoachNote(db, { coachUsername, clientUsername }) {
 }
 
 // fields: what the coach changed — { currentProgram?, nutritionSummary?, trainingMode? }
-async function notifyCoachPlan(db, { coachUsername, clientUsername, fields = {} }) {
+// announce (optional) says exactly what arrived, for the client's "New from
+// your coach" sheet: { kind: 'plan' | 'program', name, version?, message?, key }.
+// The push reads e.g. "arman published your plan: 16-week X-frame plan".
+async function notifyCoachPlan(db, { coachUsername, clientUsername, fields = {}, announce = null }) {
+  if (announce && (announce.kind === 'plan' || announce.kind === 'program')) {
+    const name = String(announce.name || '').slice(0, 60);
+    const message = String(announce.message || '').trim();
+    let text = announce.kind === 'program'
+      ? `sent you a new program${name ? `: ${name}` : ''}`
+      : announce.version > 1 ? `published version ${announce.version} of your plan` : `published your plan${name ? `: ${name}` : ''}`;
+    if (message) text += ` · "${message.length > 70 ? `${message.slice(0, 67)}…` : message}"`;
+    return notify(db, {
+      to: clientUsername, type: 'coach_plan', actor: coachUsername, actorName: coachUsername,
+      text,
+      data: {
+        coach: coachUsername, kind: announce.kind, name, version: Number(announce.version) || 1,
+        message: message.slice(0, 500), key: String(announce.key || '').slice(0, 120),
+        program: fields.currentProgram ? String(fields.currentProgram).slice(0, 80) : '',
+      },
+      collapseKey: `coach_plan__${profileKey(coachUsername)}`,
+    });
+  }
   const parts = [];
   if (fields.currentProgram) parts.push('program');
   if (fields.nutritionSummary || fields.macroPlan) parts.push('nutrition');
