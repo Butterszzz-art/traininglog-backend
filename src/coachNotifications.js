@@ -75,10 +75,11 @@ async function notifyCoachNote(db, { coachUsername, clientUsername }) {
 // your coach" sheet: { kind: 'plan' | 'program', name, version?, message?, key }.
 // The push reads e.g. "arman published your plan: 16-week X-frame plan".
 async function notifyCoachPlan(db, { coachUsername, clientUsername, fields = {}, announce = null }) {
-  if (announce && (announce.kind === 'plan' || announce.kind === 'program')) {
+  if (announce && ['plan', 'program', 'meals'].includes(announce.kind)) {
     const name = String(announce.name || '').slice(0, 60);
     const message = String(announce.message || '').trim();
-    let text = announce.kind === 'program'
+    let text = announce.kind === 'meals' ? 'sent you a meal plan'
+      : announce.kind === 'program'
       ? `sent you a new program${name ? `: ${name}` : ''}`
       : announce.version > 1 ? `published version ${announce.version} of your plan` : `published your plan${name ? `: ${name}` : ''}`;
     if (message) text += ` · "${message.length > 70 ? `${message.slice(0, 67)}…` : message}"`;

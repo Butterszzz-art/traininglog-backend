@@ -31,6 +31,7 @@ const coachNotifications = require('./src/coachNotifications');
 const { createSyncRouter, syncDocId } = require('./src/routes/sync');
 const { createCoachNutritionRouter } = require('./src/routes/coachNutrition');
 const { createCoachFoodsRouter, createClientCoachFoodsRouter } = require('./src/routes/coachFoods');
+const coachMeals = require('./src/routes/coachMeals');
 const { createFoodRouter } = require('./src/routes/food');
 const { createCoachPlansRouter, createClientPlanRouter } = require('./src/routes/plans');
 const { createCoachVideosRouter, createClientCoachVideosRouter } = require('./src/routes/coachVideos');
@@ -3365,6 +3366,7 @@ function coachClientSummary(id, data, now = new Date()) {
     currentNutritionSummary: data.nutritionSummary || '',
     macroTargets: data.macroTargets || null,
     macroPlan: data.macroPlan || null,
+    mealPlanSummary: data.mealPlanSummary || '',
     hideNutritionNumbers: data.hideNutritionNumbers === true,
     latestCheckInData: data.latestCheckInJson ?? null,
     compliancePercent: data.compliancePercent ?? null,
@@ -3705,7 +3707,8 @@ app.get('/api/coach/clients/:clientUid', authenticateToken, requireCoachPlan, as
       ...coachClientSummary(clientUid, data),
       checkIns: Array.isArray(data.checkIns) ? data.checkIns : [],
       bodyweight: Array.isArray(data.bodyweight) ? data.bodyweight : [],
-      weeklyWorkouts: Array.isArray(data.weeklyWorkouts) ? data.weeklyWorkouts : []
+      weeklyWorkouts: Array.isArray(data.weeklyWorkouts) ? data.weeklyWorkouts : [],
+      mealPlan: data.mealPlan || null
     };
     return sendSuccess(res, 200, { client });
   } catch (err) {
@@ -3906,9 +3909,22 @@ app.patch('/api/coach/clients/:clientUid', authenticateToken, requireCoachPlan, 
       if (plan && req.body.macroTargets === undefined) fields.macroTargets = { ...plan.days.training };
     }
     if (typeof req.body?.hideNutritionNumbers === 'boolean') fields.hideNutritionNumbers = req.body.hideNutritionNumbers;
+    // Meal plan (src/routes/coachMeals.js): on both docs, so the coach can
+    // open and change it later; client lists only carry the one-line summary.
+    if (req.body?.mealPlan !== undefined) {
+      if (req.body.mealPlan === null) {
+        fields.mealPlan = null;
+        fields.mealPlanSummary = '';
+      } else {
+        const r = coachMeals.sanitizeMealPlan({ ...req.body.mealPlan, note: req.body.message ?? req.body.mealPlan.note });
+        if (r.error) return sendError(res, 422, 'coach.invalid_meal_plan', r.error);
+        fields.mealPlan = r.plan;
+        fields.mealPlanSummary = r.summary;
+      }
+    }
     const programId = typeof req.body?.programId === 'string' ? req.body.programId.trim() : null;
     if (!Object.keys(fields).length && programId === null) {
-      return sendError(res, 422, 'coach.invalid_payload', 'Provide at least one of currentProgram, programId, nutritionSummary, macroTargets, macroPlan, trainingMode, hideNutritionNumbers.');
+      return sendError(res, 422, 'coach.invalid_payload', 'Provide at least one of currentProgram, programId, nutritionSummary, macroTargets, macroPlan, mealPlan, trainingMode, hideNutritionNumbers.');
     }
 
     const coachUid = await resolveCallerUid(req.user);
@@ -3956,9 +3972,11 @@ app.patch('/api/coach/clients/:clientUid', authenticateToken, requireCoachPlan, 
     await batch.commit();
     if (existing.get('status') === 'active') {
       const a = clientOnly.programAnnouncement;
+      const mp = fields.mealPlan;
       await coachNotifications.notifyCoachPlan(db, {
         coachUsername: req.user.username, clientUsername: existing.get('athleteDisplayName') || await usernameForUid(clientUid), fields,
-        announce: a ? { kind: 'program', name: a.title, message: a.message, key: a.key } : null,
+        announce: a ? { kind: 'program', name: a.title, message: a.message, key: a.key }
+          : mp ? { kind: 'meals', name: 'meal plan', message: mp.note, key: mp.key } : null,
       });
     }
 
@@ -5059,6 +5077,9 @@ app.use('/api/food', authenticateToken, foodLimiter, createFoodRouter({ sendErro
 const foodsAvailable = (_req, res, next) => (firebaseEnabled ? next() : sendError(res, 503, 'foods.firebase_disabled', 'Coach foods require a migrated (Firebase) backend.'));
 app.use('/api/coach/foods', authenticateToken, requireCoachPlan, coachNutritionLimiter, foodsAvailable,
   createCoachFoodsRouter({ db, sendError, sendSuccess, resolveCallerUid }));
+// Coach meals library (src/routes/coachMeals.js); plans go out with PATCH /api/coach/clients/:id.
+app.use('/api/coach/meals', authenticateToken, requireCoachPlan, coachNutritionLimiter, foodsAvailable,
+  coachMeals.createCoachMealsRouter({ db, sendError, sendSuccess, resolveCallerUid }));
 app.use('/api/client/coach-foods', authenticateToken, coachNutritionLimiter, foodsAvailable,
   createClientCoachFoodsRouter({ db, sendError, sendSuccess, resolveCallerUid }));
 

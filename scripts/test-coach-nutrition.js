@@ -40,6 +40,10 @@ const target = { kcal: 2500, protein: 180, carbs: 280, fat: 70 };
   check('entry: sanitized fields', e && e.name === 'Kipfilet' && e.kcal === 210 && e.ironMg === 1 && e.evil === undefined && e.meal === 'dinner');
   check('entry: bad date dropped', diary.sanitizeEntry({ date: '2026-13-40', name: 'x' }) === null);
   check('entry: unknown meal → snacks', diary.sanitizeEntry({ date: TODAY, name: 'x', meal: 'brunch' }).meal === 'snacks');
+  const fromPlan = diary.sanitizeEntry({ date: TODAY, name: 'Oats', meal: 'breakfast', grams: 100, coach: { mealName: 'Oats & whey', grams: 80, key: 'k' }, confirmed: true });
+  check('entry: from the coach meal plan keeps meal name, planned grams, confirmed',
+    fromPlan.fromCoach?.meal === 'Oats & whey' && fromPlan.fromCoach.plannedGrams === 80 && fromPlan.confirmed === true);
+  check('entry: own food has no coach fields', diary.sanitizeEntry({ date: TODAY, name: 'x' }).fromCoach === undefined);
   check('entry: missing core numbers → 0, other nutrients stay absent', (() => { const x = diary.sanitizeEntry({ date: TODAY, name: 'x' }); return x.kcal === 0 && x.fiber === undefined; })());
 }
 check('totals: calories from macros + direct cals', diary.sanitizeTotals({ protein: 100, carbs: 100, fats: 50, cals: -10 }).kcal === 1240);
