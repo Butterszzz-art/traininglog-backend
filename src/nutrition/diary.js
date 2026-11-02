@@ -77,6 +77,12 @@ function sanitizeEntry(raw) {
   if (raw.flag === 'kcal_mismatch' || kcalMismatch(out)) out.flag = 'kcal_mismatch';
   const t = num(raw.t, 1e14);
   if (t !== null) out.t = Math.round(t);
+  // From the coach's meal plan (app: src/js/coach-meals.js): which meal, the
+  // planned amount, and whether the client ticked it off.
+  if (raw.coach && typeof raw.coach === 'object') {
+    out.fromCoach = { meal: text(raw.coach.mealName, 80), plannedGrams: num(raw.coach.grams, 100000) };
+    out.confirmed = raw.confirmed === true;
+  }
   return out;
 }
 
