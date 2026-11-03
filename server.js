@@ -548,7 +548,10 @@ app.get('/api/user/plan', authenticateToken, async (req, res) => {
 
 app.post('/api/stripe/create-checkout-session', authenticateToken, async (req, res) => {
   if (!stripeEnabled) return res.status(503).json({ error: 'Stripe not configured' });
-  const { username, plan, billing, withdrawalWaiver } = req.body;
+  // Always the caller's own account — a body `username` is ignored, so a
+  // subscription (and its referral-credit trial) can't be pointed at someone else.
+  const username = req.user?.username;
+  const { plan, billing, withdrawalWaiver } = req.body;
   if (!username || !plan) return res.status(400).json({ error: 'username and plan required' });
   // EU/UK consumers have a 14-day right of withdrawal. The checkout sheet asks
   // them to request that the paid service start within it (terms.html#refunds);
