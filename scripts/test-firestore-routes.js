@@ -632,6 +632,30 @@ setTimeout(() => {
     r = await req('GET', '/api/coach/clients/uidClient456', tokCoach);
     check('client detail returns check-in history + bodyweight series', r.status === 200 && r.body?.client?.checkIns?.[0]?.notes === 'good week' && r.body?.client?.bodyweight?.length === 2);
 
+    // Check-in photos (src/checkInPhotos.js)
+    const photoJpeg = 'data:image/jpeg;base64,' + Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(32)]).toString('base64');
+    r = await req('PUT', `/api/client/checkin-photos/${today}`, tokClient, { photos: [{ image: photoJpeg, pose: 'Front relaxed' }, { image: photoJpeg }] });
+    check('client uploads check-in photos', r.status === 200 && r.body?.count === 2
+      && store['users/uidClient456/checkInPhotos']?.[`${today}_1`]?.mime === 'image/jpeg'
+      && store.users.uidClient456.checkInPhotoIndex?.[today] === 2);
+    r = await req('PUT', `/api/client/checkin-photos/${today}`, tokClient, { photos: [{ image: 'data:image/jpeg;base64,aGVsbG8=' }] });
+    check('non-image upload refused', r.status === 422);
+    r = await req('GET', '/api/coach/clients/uidClient456', tokCoach);
+    check('client detail carries the photo count', r.body?.client?.checkIns?.[0]?.photoCount === 2);
+    r = await req('GET', `/api/coach/clients/uidClient456/checkin-photos/${today}`, tokCoach);
+    check('coach reads the check-in photos', r.status === 200 && r.body?.photos?.length === 2 && r.body.photos[0].pose === 'Front relaxed' && r.body.photos[0].image === photoJpeg);
+    r = await req('PUT', `/api/client/checkin-photos/${today}`, tokClient, { photos: [{ image: photoJpeg }] });
+    check('re-upload replaces the photos', r.body?.count === 1 && !store['users/uidClient456/checkInPhotos'][`${today}_1`]);
+    r = await req('DELETE', `/api/client/checkin-photos/${today}`, tokClient);
+    check('client deletes check-in photos', r.status === 200 && !store['users/uidClient456/checkInPhotos'][`${today}_0`] && !store.users.uidClient456.checkInPhotoIndex?.[today]);
+    await req('PUT', `/api/client/checkin-photos/${today}`, tokClient, { photos: [{ image: photoJpeg }] });
+    await req('PUT', '/api/client/coach-sharing', tokClient, { checkIns: false });
+    check('check-in sharing off deletes the photos', !store['users/uidClient456/checkInPhotos'][`${today}_0`]);
+    r = await req('PUT', `/api/client/checkin-photos/${today}`, tokClient, { photos: [{ image: photoJpeg }] });
+    check('upload refused while check-in sharing is off', r.status === 403);
+    await req('PUT', '/api/client/coach-sharing', tokClient, { checkIns: true });
+    await req('POST', '/api/client/coach-share', tokClient, snapshot);
+
     r = await req('PUT', '/api/client/coach-sharing', tokClient, { bodyweight: false });
     check('turning bodyweight off clears it from the coach doc', r.body?.sharing?.bodyweight === false && store['coaches/uidABC123/clients'].uidClient456.bodyweight == null && store['coaches/uidABC123/clients'].uidClient456.currentBodyweight == null);
     await req('POST', '/api/client/coach-share', tokClient, snapshot);
