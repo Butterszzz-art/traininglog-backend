@@ -5,7 +5,7 @@
 //   { plan: 'pro' | 'coach',
 //     source: 'stripe_sub' | 'apple_sub' | 'prep_pass' | 'meet_pass'
 //           | 'founder_lifetime' | 'reverse_trial' | 'moment_trial'
-//           | 'referral' | 'admin' | 'coach_client',
+//           | 'referral' | 'admin' | 'coach_client' | 'coach_code',
 //     startsAt, expiresAt (null = no expiry), status: 'active' | 'expired' | 'revoked',
 //     ref, createdAt }
 //
