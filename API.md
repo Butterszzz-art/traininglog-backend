@@ -235,6 +235,7 @@ All routes need `Authorization: Bearer <token>` and a Firebase (migrated) accoun
 - `GET /api/client/coach-invites`, `POST /api/coach/clients/accept` `{ coachUsername }`, `DELETE /api/client/coaches/:coachUid` (decline a pending invite or leave a coach).
 - `GET|PUT /api/client/coach-sharing` `{ checkIns, bodyweight, workouts }`: all on by default. Turning a switch off deletes that data from every coach's copy.
 - `POST /api/client/coach-share` `{ checkIns, bodyweight, workouts: { thisWeek, weekStart, weekly }, compliancePercent, activeProgramName }`: filtered by the switches and copied to each active coach. Returns `{ coaches: 0 }` when there is no coach.
+- `PUT /api/client/checkin-photos/:date` `{ photos: [{ image: dataUrl, pose? }] }` (up to 10 JPEG/PNG/WebP, 450 KB each) replaces the photos on that check-in; `DELETE` removes them. Refused while check-in sharing is off, and turning it off deletes them. Only the newest 12 check-in dates keep photos. Coaches read them with `GET /api/coach/clients/:clientUid/checkin-photos/:date`; `GET /api/coach/clients/:clientUid` adds `photoCount` to check-ins that have photos (src/checkInPhotos.js).
 - `GET /api/client/coach-assignment` (includes `program` and `macroTargets`), `GET /api/client/coach-notes`, `GET /exercise-videos`, `GET /api/client/coach-videos` (videos from active coaches meant for the caller, newest first).
 
 Run `node scripts/test-coach-share.js` (helpers) and `node scripts/test-firestore-routes.js` (routes).
