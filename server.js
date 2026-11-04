@@ -17,6 +17,7 @@ const { DAILY_VITALS, SCALE_SAMPLES, dailyFilter, sampleFilter, mergeDailyVitals
 const { createAppleIapRouter, createAppleVerifiers } = require('./src/routes/appleIap');
 const { createPlanAccess, parseUsernames } = require('./src/planAccess');
 const { createEntitlements, pickEffective, legacyEntitlement, toDate, SUBSCRIPTION_SOURCES } = require('./src/entitlements');
+const { createCoachCodes, formatCode } = require('./src/coachCode');
 const fs = require('fs');
 const path = require('path');
 const { createModerationNotifier } = require('./src/moderationEmail');
@@ -470,11 +471,20 @@ app.get('/health', async (_req, res) => {
 // ── User plan endpoint ───────────────────────────────────────────────────────
 // Shared by GET /api/user/plan and the premium-content routes so both read the
 // plan from the same place: Firestore first, Airtable for not-yet-migrated accounts.
-async function getUserPlanInfo(username) {
+// opts.verifyCoachCode=false skips the coach-code check (src/coachCode.js);
+// that check itself asks for the coach's plan, and must not recurse.
+async function getUserPlanInfo(username, opts = {}) {
   if (!username) return { plan: 'free', status: 'none' };
 
   const uid = await resolveFirestoreUid(username);
   if (uid) {
+    // Coach-code Pro first, so a lapsed coach plan or removed link counts below.
+    let coachPro = null;
+    if (opts.verifyCoachCode !== false) {
+      try { coachPro = await coachCodes.verify(uid); } catch (err) {
+        console.error('[getUserPlanInfo] coach code check failed:', err.message);
+      }
+    }
     const snap = await db.collection('users').doc(uid).get();
     const u = snap.exists ? snap.data() : {};
     // Effective plan across every entitlement source (src/entitlements.js).
@@ -506,6 +516,7 @@ async function getUserPlanInfo(username) {
         lastMomentTrialAt: lastMoment ? lastMoment.toISOString() : null,
       },
       ai: null, // filled in by PAY2-3 (AI metering)
+      coachPro, // { status: 'active' | 'paused' | 'revoked', coachUsername } or null
     };
   }
 
@@ -532,6 +543,16 @@ const planAccess = createPlanAccess({
 });
 const requirePaidPlan = planAccess.requirePaidPlan;
 const requireCoachPlan = planAccess.requireCoachPlan;
+
+// Coach Pro codes (src/coachCode.js): a coach's code gives the athlete who
+// enters it Pro while the coach keeps the Coach plan.
+const coachCodes = createCoachCodes({
+  db,
+  coachHasPlan: async coachUid => {
+    const name = await usernameForUid(coachUid);
+    return !!name && hasCoachAccess(name, { verifyCoachCode: false });
+  },
+});
 
 app.get('/api/user/plan', authenticateToken, async (req, res) => {
   try {
@@ -752,6 +773,7 @@ async function deleteFirestoreAccount(uid, username, email) {
     await db.collection(`users/${d.id}/coachInvites`).doc(uid).delete();
     await db.collection(`users/${d.id}/coachAssignment`).doc(uid).delete();
   }
+  await coachCodes.removeForCoach(uid); // their coach code stops working
   await db.recursiveDelete(db.collection('users').doc(uid));
   await db.recursiveDelete(db.collection('coaches').doc(uid)); // no-op if this user never coached anyone
   await db.collection('usernames').doc(String(username).toLowerCase()).delete();
@@ -3391,10 +3413,10 @@ async function isActiveCoachLink(coachUid, clientUid) {
 // Linking clients is a Coach-plan feature. INTAKE_COACH_USERNAME (the account
 // that owns the public intake form) is always allowed, and COACH_PLAN_REQUIRED=false
 // turns the check off (e.g. for a beta).
-async function hasCoachAccess(username) {
+async function hasCoachAccess(username, opts) {
   if (process.env.COACH_PLAN_REQUIRED === 'false') return true;
   if (process.env.INTAKE_COACH_USERNAME && String(username).toLowerCase() === String(process.env.INTAKE_COACH_USERNAME).toLowerCase()) return true;
-  const info = await getUserPlanInfo(username);
+  const info = await getUserPlanInfo(username, opts);
   return info.plan === 'coach';
 }
 
@@ -3600,6 +3622,8 @@ async function unlinkCoachClient(coachUid, clientUid) {
   await db.recursiveDelete(db.collection(`coaches/${coachUid}/clients`).doc(clientUid));
   await db.collection(`users/${clientUid}/coachInvites`).doc(coachUid).delete();
   await db.collection(`users/${clientUid}/coachAssignment`).doc(coachUid).delete();
+  // Pro from this coach's code ends with the link.
+  await coachCodes.verify(clientUid).catch(err => console.error('[unlinkCoachClient] coach code check failed:', err.message));
 }
 
 // GET /api/client/coach-sharing — the athlete's switches for what linked
@@ -3849,6 +3873,8 @@ app.delete('/api/client/coaches/:coachUid', authenticateToken, async (req, res) 
     await db.recursiveDelete(db.collection(`coaches/${coachUid}/clients`).doc(clientUid));
     await inviteRef.delete();
     await db.collection(`users/${clientUid}/coachAssignment`).doc(coachUid).delete();
+    // Pro from this coach's code ends with the link.
+    await coachCodes.verify(clientUid).catch(err => console.error('[client leave] coach code check failed:', err.message));
 
     await coachNotifications.coachLeftByClient(db, {
       coachUsername: invite.get('coachUsername') || await usernameForUid(coachUid),
@@ -3859,6 +3885,109 @@ app.delete('/api/client/coaches/:coachUid', authenticateToken, async (req, res) 
   } catch (err) {
     console.error('DELETE /api/client/coaches/:coachUid failed:', err);
     return sendError(res, 500, 'coach.server_error', String(err));
+  }
+});
+
+// ── Coach Pro codes (src/coachCode.js) ─────────────────────────────────────
+// A coach shares their code; an athlete enters it under Settings › Account,
+// which links them to the coach (no separate accept: typing the code is the
+// consent) and gives them Pro while the coach keeps the Coach plan.
+
+const coachCodeRedeemLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10, // codes are short; keep guessing slow
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: { code: 'coach_code.rate_limited', message: 'Too many tries. Wait a few minutes and try again.' } }
+});
+
+function coachCodeBody(code) {
+  return { code, display: formatCode(code) };
+}
+
+// GET /api/coach/code — the coach's code (made on first call).
+app.get('/api/coach/code', authenticateToken, requireCoachPlan, async (req, res) => {
+  if (!firebaseEnabled) return sendError(res, 503, 'coach.firebase_disabled', 'Coach codes need a migrated (Firebase) account.');
+  try {
+    const coachUid = await resolveCallerUid(req.user);
+    if (!coachUid) return sendError(res, 409, 'coach.not_migrated', 'Your account needs to complete migration first. Contact support.');
+    const code = await coachCodes.getOrCreate(coachUid, req.user.username);
+    return sendSuccess(res, 200, coachCodeBody(code));
+  } catch (err) {
+    console.error('GET /api/coach/code failed:', err);
+    return sendError(res, 500, 'coach.server_error', 'Could not load your coach code.');
+  }
+});
+
+// POST /api/coach/code/regenerate — a new code; the old one stops working.
+// Clients who already joined keep Pro.
+app.post('/api/coach/code/regenerate', authenticateToken, requireCoachPlan, coachInviteLimiter, async (req, res) => {
+  if (!firebaseEnabled) return sendError(res, 503, 'coach.firebase_disabled', 'Coach codes need a migrated (Firebase) account.');
+  try {
+    const coachUid = await resolveCallerUid(req.user);
+    if (!coachUid) return sendError(res, 409, 'coach.not_migrated', 'Your account needs to complete migration first. Contact support.');
+    const code = await coachCodes.regenerate(coachUid, req.user.username);
+    return sendSuccess(res, 200, coachCodeBody(code));
+  } catch (err) {
+    console.error('POST /api/coach/code/regenerate failed:', err);
+    return sendError(res, 500, 'coach.server_error', 'Could not make a new code.');
+  }
+});
+
+// POST /api/client/coach-code — body: { code }. Links the caller to the coach
+// and gives them Pro.
+app.post('/api/client/coach-code', authenticateToken, coachCodeRedeemLimiter, async (req, res) => {
+  if (!firebaseEnabled) return sendError(res, 503, 'coach.firebase_disabled', 'Coach codes need a migrated (Firebase) account.');
+  try {
+    const clientUid = await resolveCallerUid(req.user);
+    if (!clientUid) return sendError(res, 409, 'coach.not_migrated', 'Your account needs to complete migration first. Contact support.');
+
+    const found = await coachCodes.lookup(req.body?.code);
+    if (!found) return sendError(res, 404, 'coach_code.not_found', 'That code doesn’t match a coach. Check it and try again.');
+    const { coachUid, code } = found;
+    if (coachUid === clientUid) return sendError(res, 422, 'coach_code.own_code', 'That’s your own coach code. Share it with your clients.');
+
+    const coachUsername = await usernameForUid(coachUid) || found.coachUsername;
+    coachCodes.forgetCoach(coachUid); // check the coach's plan fresh
+    if (!coachUsername || !(await coachCodes.coachIsActive(coachUid))) {
+      return sendError(res, 409, 'coach_code.coach_inactive', 'This coach’s plan isn’t active, so the code can’t give Pro right now.');
+    }
+
+    // Link to the coach, the same two mirror docs an accepted invite has.
+    const clientDocRef = db.collection(`coaches/${coachUid}/clients`).doc(clientUid);
+    const inviteRef = db.collection(`users/${clientUid}/coachInvites`).doc(coachUid);
+    const [clientSnap, userSnap] = await Promise.all([clientDocRef.get(), db.collection('users').doc(clientUid).get()]);
+    const alreadyLinked = clientSnap.exists && clientSnap.get('status') === 'active';
+    if (!alreadyLinked) {
+      const sharing = coachShare.normalizeSharing(userSnap.exists ? userSnap.get('coachSharing') : null);
+      const now = FieldValue.serverTimestamp();
+      const batch = db.batch();
+      batch.set(clientDocRef, {
+        athleteDisplayName: req.user.username,
+        email: userSnap.exists ? (userSnap.get('email') || '') : '',
+        status: 'active',
+        invitedBy: 'coach_code',
+        invitedAt: clientSnap.exists ? (clientSnap.get('invitedAt') || now) : now,
+        acceptedAt: now,
+        sharing,
+      }, { merge: true });
+      batch.set(inviteRef, {
+        coachUsername,
+        status: 'active',
+        invitedAt: now,
+        acceptedAt: now,
+        via: 'coach_code',
+      }, { merge: true });
+      await batch.commit();
+      await coachNotifications.coachInviteAccepted(db, { coachUsername, clientUsername: req.user.username })
+        .catch(err => console.error('[coach code] notification failed:', err.message));
+    }
+
+    await coachCodes.grant(clientUid, { coachUid, coachUsername, code });
+    return sendSuccess(res, 200, { coachUsername, coachUid, plan: 'pro', linked: true, alreadyLinked });
+  } catch (err) {
+    console.error('POST /api/client/coach-code failed:', err);
+    return sendError(res, 500, 'coach.server_error', 'Could not use that code. Please try again.');
   }
 });
 
