@@ -26,6 +26,7 @@
 const express = require('express');
 const foods = require('../nutrition/foods');
 const { toEnglish, correctTypos } = require('../nutrition/searchTerms');
+const { withStaples } = require('../nutrition/staples');
 
 const SEARCH_TTL_MS = 24 * 60 * 60 * 1000;
 const BARCODE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -280,8 +281,14 @@ function createFoodRouter({ sendError, sendSuccess, searcher, ...opts } = {}) {
     if (!r.foods.length && Object.values(r.sources).every(v => v !== 'ok')) {
       return sendError(res, 502, 'food.search_unavailable', 'Food search is unavailable right now. Try again shortly, or add the food yourself.');
     }
+    // Cooked/dry reference foods for "rijst", "pasta"... go with the Open
+    // Food Facts answer (the app shows it first); dry grains are labelled
+    // in both (src/nutrition/staples.js).
+    const list = sources === 'usda'
+      ? r.foods.map(f => withStaples('', [f])[0])
+      : withStaples(r.corrected || q, r.foods);
     return sendSuccess(res, 200, {
-      foods: r.foods.slice(0, limit), sources: r.sources,
+      foods: list.slice(0, limit), sources: r.sources,
       ...(r.corrected ? { corrected: r.corrected } : {}), ...(r.cached ? { cached: true } : {}),
     });
   });
