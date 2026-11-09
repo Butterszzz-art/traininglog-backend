@@ -37,6 +37,8 @@ const TYPE_CATEGORY = {
   coach_plan: 'coaching',
   coach_video: 'coaching',
   coach_left: 'coaching',
+  coach_checkin_comment: 'coaching',
+  client_checkin_reply: 'coaching',
 };
 const PAGE = 50;
 const KEEP = 100;           // older rows are pruned when the list is read

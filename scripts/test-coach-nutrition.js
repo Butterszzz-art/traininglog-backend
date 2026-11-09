@@ -23,7 +23,7 @@ const check = (label, cond, extra) => {
 
 // ── Pure: sharing ───────────────────────────────────────────────────────────
 check('sharing: nutrition defaults off, others on',
-  JSON.stringify(coachShare.normalizeSharing(null)) === JSON.stringify({ checkIns: true, bodyweight: true, workouts: true, nutrition: false }));
+  JSON.stringify(coachShare.normalizeSharing(null)) === JSON.stringify({ checkIns: true, bodyweight: true, workouts: true, nutrition: false, photos: false }));
 check('sharing: undecided until set', coachShare.decidedSharing({ checkIns: true }).nutrition === false
   && coachShare.decidedSharing({ nutrition: false }).nutrition === true);
 {

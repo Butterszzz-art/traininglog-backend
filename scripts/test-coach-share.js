@@ -12,8 +12,17 @@ function test(label, fn) {
 const NOW = new Date('2026-09-24T12:00:00Z'); // a Thursday
 
 test('normalizeSharing defaults everything on except the food log', () => {
-  assert.deepStrictEqual(cs.normalizeSharing(null), { checkIns: true, bodyweight: true, workouts: true, nutrition: false });
-  assert.deepStrictEqual(cs.normalizeSharing({ bodyweight: false, junk: 1 }), { checkIns: true, bodyweight: false, workouts: true, nutrition: false });
+  assert.deepStrictEqual(cs.normalizeSharing(null), { checkIns: true, bodyweight: true, workouts: true, nutrition: false, photos: false });
+  assert.deepStrictEqual(cs.normalizeSharing({ bodyweight: false, junk: 1 }), { checkIns: true, bodyweight: false, workouts: true, nutrition: false, photos: false });
+});
+
+test('photos need their own yes on top of check-ins', () => {
+  assert.strictEqual(cs.photosAllowed(null), false);
+  assert.strictEqual(cs.photosAllowed({ checkIns: true }), false, 'undecided is off');
+  assert.strictEqual(cs.photosAllowed({ photos: true }), true, 'check-ins default on');
+  assert.strictEqual(cs.photosAllowed({ checkIns: false, photos: true }), false);
+  assert.strictEqual(cs.decidedSharing({ checkIns: true }).photos, false);
+  assert.deepStrictEqual(cs.mergeSharing({ photos: true }, { nutrition: true }), { nutrition: true, photos: true });
 });
 
 test('buildShareFields keeps valid check-ins, newest first, deduped by date', () => {

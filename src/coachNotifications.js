@@ -117,4 +117,28 @@ async function notifyCoachVideo(db, { coachUsername, clientUsernames, title }) {
   });
 }
 
-module.exports = { notifyCoachInvite, coachInviteAccepted, coachInviteWithdrawn, coachLeftByClient, notifyCoachNote, notifyCoachPlan, notifyCoachVideo };
+// A coach commented on a check-in (or pinned a comment to one of its photos).
+// One row per coach and check-in date while unread. The comment text stays
+// out of the notification and the push: the client reads it in the app.
+async function notifyCheckInComment(db, { coachUsername, clientUsername, date, onPhoto }) {
+  const day = String(date || '').slice(0, 10);
+  return notify(db, {
+    to: clientUsername, type: 'coach_checkin_comment', actor: coachUsername, actorName: coachUsername,
+    text: onPhoto ? 'commented on a photo in your check-in' : 'commented on your check-in',
+    data: { coach: coachUsername, date: day },
+    collapseKey: `coach_checkin_comment__${profileKey(coachUsername)}__${day}`,
+  });
+}
+
+// The client replied under a check-in; the coach is told.
+async function notifyCheckInReply(db, { coachUsername, clientUsername, clientUid, date }) {
+  const day = String(date || '').slice(0, 10);
+  return notify(db, {
+    to: coachUsername, type: 'client_checkin_reply', actor: clientUsername, actorName: clientUsername,
+    text: 'replied on their check-in',
+    data: { client: clientUsername, clientUid: String(clientUid || ''), date: day },
+    collapseKey: `client_checkin_reply__${profileKey(clientUsername)}__${day}`,
+  });
+}
+
+module.exports = { notifyCheckInComment, notifyCheckInReply, notifyCoachInvite, coachInviteAccepted, coachInviteWithdrawn, coachLeftByClient, notifyCoachNote, notifyCoachPlan, notifyCoachVideo };

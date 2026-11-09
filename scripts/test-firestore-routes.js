@@ -634,7 +634,12 @@ setTimeout(() => {
 
     // Check-in photos (src/checkInPhotos.js)
     const photoJpeg = 'data:image/jpeg;base64,' + Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(32)]).toString('base64');
+    r = await req('PUT', `/api/client/checkin-photos/${today}`, tokClient, { photos: [{ image: photoJpeg }] });
+    check('upload refused until the client says yes to photos', r.status === 403 && r.body?.error?.code === 'checkin_photos.photos_off');
+    r = await req('PUT', '/api/client/coach-sharing', tokClient, { photos: true });
+    check('photos switched on (decided)', r.body?.sharing?.photos === true && r.body?.decided?.photos === true);
     r = await req('PUT', `/api/client/checkin-photos/${today}`, tokClient, { photos: [{ image: photoJpeg, pose: 'Front relaxed' }, { image: photoJpeg }] });
+    check('roster lists the dates with photos', store['coaches/uidABC123/clients'].uidClient456.photoDates?.[0] === today);
     check('client uploads check-in photos', r.status === 200 && r.body?.count === 2
       && store['users/uidClient456/checkInPhotos']?.[`${today}_1`]?.mime === 'image/jpeg'
       && store.users.uidClient456.checkInPhotoIndex?.[today] === 2);
@@ -654,6 +659,10 @@ setTimeout(() => {
     r = await req('PUT', `/api/client/checkin-photos/${today}`, tokClient, { photos: [{ image: photoJpeg }] });
     check('upload refused while check-in sharing is off', r.status === 403);
     await req('PUT', '/api/client/coach-sharing', tokClient, { checkIns: true });
+    await req('PUT', `/api/client/checkin-photos/${today}`, tokClient, { photos: [{ image: photoJpeg }] });
+    await req('PUT', '/api/client/coach-sharing', tokClient, { photos: false });
+    r = await req('GET', `/api/coach/clients/uidClient456/checkin-photos/${today}`, tokCoach);
+    check('photos off deletes them and the coach sees none', !store['users/uidClient456/checkInPhotos'][`${today}_0`] && r.body?.photos?.length === 0);
     await req('POST', '/api/client/coach-share', tokClient, snapshot);
 
     r = await req('PUT', '/api/client/coach-sharing', tokClient, { bodyweight: false });

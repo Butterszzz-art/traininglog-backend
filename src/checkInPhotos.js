@@ -133,6 +133,12 @@ async function deleteAllPhotos(db, uid) {
   await batch.commit();
 }
 
+// The pose label of one photo (no image bytes), for a comment pinned to it.
+async function readPose(db, uid, date, i) {
+  const snap = await photosCol(db, uid).doc(photoId(date, i)).get();
+  return snap.exists ? snap.get('pose') || '' : '';
+}
+
 // Photos for one date as [{ index, pose, image }] (data URLs), in order.
 async function readPhotos(db, uid, date) {
   const count = (await readIndex(db, uid))[date] || 0;
@@ -148,5 +154,5 @@ async function readPhotos(db, uid, date) {
 module.exports = {
   MAX_PHOTOS, MAX_DATES, PHOTO_MAX_BYTES,
   isoDate, parsePhoto, parsePhotoList, cleanIndex, nextIndex, photoIds,
-  readIndex, savePhotos, deletePhotos, deleteAllPhotos, readPhotos,
+  readIndex, savePhotos, deletePhotos, deleteAllPhotos, readPhotos, readPose,
 };

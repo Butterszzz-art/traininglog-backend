@@ -144,6 +144,10 @@ service cloud.firestore {
     match /sharedMealPhotos/{photoId} {
       allow read, write: if false;
     }
+    // Check-in comment threads (src/checkInComments.js) — server-only.
+    match /checkInComments/{commentId} {
+      allow read, write: if false;
+    }
     match /exerciseBests/{bestId} {
       allow read, write: if false;
     }
