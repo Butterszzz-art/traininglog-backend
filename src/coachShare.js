@@ -6,11 +6,13 @@
 // strips whatever the client switched off, and the result is copied onto each
 // active coach's roster doc (coaches/{coachUid}/clients/{clientUid}).
 
-// nutrition (the food-level diary) is opt-in: food logs are health data, so
-// a coach only sees them after the client switches it on. The others keep
-// their original default (on).
-const SHARING_KEYS = ['checkIns', 'bodyweight', 'workouts', 'nutrition'];
-const DEFAULT_SHARING = Object.freeze({ checkIns: true, bodyweight: true, workouts: true, nutrition: false });
+// nutrition (the food-level diary) and photos (progress photos on check-ins,
+// src/checkInPhotos.js) are opt-in: they're health data and body photos, so a
+// coach only sees them after the client switches them on. The app asks once
+// while one is undecided (decidedSharing). The others keep their original
+// default (on).
+const SHARING_KEYS = ['checkIns', 'bodyweight', 'workouts', 'nutrition', 'photos'];
+const DEFAULT_SHARING = Object.freeze({ checkIns: true, bodyweight: true, workouts: true, nutrition: false, photos: false });
 
 // Fields on the coach's roster doc that come from the client's share, grouped
 // by the sharing switch that controls them. Turning a switch off deletes these.
@@ -22,7 +24,17 @@ const SHARE_FIELDS = {
   // synced food log at request time (src/routes/coachNutrition.js), so
   // switching it off cuts access straight away.
   nutrition: [],
+  // The photos live under the client (src/checkInPhotos.js) and are deleted
+  // by the sharing route; this is the roster's list of dates that have them.
+  photos: ['photoDates'],
 };
+
+// Photos reach a coach only with both switches on: they belong to check-ins,
+// and they need their own yes.
+function photosAllowed(sharing) {
+  const s = normalizeSharing(sharing);
+  return s.checkIns === true && s.photos === true;
+}
 
 const MAX_CHECKINS = 12;
 const MAX_BODYWEIGHT = 120;
@@ -325,6 +337,7 @@ module.exports = {
   DEFAULT_SHARING,
   normalizeSharing,
   decidedSharing,
+  photosAllowed,
   mergeSharing,
   buildShareFields,
   computeClientAlerts,

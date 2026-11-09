@@ -54,6 +54,7 @@ const { computeSessionVolume, safeDocId, naturalDocId, syncEntryDocId, saveWorko
 const TERMS_VERSION = '2026-10-02';
 const coachShare = require('./src/coachShare');
 const checkInPhotos = require('./src/checkInPhotos');
+const checkInComments = require('./src/checkInComments');
 
 const app = express();
 
@@ -786,6 +787,10 @@ async function deleteFirestoreAccount(uid, username, email) {
   await deleteFeedPosts(db, username);
   await deleteShares(db, username);
   await deleteUserMealPhotos(db, profileKey(username));
+  // Check-in comment threads, as a client and as a coach (check-in photos
+  // live under users/{uid} and went with it above).
+  await checkInComments.deleteComments(db, { clientUid: uid });
+  await checkInComments.deleteComments(db, { coachUid: uid });
   await deleteExerciseBests(db, username);
   await deleteNotifications(db, username);
   await deleteCalendarFeed(db, username);
@@ -3402,7 +3407,12 @@ function coachClientSummary(id, data, now = new Date()) {
     currentBodyweight: data.currentBodyweight ?? null,
     weeklyWeightChangePercent: data.weeklyWeightChangePercent ?? null,
     sharing: data.sharing || null,
-    lastSharedAt: data.lastSharedAt || null
+    lastSharedAt: data.lastSharedAt || null,
+    // Check-in dates with photos, dates the coach has commented on, and dates
+    // where the client wrote last (src/checkInComments.js).
+    photoDates: Array.isArray(data.photoDates) ? data.photoDates : [],
+    coachCommentDates: Array.isArray(data.coachCommentDates) ? data.coachCommentDates : [],
+    awaitingReplyDates: Array.isArray(data.awaitingReplyDates) ? data.awaitingReplyDates : []
   };
 }
 
@@ -3625,6 +3635,7 @@ async function unlinkCoachClient(coachUid, clientUid) {
   await db.recursiveDelete(db.collection(`coaches/${coachUid}/clients`).doc(clientUid));
   await db.collection(`users/${clientUid}/coachInvites`).doc(coachUid).delete();
   await db.collection(`users/${clientUid}/coachAssignment`).doc(coachUid).delete();
+  await endPhotoSharing(coachUid, clientUid);
   // Pro from this coach's code ends with the link.
   await coachCodes.verify(clientUid).catch(err => console.error('[unlinkCoachClient] coach code check failed:', err.message));
 }
@@ -3670,8 +3681,13 @@ app.put('/api/client/coach-sharing', authenticateToken, async (req, res) => {
     for (const key of coachShare.SHARING_KEYS) {
       if (!sharing[key]) for (const f of coachShare.SHARE_FIELDS[key]) cleared[f] = FieldValue.delete ? FieldValue.delete() : null;
     }
-    // Check-in photos follow the check-ins switch.
-    if (!sharing.checkIns) await checkInPhotos.deleteAllPhotos(db, uid);
+    // Check-in photos need both the check-ins and the photos switch. Turning
+    // either off deletes them. (An undecided photos switch only hides them:
+    // photos sent before the switch existed wait for the client's answer.)
+    if (!sharing.checkIns || (req.body && req.body.photos === false)) {
+      await checkInPhotos.deleteAllPhotos(db, uid);
+      cleared.photoDates = FieldValue.delete ? FieldValue.delete() : null;
+    }
     const coachUids = await activeCoachUidsFor(uid);
     if (coachUids.length) {
       const batch = db.batch();
@@ -3737,7 +3753,7 @@ app.get('/api/coach/clients/:clientUid', authenticateToken, requireCoachPlan, as
     const data = snap.data() || {};
     // How many photos each check-in has (src/checkInPhotos.js), read from
     // the client's own index so the count is never stale.
-    const photoIndex = (data.status || 'active') === 'active' && coachShare.normalizeSharing(data.sharing).checkIns
+    const photoIndex = (data.status || 'active') === 'active' && await clientPhotosAllowed(clientUid)
       ? await checkInPhotos.readIndex(db, clientUid) : {};
     const client = {
       ...coachClientSummary(clientUid, data),
@@ -3773,6 +3789,28 @@ const CHECKIN_PHOTO_ERRORS = {
   invalid: [422, 'checkin_photos.invalid', 'Photos must be JPEG, PNG or WebP images.'],
 };
 
+// The client's live switches (not the copy on a roster doc): photos need
+// check-ins and photos both on.
+async function clientPhotosAllowed(clientUid) {
+  const snap = await db.collection('users').doc(clientUid).get();
+  return coachShare.photosAllowed(snap.exists ? snap.get('coachSharing') : null);
+}
+
+// Each active coach's roster row lists the check-in dates with photos, so the
+// dashboard can flag new ones without reading the client's index.
+async function syncPhotoDates(clientUid, index) {
+  const dates = Object.keys(index || {}).sort().reverse();
+  const coachUids = await activeCoachUidsFor(clientUid);
+  await Promise.all(coachUids.map(c => db.collection(`coaches/${c}/clients`).doc(clientUid).set({ photoDates: dates }, { merge: true })));
+}
+
+// A coach <-> client link ended (either side): their comment threads go, and
+// the client's photos go once no active coach is left to see them.
+async function endPhotoSharing(coachUid, clientUid) {
+  await checkInComments.deleteComments(db, { coachUid, clientUid });
+  if (!(await activeCoachUidsFor(clientUid)).length) await checkInPhotos.deleteAllPhotos(db, clientUid);
+}
+
 // PUT /api/client/checkin-photos/:date — body { photos: [{ image, pose? }] }
 // replaces the photos on that check-in. Refused while check-in sharing is off.
 app.put('/api/client/checkin-photos/:date', authenticateToken, checkInPhotoLimiter, async (req, res) => {
@@ -3785,6 +3823,7 @@ app.put('/api/client/checkin-photos/:date', authenticateToken, checkInPhotoLimit
     const userSnap = await db.collection('users').doc(uid).get();
     const sharing = coachShare.normalizeSharing(userSnap.exists ? userSnap.get('coachSharing') : null);
     if (!sharing.checkIns) return sendError(res, 403, 'checkin_photos.sharing_off', 'Check-in sharing is turned off.');
+    if (!sharing.photos) return sendError(res, 403, 'checkin_photos.photos_off', 'Photo sharing with your coach is turned off.');
     const parsed = checkInPhotos.parsePhotoList(req.body);
     if (parsed.error) {
       const [status, code, message] = CHECKIN_PHOTO_ERRORS[parsed.error];
@@ -3792,6 +3831,7 @@ app.put('/api/client/checkin-photos/:date', authenticateToken, checkInPhotoLimit
     }
     const index = await checkInPhotos.savePhotos(db, uid, date, parsed.photos);
     if (!index) return sendError(res, 422, 'checkin_photos.too_old', 'Only your most recent check-ins can have photos.');
+    await syncPhotoDates(uid, index);
     return sendSuccess(res, 200, { date, count: index[date] });
   } catch (err) {
     console.error('PUT /api/client/checkin-photos/:date failed:', err);
@@ -3807,7 +3847,7 @@ app.delete('/api/client/checkin-photos/:date', authenticateToken, async (req, re
     if (!date) return sendError(res, 422, 'checkin_photos.invalid_date', 'Use a YYYY-MM-DD date.');
     const uid = await resolveCallerUid(req.user);
     if (!uid) return sendError(res, 409, 'coach.not_migrated', 'Your account needs to complete migration first. Contact support.');
-    await checkInPhotos.deletePhotos(db, uid, date);
+    await syncPhotoDates(uid, await checkInPhotos.deletePhotos(db, uid, date));
     return sendSuccess(res, 200, { date, count: 0 });
   } catch (err) {
     console.error('DELETE /api/client/checkin-photos/:date failed:', err);
@@ -3828,10 +3868,8 @@ app.get('/api/coach/clients/:clientUid/checkin-photos/:date', authenticateToken,
     const snap = await db.collection(`coaches/${coachUid}/clients`).doc(clientUid).get();
     if (!snap.exists || (snap.get('status') || 'active') !== 'active') return sendError(res, 404, 'coach.not_linked', 'This client is not linked to your roster.');
     // The client's live switch, not the copy on the roster doc.
-    const userSnap = await db.collection('users').doc(clientUid).get();
-    const sharing = coachShare.normalizeSharing(userSnap.exists ? userSnap.get('coachSharing') : null);
     res.set('Cache-Control', 'private, no-store');
-    if (!sharing.checkIns) return sendSuccess(res, 200, { date, photos: [] });
+    if (!(await clientPhotosAllowed(clientUid))) return sendSuccess(res, 200, { date, photos: [] });
     return sendSuccess(res, 200, { date, photos: await checkInPhotos.readPhotos(db, clientUid, date) });
   } catch (err) {
     console.error('GET /api/coach/clients/:clientUid/checkin-photos/:date failed:', err);
@@ -3968,6 +4006,8 @@ app.delete('/api/client/coaches/:coachUid', authenticateToken, async (req, res) 
     await db.recursiveDelete(db.collection(`coaches/${coachUid}/clients`).doc(clientUid));
     await inviteRef.delete();
     await db.collection(`users/${clientUid}/coachAssignment`).doc(coachUid).delete();
+    // Comment threads with this coach, and the photos if no coach is left.
+    await endPhotoSharing(coachUid, clientUid);
     // Pro from this coach's code ends with the link.
     await coachCodes.verify(clientUid).catch(err => console.error('[client leave] coach code check failed:', err.message));
 
@@ -5366,6 +5406,28 @@ app.use('/api/coach/videos', authenticateToken, requireCoachPlan, coachVideosLim
   },
 }));
 app.use('/api/client/coach-videos', authenticateToken, coachVideosLimiter, videosAvailable, createClientCoachVideosRouter({ db, sendError, sendSuccess, resolveCallerUid }));
+
+// ── Check-in comments (src/checkInComments.js) ───────────────────────────────
+const commentsAvailable = (_req, res, next) => (firebaseEnabled ? next() : sendError(res, 503, 'comments.firebase_disabled', 'Check-in comments require a migrated (Firebase) backend.'));
+const checkInCommentLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: { code: 'comments.rate_limited', message: 'Too many requests. Try again shortly.' } }
+});
+const checkInCommentRouters = checkInComments.createRouters({
+  db, sendError, sendSuccess, resolveCallerUid, usernameForUid,
+  photosFor: async clientUid => {
+    const allowed = await clientPhotosAllowed(clientUid);
+    return { allowed, index: allowed ? await checkInPhotos.readIndex(db, clientUid) : {} };
+  },
+  photoPose: (clientUid, date, i) => checkInPhotos.readPose(db, clientUid, date, i),
+  notifyComment: args => coachNotifications.notifyCheckInComment(db, args),
+  notifyReply: args => coachNotifications.notifyCheckInReply(db, args),
+});
+app.use('/api/client/checkins', authenticateToken, checkInCommentLimiter, commentsAvailable, checkInCommentRouters.client);
+app.use('/api/coach/clients/:clientUid', authenticateToken, requireCoachPlan, checkInCommentLimiter, commentsAvailable, checkInCommentRouters.coach);
 
 app.use('/', leaderboardRoute);
 
