@@ -141,4 +141,41 @@ async function notifyCheckInReply(db, { coachUsername, clientUsername, clientUid
   });
 }
 
-module.exports = { notifyCheckInComment, notifyCheckInReply, notifyCoachInvite, coachInviteAccepted, coachInviteWithdrawn, coachLeftByClient, notifyCoachNote, notifyCoachPlan, notifyCoachVideo };
+// The client wrote to their coach (src/coachMessages.js). One row per client
+// while unread; the message text stays out of the notification.
+async function notifyClientMessage(db, { coachUsername, clientUsername, clientUid }) {
+  return notify(db, {
+    to: coachUsername, type: 'client_message', actor: clientUsername, actorName: clientUsername,
+    text: 'sent you a message',
+    data: { client: clientUsername, clientUid: String(clientUid || '') },
+    collapseKey: `client_message__${profileKey(clientUsername)}`,
+  });
+}
+
+// The coach asked the client to check in.
+async function notifyCheckInRequest(db, { coachUsername, clientUsername }) {
+  return notify(db, {
+    to: clientUsername, type: 'coach_checkin_request', actor: coachUsername, actorName: coachUsername,
+    text: 'asked you for a check-in', data: { coach: coachUsername },
+    collapseKey: `coach_checkin_request__${profileKey(coachUsername)}`,
+  });
+}
+
+// A client sent a form check video (src/formChecks.js); the coach reviewed one.
+async function notifyFormCheckSent(db, { coachUsername, clientUsername, clientUid, exercise }) {
+  return notify(db, {
+    to: coachUsername, type: 'client_form_check', actor: clientUsername, actorName: clientUsername,
+    text: 'sent a form check', data: { client: clientUsername, clientUid: String(clientUid || ''), exercise: String(exercise || '').slice(0, 80) },
+    collapseKey: `client_form_check__${profileKey(clientUsername)}`,
+  });
+}
+
+async function notifyFormCheckReviewed(db, { coachUsername, clientUsername, exercise }) {
+  return notify(db, {
+    to: clientUsername, type: 'coach_form_check', actor: coachUsername, actorName: coachUsername,
+    text: 'reviewed your form check', data: { coach: coachUsername, exercise: String(exercise || '').slice(0, 80) },
+    collapseKey: `coach_form_check__${profileKey(coachUsername)}`,
+  });
+}
+
+module.exports = { notifyFormCheckSent, notifyFormCheckReviewed, notifyClientMessage, notifyCheckInRequest, notifyCheckInComment, notifyCheckInReply, notifyCoachInvite, coachInviteAccepted, coachInviteWithdrawn, coachLeftByClient, notifyCoachNote, notifyCoachPlan, notifyCoachVideo };
