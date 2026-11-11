@@ -55,6 +55,8 @@ const TERMS_VERSION = '2026-10-02';
 const coachShare = require('./src/coachShare');
 const checkInPhotos = require('./src/checkInPhotos');
 const checkInComments = require('./src/checkInComments');
+const coachMessages = require('./src/coachMessages');
+const formChecks = require('./src/formChecks');
 
 const app = express();
 
@@ -791,6 +793,10 @@ async function deleteFirestoreAccount(uid, username, email) {
   // live under users/{uid} and went with it above).
   await checkInComments.deleteComments(db, { clientUid: uid });
   await checkInComments.deleteComments(db, { coachUid: uid });
+  await coachMessages.deleteMessages(db, { clientUid: uid });
+  await coachMessages.deleteMessages(db, { coachUid: uid });
+  await formChecks.deleteFormChecks(db, { clientUid: uid });
+  await formChecks.deleteFormChecks(db, { coachUid: uid });
   await deleteExerciseBests(db, username);
   await deleteNotifications(db, username);
   await deleteCalendarFeed(db, username);
@@ -3412,7 +3418,13 @@ function coachClientSummary(id, data, now = new Date()) {
     // where the client wrote last (src/checkInComments.js).
     photoDates: Array.isArray(data.photoDates) ? data.photoDates : [],
     coachCommentDates: Array.isArray(data.coachCommentDates) ? data.coachCommentDates : [],
-    awaitingReplyDates: Array.isArray(data.awaitingReplyDates) ? data.awaitingReplyDates : []
+    awaitingReplyDates: Array.isArray(data.awaitingReplyDates) ? data.awaitingReplyDates : [],
+    // Inbox summary and the open check-in request (src/coachMessages.js).
+    ...coachMessages.rosterSummary(data),
+    // Check-in frequency and the coach's own questions; the newest check-in
+    // the coach marked reviewed.
+    checkInSettings: coachShare.sanitizeCheckInSettings(data.checkInSettings || {}),
+    reviewedCheckInDate: typeof data.reviewedCheckInDate === 'string' ? data.reviewedCheckInDate : null
   };
 }
 
@@ -3808,6 +3820,8 @@ async function syncPhotoDates(clientUid, index) {
 // the client's photos go once no active coach is left to see them.
 async function endPhotoSharing(coachUid, clientUid) {
   await checkInComments.deleteComments(db, { coachUid, clientUid });
+  await coachMessages.deleteMessages(db, { coachUid, clientUid });
+  await formChecks.deleteFormChecks(db, { coachUid, clientUid });
   if (!(await activeCoachUidsFor(clientUid)).length) await checkInPhotos.deleteAllPhotos(db, clientUid);
 }
 
@@ -4176,6 +4190,11 @@ app.patch('/api/coach/clients/:clientUid', authenticateToken, requireCoachPlan, 
       if (plan && req.body.macroTargets === undefined) fields.macroTargets = { ...plan.days.training };
     }
     if (typeof req.body?.hideNutritionNumbers === 'boolean') fields.hideNutritionNumbers = req.body.hideNutritionNumbers;
+    if (req.body?.checkInSettings !== undefined) {
+      const settings = coachShare.sanitizeCheckInSettings(req.body.checkInSettings);
+      if (!settings) return sendError(res, 422, 'coach.invalid_checkin_settings', 'checkInSettings needs everyDays and questions.');
+      fields.checkInSettings = settings;
+    }
     // Meal plan (src/routes/coachMeals.js): on both docs, so the coach can
     // open and change it later; client lists only carry the one-line summary.
     if (req.body?.mealPlan !== undefined) {
@@ -4191,7 +4210,7 @@ app.patch('/api/coach/clients/:clientUid', authenticateToken, requireCoachPlan, 
     }
     const programId = typeof req.body?.programId === 'string' ? req.body.programId.trim() : null;
     if (!Object.keys(fields).length && programId === null) {
-      return sendError(res, 422, 'coach.invalid_payload', 'Provide at least one of currentProgram, programId, nutritionSummary, macroTargets, macroPlan, mealPlan, trainingMode, hideNutritionNumbers.');
+      return sendError(res, 422, 'coach.invalid_payload', 'Provide at least one of currentProgram, programId, nutritionSummary, macroTargets, macroPlan, mealPlan, trainingMode, hideNutritionNumbers, checkInSettings.');
     }
 
     const coachUid = await resolveCallerUid(req.user);
@@ -4314,6 +4333,7 @@ app.post('/api/coach/clients/:clientUid/notes', authenticateToken, requireCoachP
     batch.set(noteRef, note);
     batch.set(db.collection(`users/${clientUid}/coachNotes`).doc(noteRef.id), note);
     await batch.commit();
+    await coachMessages.recordCoachNote(db, { coachUid, clientUid, text });
     await coachNotifications.notifyCoachNote(db, {
       coachUsername: req.user.username, clientUsername: existing.get('athleteDisplayName') || await usernameForUid(clientUid),
     });
@@ -5428,6 +5448,24 @@ const checkInCommentRouters = checkInComments.createRouters({
 });
 app.use('/api/client/checkins', authenticateToken, checkInCommentLimiter, commentsAvailable, checkInCommentRouters.client);
 app.use('/api/coach/clients/:clientUid', authenticateToken, requireCoachPlan, checkInCommentLimiter, commentsAvailable, checkInCommentRouters.coach);
+
+// ── Coach ↔ client messages and check-in requests (src/coachMessages.js) ─────
+const coachMessageRouters = coachMessages.createRouters({
+  db, sendError, sendSuccess, resolveCallerUid, usernameForUid,
+  notifyMessage: args => coachNotifications.notifyClientMessage(db, args),
+  notifyCheckInRequest: args => coachNotifications.notifyCheckInRequest(db, args),
+});
+app.use('/api/client/messages', authenticateToken, checkInCommentLimiter, commentsAvailable, coachMessageRouters.client);
+app.use('/api/coach/clients/:clientUid', authenticateToken, requireCoachPlan, checkInCommentLimiter, commentsAvailable, coachMessageRouters.coach);
+
+// ── Form checks (src/formChecks.js) ──────────────────────────────────────────
+const formCheckRouters = formChecks.createRouters({
+  db, sendError, sendSuccess, resolveCallerUid, usernameForUid,
+  notifySent: args => coachNotifications.notifyFormCheckSent(db, args),
+  notifyReviewed: args => coachNotifications.notifyFormCheckReviewed(db, args),
+});
+app.use('/api/client/form-checks', authenticateToken, checkInCommentLimiter, commentsAvailable, formCheckRouters.client);
+app.use('/api/coach/form-checks', authenticateToken, requireCoachPlan, checkInCommentLimiter, commentsAvailable, formCheckRouters.coach);
 
 app.use('/', leaderboardRoute);
 

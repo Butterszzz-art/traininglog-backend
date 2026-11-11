@@ -16,6 +16,7 @@
 //           POST /api/client/checkins/:date/comments      { text, coachUid? }
 //   coach   GET  /api/coach/clients/:clientUid/checkins/:date/comments
 //           POST /api/coach/clients/:clientUid/checkins/:date/comments  { text, photoIndex? }
+//           POST /api/coach/clients/:clientUid/checkins/:date/reviewed  roster.reviewedCheckInDate
 // Comments are deleted when the coach ↔ client link ends and with either account.
 'use strict';
 
@@ -256,6 +257,20 @@ function createRouters({
       });
       return sendSuccess(res, 201, { comment });
     } catch (err) { return fail(res, 'POST /api/coach/clients/:id/checkins/:date/comments', err, 'Could not send the comment.'); }
+  });
+
+  // The coach has looked at this check-in: it leaves their "to review" list.
+  coach.post('/checkins/:date/reviewed', async (req, res) => {
+    try {
+      const l = await linked(req, res);
+      if (!l) return;
+      const date = dateOr422(req, res);
+      if (!date) return;
+      const prev = isoDate(l.snap.get('reviewedCheckInDate'));
+      const reviewedCheckInDate = prev && prev > date ? prev : date;
+      await l.ref.set({ reviewedCheckInDate }, { merge: true });
+      return sendSuccess(res, 200, { reviewedCheckInDate });
+    } catch (err) { return fail(res, 'POST /api/coach/clients/:id/checkins/:date/reviewed', err, 'Could not mark it reviewed.'); }
   });
 
   return { client, coach };

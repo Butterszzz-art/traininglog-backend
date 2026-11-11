@@ -39,6 +39,10 @@ const TYPE_CATEGORY = {
   coach_left: 'coaching',
   coach_checkin_comment: 'coaching',
   client_checkin_reply: 'coaching',
+  client_message: 'coaching',
+  coach_checkin_request: 'coaching',
+  client_form_check: 'coaching',
+  coach_form_check: 'coaching',
 };
 const PAGE = 50;
 const KEEP = 100;           // older rows are pruned when the list is read

@@ -107,7 +107,28 @@ function sanitizeCheckIn(entry) {
   if (notes) out.notes = notes;
   const summary = text(entry.summary, 400);
   if (summary) out.summary = summary;
+  // Answers to the coach's own check-in questions (sanitizeCheckInSettings).
+  if (Array.isArray(entry.answers)) {
+    const answers = entry.answers.map(x => ({ q: text(x && x.q, QUESTION_MAX), a: text(x && x.a, 500) }))
+      .filter(x => x.q && x.a).slice(0, MAX_QUESTIONS);
+    if (answers.length) out.answers = answers;
+  }
   return out;
+}
+
+// What a coach sets per client for check-ins: how often one is expected and
+// up to MAX_QUESTIONS extra questions the client answers with it.
+const MAX_QUESTIONS = 8;
+const QUESTION_MAX = 140;
+function sanitizeCheckInSettings(value) {
+  if (!value || typeof value !== 'object') return null;
+  const days = Number(value.everyDays);
+  const questions = (Array.isArray(value.questions) ? value.questions : [])
+    .map(q => text(q, QUESTION_MAX).replace(/\s+/g, ' ')).filter(Boolean);
+  return {
+    everyDays: Number.isInteger(days) && days >= 1 && days <= 28 ? days : 7,
+    questions: [...new Set(questions)].slice(0, MAX_QUESTIONS),
+  };
 }
 
 // Validates and trims the phone's snapshot, then drops whatever the client's
@@ -332,6 +353,7 @@ function sanitizeMacroPlan(value) {
 }
 
 module.exports = {
+  sanitizeCheckInSettings,
   SHARING_KEYS,
   SHARE_FIELDS,
   DEFAULT_SHARING,

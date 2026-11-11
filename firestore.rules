@@ -148,6 +148,14 @@ service cloud.firestore {
     match /checkInComments/{commentId} {
       allow read, write: if false;
     }
+    // Client replies to their coach (src/coachMessages.js) — server-only.
+    match /coachMessages/{messageId} {
+      allow read, write: if false;
+    }
+    // Form check videos and their comments (src/formChecks.js) — server-only.
+    match /formChecks/{formCheckId} {
+      allow read, write: if false;
+    }
     match /exerciseBests/{bestId} {
       allow read, write: if false;
     }
