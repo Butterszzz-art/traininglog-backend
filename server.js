@@ -58,6 +58,7 @@ const checkInComments = require('./src/checkInComments');
 const coachMessages = require('./src/coachMessages');
 const formChecks = require('./src/formChecks');
 const coachLibrary = require('./src/routes/coachLibrary');
+const coachAutomations = require('./src/coachAutomations');
 
 const app = express();
 
@@ -3604,6 +3605,7 @@ app.post('/api/coach/clients/accept', authenticateToken, coachInviteLimiter, asy
     await coachNotifications.coachInviteAccepted(db, {
       coachUsername: inviteSnap.get('coachUsername') || coachUsername, clientUsername: req.user.username,
     });
+    await welcomeNewClient({ coachUid, coachUsername: inviteSnap.get('coachUsername') || coachUsername, clientUid, clientUsername: req.user.username });
 
     return sendSuccess(res, 200, { coachUsername, coachUid, status: 'active', sharing });
   } catch (err) {
@@ -4132,6 +4134,7 @@ app.post('/api/client/coach-code', authenticateToken, coachCodeRedeemLimiter, as
       await batch.commit();
       await coachNotifications.coachInviteAccepted(db, { coachUsername, clientUsername: req.user.username })
         .catch(err => console.error('[coach code] notification failed:', err.message));
+      await welcomeNewClient({ coachUid, coachUsername, clientUid, clientUsername: req.user.username });
     }
 
     await coachCodes.grant(clientUid, { coachUid, coachUsername, code });
@@ -4306,6 +4309,18 @@ app.get('/api/client/coach-assignment', authenticateToken, async (req, res) => {
     return sendError(res, 500, 'coach.server_error', String(err));
   }
 });
+
+// The coach's welcome automation, for a client who just became active. The
+// message is a normal coach note, so it shows in the thread and notifies.
+function welcomeNewClient(args) {
+  return coachAutomations.sendWelcome(db, {
+    ...args,
+    onSent: async ({ coachUid, clientUid, coachUsername, clientUsername, text }) => {
+      await coachMessages.recordCoachNote(db, { coachUid, clientUid, text });
+      await coachNotifications.notifyCoachNote(db, { coachUsername, clientUsername });
+    },
+  });
+}
 
 const coachNoteLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -5471,6 +5486,14 @@ app.use('/api/coach/clients/:clientUid', authenticateToken, requireCoachPlan, ch
 // ── Coach libraries: workouts and the vault (src/routes/coachLibrary.js) ─────
 app.use('/api/coach/workouts', authenticateToken, requireCoachPlan, coachVideosLimiter, videosAvailable, coachLibrary.createCoachWorkoutsRouter({
   db, sendError, sendSuccess, resolveCallerUid, sanitizeProgram: coachShare.sanitizeCoachProgram,
+}));
+app.use('/api/coach/groups', authenticateToken, requireCoachPlan, coachVideosLimiter, videosAvailable, coachLibrary.createCoachGroupsRouter({
+  db, sendError, sendSuccess, resolveCallerUid,
+}));
+// Automations (src/coachAutomations.js). The daily check-in reminder run is
+// a scheduled function in functions-entry.js.
+app.use('/api/coach/automations', authenticateToken, requireCoachPlan, coachVideosLimiter, videosAvailable, coachAutomations.createRouter({
+  db, sendError, sendSuccess, resolveCallerUid,
 }));
 app.use('/api/coach/events', authenticateToken, requireCoachPlan, coachVideosLimiter, videosAvailable, coachLibrary.createCoachEventsRouter({
   db, sendError, sendSuccess, resolveCallerUid,

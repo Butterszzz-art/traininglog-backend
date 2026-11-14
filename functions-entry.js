@@ -66,3 +66,15 @@ exports.purgeStaleLeads = onSchedule({ schedule: 'every day 03:30', timeZone: 'E
   const { deleted, cutoff } = await purgeStaleLeads(db);
   console.info(`[Lead retention] Deleted ${deleted} lead(s) created before ${cutoff.toISOString()}`);
 });
+
+// Daily: coaches who switched on the check-in reminder automation
+// (src/coachAutomations.js). Clients past their check-in frequency get the
+// "asked you for a check-in" notification, once per missed check-in.
+const { runCheckInReminders } = require('./src/coachAutomations');
+const coachNotifications = require('./src/coachNotifications');
+
+exports.coachCheckInReminders = onSchedule({ schedule: 'every day 09:00', timeZone: 'Europe/Amsterdam', secrets: [apnsKey] }, async () => {
+  if (!firebaseEnabled) return;
+  const { coaches, reminded } = await runCheckInReminders(db, { notify: args => coachNotifications.notifyCheckInRequest(db, args) });
+  console.info(`[Automations] Check-in reminders: ${reminded} client(s) across ${coaches} coach(es)`);
+});

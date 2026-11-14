@@ -22,6 +22,12 @@
 // about one client. Only the coach sees them.
 //   coaches/{coachUid}/events/{id}  { title, date, time, kind: 'call'|'other', clientUid, note, updatedAt }
 //   /api/coach/events     GET /, PUT /:id { title, date, time?, kind?, clientUid?, note? }, DELETE /:id
+//
+// Groups are named sets of the coach's clients, used by the dashboard to
+// message, assign a program to, or ask a check-in from several at once.
+// Clients don't see them.
+//   coaches/{coachUid}/groups/{id}  { name, clientUids: [], updatedAt }
+//   /api/coach/groups     GET /, PUT /:id { name, clientUids }, DELETE /:id
 'use strict';
 
 const express = require('express');
@@ -32,6 +38,7 @@ const MAX_WORKOUTS = 300;
 const MAX_VAULT = 300;
 const MAX_CLIENTS = 500;
 const MAX_EVENTS = 1000;
+const MAX_GROUPS = 100;
 
 const line = (v, max) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : '');
 
@@ -146,6 +153,55 @@ function createCoachWorkoutsRouter({ db, sendError, sendSuccess, resolveCallerUi
       await db.collection(`coaches/${uid}/workouts`).doc(id).delete();
       return sendSuccess(res, 200, { deleted: id });
     } catch (err) { return fail(res, 'DELETE /api/coach/workouts/:id', err, 'Could not delete the workout.'); }
+  });
+
+  return router;
+}
+
+function createCoachGroupsRouter({ db, sendError, sendSuccess, resolveCallerUid, now = () => new Date() }) {
+  const router = express.Router();
+  const { uidOf, fail } = helpers({ sendError, resolveCallerUid }, 'groups');
+
+  router.get('/', async (req, res) => {
+    try {
+      const uid = await uidOf(req, res);
+      if (!uid) return undefined;
+      const snap = await db.collection(`coaches/${uid}/groups`).get();
+      return sendSuccess(res, 200, { groups: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort(byName) });
+    } catch (err) { return fail(res, 'GET /api/coach/groups', err, 'Could not load your groups.'); }
+  });
+
+  router.put('/:id', async (req, res) => {
+    try {
+      const id = String(req.params.id || '');
+      if (!ID_RE.test(id)) return sendError(res, 422, 'groups.invalid_id', 'Invalid group id.');
+      const name = line(req.body && req.body.name, 60);
+      if (!name) return sendError(res, 422, 'groups.invalid', 'Give the group a name.');
+      const uid = await uidOf(req, res);
+      if (!uid) return undefined;
+      // Members must be on the coach's roster (pending invites included).
+      const roster = new Set((await db.collection(`coaches/${uid}/clients`).get()).docs.map(d => d.id));
+      const clientUids = [...new Set((Array.isArray(req.body.clientUids) ? req.body.clientUids : []).map(String))].filter(c => roster.has(c)).slice(0, MAX_CLIENTS);
+      const coll = db.collection(`coaches/${uid}/groups`);
+      const ref = coll.doc(id);
+      if (!(await ref.get()).exists && (await coll.get()).docs.length >= MAX_GROUPS) {
+        return sendError(res, 409, 'groups.too_many', `You have ${MAX_GROUPS} groups. Remove one first.`);
+      }
+      const saved = { name, clientUids, updatedAt: now().toISOString() };
+      await ref.set(saved);
+      return sendSuccess(res, 200, { group: { id, ...saved } });
+    } catch (err) { return fail(res, 'PUT /api/coach/groups/:id', err, 'Could not save the group.'); }
+  });
+
+  router.delete('/:id', async (req, res) => {
+    try {
+      const id = String(req.params.id || '');
+      if (!ID_RE.test(id)) return sendError(res, 404, 'groups.not_found', 'Group not found.');
+      const uid = await uidOf(req, res);
+      if (!uid) return undefined;
+      await db.collection(`coaches/${uid}/groups`).doc(id).delete();
+      return sendSuccess(res, 200, { deleted: id });
+    } catch (err) { return fail(res, 'DELETE /api/coach/groups/:id', err, 'Could not delete the group.'); }
   });
 
   return router;
@@ -281,5 +337,5 @@ function createClientCoachVaultRouter({ db, sendError, sendSuccess, resolveCalle
 
 module.exports = {
   sanitizeWorkout, sanitizeVaultItem, sanitizeEvent, MAX_WORKOUTS, MAX_VAULT,
-  createCoachEventsRouter, createCoachWorkoutsRouter, createCoachVaultRouter, createClientCoachVaultRouter,
+  createCoachGroupsRouter, createCoachEventsRouter, createCoachWorkoutsRouter, createCoachVaultRouter, createClientCoachVaultRouter,
 };
