@@ -36,6 +36,7 @@ const TYPE_CATEGORY = {
   coach_note: 'coaching',
   coach_plan: 'coaching',
   coach_video: 'coaching',
+  coach_resource: 'coaching',
   coach_left: 'coaching',
   coach_checkin_comment: 'coaching',
   client_checkin_reply: 'coaching',

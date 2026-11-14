@@ -178,4 +178,13 @@ async function notifyFormCheckReviewed(db, { coachUsername, clientUsername, exer
   });
 }
 
-module.exports = { notifyFormCheckSent, notifyFormCheckReviewed, notifyClientMessage, notifyCheckInRequest, notifyCheckInComment, notifyCheckInReply, notifyCoachInvite, coachInviteAccepted, coachInviteWithdrawn, coachLeftByClient, notifyCoachNote, notifyCoachPlan, notifyCoachVideo };
+// A coach added something to their vault (src/routes/coachLibrary.js).
+async function notifyCoachResource(db, { coachUsername, clientUsernames, title }) {
+  return notify(db, {
+    to: clientUsernames, type: 'coach_resource', actor: coachUsername, actorName: coachUsername,
+    text: 'shared a resource', data: { coach: coachUsername, title: String(title || '').slice(0, 80) },
+    collapseKey: `coach_resource__${profileKey(coachUsername)}`,
+  });
+}
+
+module.exports = { notifyCoachResource, notifyFormCheckSent, notifyFormCheckReviewed, notifyClientMessage, notifyCheckInRequest, notifyCheckInComment, notifyCheckInReply, notifyCoachInvite, coachInviteAccepted, coachInviteWithdrawn, coachLeftByClient, notifyCoachNote, notifyCoachPlan, notifyCoachVideo };
