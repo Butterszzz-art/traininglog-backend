@@ -3425,6 +3425,7 @@ function coachClientSummary(id, data, now = new Date()) {
     // Check-in frequency and the coach's own questions; the newest check-in
     // the coach marked reviewed.
     checkInSettings: coachShare.sanitizeCheckInSettings(data.checkInSettings || {}),
+    roadmap: coachShare.sanitizeRoadmap(data.roadmap),
     reviewedCheckInDate: typeof data.reviewedCheckInDate === 'string' ? data.reviewedCheckInDate : null
   };
 }
@@ -4191,6 +4192,14 @@ app.patch('/api/coach/clients/:clientUid', authenticateToken, requireCoachPlan, 
       if (plan && req.body.macroTargets === undefined) fields.macroTargets = { ...plan.days.training };
     }
     if (typeof req.body?.hideNutritionNumbers === 'boolean') fields.hideNutritionNumbers = req.body.hideNutritionNumbers;
+    // Long-term roadmap (phases and milestones); null clears it.
+    if (req.body?.roadmap !== undefined) {
+      const roadmap = req.body.roadmap === null ? null : coachShare.sanitizeRoadmap(req.body.roadmap);
+      if (req.body.roadmap !== null && !roadmap) {
+        return sendError(res, 422, 'coach.invalid_roadmap', 'A roadmap needs at least one phase (name, start and end date) or one milestone.');
+      }
+      fields.roadmap = roadmap;
+    }
     if (req.body?.checkInSettings !== undefined) {
       const settings = coachShare.sanitizeCheckInSettings(req.body.checkInSettings);
       if (!settings) return sendError(res, 422, 'coach.invalid_checkin_settings', 'checkInSettings needs everyDays and questions.');
@@ -4211,7 +4220,7 @@ app.patch('/api/coach/clients/:clientUid', authenticateToken, requireCoachPlan, 
     }
     const programId = typeof req.body?.programId === 'string' ? req.body.programId.trim() : null;
     if (!Object.keys(fields).length && programId === null) {
-      return sendError(res, 422, 'coach.invalid_payload', 'Provide at least one of currentProgram, programId, nutritionSummary, macroTargets, macroPlan, mealPlan, trainingMode, hideNutritionNumbers, checkInSettings.');
+      return sendError(res, 422, 'coach.invalid_payload', 'Provide at least one of currentProgram, programId, nutritionSummary, macroTargets, macroPlan, mealPlan, trainingMode, hideNutritionNumbers, checkInSettings, roadmap.');
     }
 
     const coachUid = await resolveCallerUid(req.user);
@@ -5462,6 +5471,9 @@ app.use('/api/coach/clients/:clientUid', authenticateToken, requireCoachPlan, ch
 // ── Coach libraries: workouts and the vault (src/routes/coachLibrary.js) ─────
 app.use('/api/coach/workouts', authenticateToken, requireCoachPlan, coachVideosLimiter, videosAvailable, coachLibrary.createCoachWorkoutsRouter({
   db, sendError, sendSuccess, resolveCallerUid, sanitizeProgram: coachShare.sanitizeCoachProgram,
+}));
+app.use('/api/coach/events', authenticateToken, requireCoachPlan, coachVideosLimiter, videosAvailable, coachLibrary.createCoachEventsRouter({
+  db, sendError, sendSuccess, resolveCallerUid,
 }));
 app.use('/api/coach/vault', authenticateToken, requireCoachPlan, coachVideosLimiter, videosAvailable, coachLibrary.createCoachVaultRouter({
   db, sendError, sendSuccess, resolveCallerUid,

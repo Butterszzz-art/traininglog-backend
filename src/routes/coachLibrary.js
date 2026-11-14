@@ -17,6 +17,11 @@
 //   /api/coach/workouts   GET /, PUT /:id { name, focus?, notes?, exercises }, DELETE /:id
 //   /api/coach/vault      GET /, POST / { title, url, description?, folder?, audience, clientUids? }, DELETE /:id
 //   /api/client/coach-vault   GET /   items from active coaches meant for the caller
+//
+// Calendar events are the coach's own entries (calls, reminders), optionally
+// about one client. Only the coach sees them.
+//   coaches/{coachUid}/events/{id}  { title, date, time, kind: 'call'|'other', clientUid, note, updatedAt }
+//   /api/coach/events     GET /, PUT /:id { title, date, time?, kind?, clientUid?, note? }, DELETE /:id
 'use strict';
 
 const express = require('express');
@@ -26,6 +31,7 @@ const ID_RE = /^[a-zA-Z0-9_-]{1,64}$/;
 const MAX_WORKOUTS = 300;
 const MAX_VAULT = 300;
 const MAX_CLIENTS = 500;
+const MAX_EVENTS = 1000;
 
 const line = (v, max) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : '');
 
@@ -66,6 +72,19 @@ function sanitizeVaultItem(body) {
   if (audience === 'selected' && !clientUids.length) return { error: 'Pick at least one client.' };
   if (clientUids.length > MAX_CLIENTS) return { error: 'Too many clients selected.' };
   return { item: { title, url, description: line(b.description, 500), folder: line(b.folder, 40), audience, clientUids } };
+}
+
+// → { event } or { error }
+function sanitizeEvent(body) {
+  const b = body && typeof body === 'object' ? body : {};
+  const title = line(b.title, 100);
+  if (!title) return { error: 'Give the event a title.' };
+  const date = typeof b.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(b.date) && !Number.isNaN(Date.parse(b.date + 'T00:00:00Z'))
+    && new Date(b.date + 'T00:00:00Z').toISOString().slice(0, 10) === b.date ? b.date : '';
+  if (!date) return { error: 'Pick a date.' };
+  const time = typeof b.time === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(b.time) ? b.time : '';
+  const clientUid = typeof b.clientUid === 'string' && !b.clientUid.includes('/') ? b.clientUid.trim().slice(0, 128) : '';
+  return { event: { title, date, time, kind: b.kind === 'call' ? 'call' : 'other', clientUid, note: line(b.note, 500) } };
 }
 
 const isFor = (item, clientUid) => item.audience !== 'selected' || (Array.isArray(item.clientUids) && item.clientUids.includes(clientUid));
@@ -127,6 +146,57 @@ function createCoachWorkoutsRouter({ db, sendError, sendSuccess, resolveCallerUi
       await db.collection(`coaches/${uid}/workouts`).doc(id).delete();
       return sendSuccess(res, 200, { deleted: id });
     } catch (err) { return fail(res, 'DELETE /api/coach/workouts/:id', err, 'Could not delete the workout.'); }
+  });
+
+  return router;
+}
+
+function createCoachEventsRouter({ db, sendError, sendSuccess, resolveCallerUid, now = () => new Date() }) {
+  const router = express.Router();
+  const { uidOf, fail } = helpers({ sendError, resolveCallerUid }, 'events');
+
+  router.get('/', async (req, res) => {
+    try {
+      const uid = await uidOf(req, res);
+      if (!uid) return undefined;
+      const snap = await db.collection(`coaches/${uid}/events`).get();
+      const events = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')));
+      return sendSuccess(res, 200, { events });
+    } catch (err) { return fail(res, 'GET /api/coach/events', err, 'Could not load your calendar.'); }
+  });
+
+  router.put('/:id', async (req, res) => {
+    try {
+      const id = String(req.params.id || '');
+      if (!ID_RE.test(id)) return sendError(res, 422, 'events.invalid_id', 'Invalid event id.');
+      const r = sanitizeEvent(req.body);
+      if (r.error) return sendError(res, 422, 'events.invalid', r.error);
+      const uid = await uidOf(req, res);
+      if (!uid) return undefined;
+      if (r.event.clientUid && !(await db.collection(`coaches/${uid}/clients`).doc(r.event.clientUid).get()).exists) {
+        return sendError(res, 422, 'events.invalid', 'That client is not on your roster.');
+      }
+      const coll = db.collection(`coaches/${uid}/events`);
+      const ref = coll.doc(id);
+      if (!(await ref.get()).exists && (await coll.get()).docs.length >= MAX_EVENTS) {
+        return sendError(res, 409, 'events.too_many', `Your calendar holds ${MAX_EVENTS} events. Remove old ones first.`);
+      }
+      const saved = { ...r.event, updatedAt: now().toISOString() };
+      await ref.set(saved);
+      return sendSuccess(res, 200, { event: { id, ...saved } });
+    } catch (err) { return fail(res, 'PUT /api/coach/events/:id', err, 'Could not save the event.'); }
+  });
+
+  router.delete('/:id', async (req, res) => {
+    try {
+      const id = String(req.params.id || '');
+      if (!ID_RE.test(id)) return sendError(res, 404, 'events.not_found', 'Event not found.');
+      const uid = await uidOf(req, res);
+      if (!uid) return undefined;
+      await db.collection(`coaches/${uid}/events`).doc(id).delete();
+      return sendSuccess(res, 200, { deleted: id });
+    } catch (err) { return fail(res, 'DELETE /api/coach/events/:id', err, 'Could not delete the event.'); }
   });
 
   return router;
@@ -210,6 +280,6 @@ function createClientCoachVaultRouter({ db, sendError, sendSuccess, resolveCalle
 }
 
 module.exports = {
-  sanitizeWorkout, sanitizeVaultItem, MAX_WORKOUTS, MAX_VAULT,
-  createCoachWorkoutsRouter, createCoachVaultRouter, createClientCoachVaultRouter,
+  sanitizeWorkout, sanitizeVaultItem, sanitizeEvent, MAX_WORKOUTS, MAX_VAULT,
+  createCoachEventsRouter, createCoachWorkoutsRouter, createCoachVaultRouter, createClientCoachVaultRouter,
 };
