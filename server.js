@@ -57,6 +57,7 @@ const checkInPhotos = require('./src/checkInPhotos');
 const checkInComments = require('./src/checkInComments');
 const coachMessages = require('./src/coachMessages');
 const formChecks = require('./src/formChecks');
+const coachLibrary = require('./src/routes/coachLibrary');
 
 const app = express();
 
@@ -5457,6 +5458,19 @@ const coachMessageRouters = coachMessages.createRouters({
 });
 app.use('/api/client/messages', authenticateToken, checkInCommentLimiter, commentsAvailable, coachMessageRouters.client);
 app.use('/api/coach/clients/:clientUid', authenticateToken, requireCoachPlan, checkInCommentLimiter, commentsAvailable, coachMessageRouters.coach);
+
+// ── Coach libraries: workouts and the vault (src/routes/coachLibrary.js) ─────
+app.use('/api/coach/workouts', authenticateToken, requireCoachPlan, coachVideosLimiter, videosAvailable, coachLibrary.createCoachWorkoutsRouter({
+  db, sendError, sendSuccess, resolveCallerUid, sanitizeProgram: coachShare.sanitizeCoachProgram,
+}));
+app.use('/api/coach/vault', authenticateToken, requireCoachPlan, coachVideosLimiter, videosAvailable, coachLibrary.createCoachVaultRouter({
+  db, sendError, sendSuccess, resolveCallerUid,
+  notifyResource: async ({ coachUsername, clients, title }) => {
+    const clientUsernames = (await Promise.all(clients.map(c => c.name || usernameForUid(c.uid)))).filter(Boolean);
+    if (clientUsernames.length) await coachNotifications.notifyCoachResource(db, { coachUsername, clientUsernames, title });
+  },
+}));
+app.use('/api/client/coach-vault', authenticateToken, coachVideosLimiter, videosAvailable, coachLibrary.createClientCoachVaultRouter({ db, sendError, sendSuccess, resolveCallerUid }));
 
 // ── Form checks (src/formChecks.js) ──────────────────────────────────────────
 const formCheckRouters = formChecks.createRouters({
