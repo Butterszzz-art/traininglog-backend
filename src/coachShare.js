@@ -120,6 +120,26 @@ function sanitizeCheckIn(entry) {
 // up to MAX_QUESTIONS extra questions the client answers with it.
 const MAX_QUESTIONS = 8;
 const QUESTION_MAX = 140;
+// A client's long-term roadmap, set by their coach: up to 12 phases (name,
+// start and end date, goal) in date order, and up to 20 dated milestones.
+// → the roadmap, or null when nothing valid is in it.
+function sanitizeRoadmap(value) {
+  if (!value || typeof value !== 'object') return null;
+  const phases = (Array.isArray(value.phases) ? value.phases : []).map(ph => {
+    const name = text(ph && ph.name, 60);
+    const start = isoDate(ph && ph.start);
+    const end = isoDate(ph && ph.end);
+    if (!name || !start || !end || end < start) return null;
+    return { name, start, end, goal: text(ph.goal, 200) };
+  }).filter(Boolean).sort((a, b) => a.start.localeCompare(b.start)).slice(0, 12);
+  const milestones = (Array.isArray(value.milestones) ? value.milestones : []).map(m => {
+    const title = text(m && m.title, 80);
+    const date = isoDate(m && m.date);
+    return title && date ? { date, title } : null;
+  }).filter(Boolean).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 20);
+  return phases.length || milestones.length ? { phases, milestones } : null;
+}
+
 function sanitizeCheckInSettings(value) {
   if (!value || typeof value !== 'object') return null;
   const days = Number(value.everyDays);
@@ -353,6 +373,7 @@ function sanitizeMacroPlan(value) {
 }
 
 module.exports = {
+  sanitizeRoadmap,
   sanitizeCheckInSettings,
   SHARING_KEYS,
   SHARE_FIELDS,
