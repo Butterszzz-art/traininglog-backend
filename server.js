@@ -273,7 +273,7 @@ if (stripeEnabled) {
 }
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
-const defaultOrigins = 'https://pocketcoachcoms.org,http://localhost:5173';
+const defaultOrigins = 'https://pocketcoachcoms.org,https://coaching.pocketcoachcoms.org,http://localhost:5173';
 const allowed = (process.env.CORS_ORIGINS ?? defaultOrigins)
   .split(',').map(s => s.trim()).filter(Boolean);
 
