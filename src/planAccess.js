@@ -1,7 +1,8 @@
-// Paid-plan gating: every AI feature is Pro (Coach includes Pro), and the
-// coach tools are Coach only. The check runs here on the server — the app
-// locks the buttons too, but that alone could be bypassed by calling the API
-// directly, and each AI call costs money (Anthropic).
+// Paid-plan gating: the coach tools are Coach only, and requirePaidPlan is
+// available for Pro-only routes. AI routes are gated by src/aiMeter.js
+// instead (plan + monthly AI allowance). The check runs here on the server —
+// the app locks the buttons too, but that alone could be bypassed by calling
+// the API directly.
 //
 // Admins (ADMIN_USERNAMES, comma-separated, case-insensitive) always have full
 // paid access whatever their plan.

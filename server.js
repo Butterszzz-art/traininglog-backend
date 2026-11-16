@@ -16,6 +16,9 @@ const { HEALTH_METRICS_SCOPE, RECOVERY_TYPES, recoveryFilter, mergeRecoveryPoint
 const { DAILY_VITALS, SCALE_SAMPLES, dailyFilter, sampleFilter, mergeDailyVitals, mergeWeighIns } = require('./src/activitySyncBody');
 const { createAppleIapRouter, createAppleVerifiers } = require('./src/routes/appleIap');
 const { createPlanAccess, parseUsernames } = require('./src/planAccess');
+const { createAiMeter } = require('./src/aiMeter');
+const { createClientPro } = require('./src/clientPro');
+const AI_LIMITS = require('./src/config/aiLimits');
 const { createEntitlements, pickEffective, legacyEntitlement, toDate, SUBSCRIPTION_SOURCES } = require('./src/entitlements');
 const { createCoachCodes, formatCode } = require('./src/coachCode');
 const fs = require('fs');
@@ -301,6 +304,8 @@ app.use(cors({
   },
   credentials: true,
   allowedHeaders: ['Content-Type', 'Authorization'],
+  // The app reads the AI credits left after each AI call (src/aiMeter.js).
+  exposedHeaders: ['X-AI-Remaining'],
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
 }));
 
@@ -523,7 +528,7 @@ async function getUserPlanInfo(username, opts = {}) {
         usedReverseTrial: u.usedReverseTrial === true,
         lastMomentTrialAt: lastMoment ? lastMoment.toISOString() : null,
       },
-      ai: null, // filled in by PAY2-3 (AI metering)
+      ai: await aiUsageFor(uid, effective),
       coachPro, // { status: 'active' | 'paused' | 'revoked', coachUsername } or null
     };
   }
@@ -549,7 +554,6 @@ const planAccess = createPlanAccess({
   adminUsernames: parseUsernames(process.env.ADMIN_USERNAMES),
   sendError,
 });
-const requirePaidPlan = planAccess.requirePaidPlan;
 const requireCoachPlan = planAccess.requireCoachPlan;
 
 // Coach Pro codes (src/coachCode.js): a coach's code gives the athlete who
@@ -562,12 +566,58 @@ const coachCodes = createCoachCodes({
   },
 });
 
+// AI usage metering (src/aiMeter.js, limits in src/config/aiLimits.js):
+// replaces the old "AI = paid only" gate. Free accounts get a few AI uses a
+// month; paid plans get fair-use caps. Accounts not yet migrated to Firestore
+// are counted under their username.
+const aiMeter = createAiMeter({
+  db,
+  sendError,
+  isAdmin: planAccess.isAdmin,
+  resolvePlan: async req => {
+    const username = req.user && req.user.username;
+    const info = await getUserPlanInfo(username);
+    const uid = (req.user && req.user.uid) || (username ? await resolveFirestoreUid(username) : null);
+    return { plan: info.plan, source: info.planSource || null, userKey: uid || (username ? `name:${username}` : null) };
+  },
+});
+
+// Client Pro (src/clientPro.js): clients of a coach on the Coach plan get Pro
+// included while there is real coaching. Synced on plan reads and on every
+// coach/client event below; failures never block the event itself.
+const clientProService = createClientPro({
+  db,
+  coachHasCoachPlan: async coachUid => {
+    const username = await usernameForUid(coachUid);
+    if (!username) return false;
+    return planAccess.isAdmin(username) || await hasCoachAccess(username, { verifyCoachCode: false });
+  },
+});
+function syncClientPro(clientUid, where) {
+  return clientProService.sync(clientUid).catch(err => {
+    console.error(`[clientPro] sync after ${where} failed:`, err.message);
+    return null;
+  });
+}
+
+async function aiUsageFor(uid, effective) {
+  try {
+    return await aiMeter.getUsage(uid, effective.plan, effective.source);
+  } catch (err) {
+    console.error('[getUserPlanInfo] AI usage lookup failed:', err.message);
+    return null;
+  }
+}
+
 app.get('/api/user/plan', authenticateToken, async (req, res) => {
   try {
+    // Bring Client Pro up to date first, so the plan below includes it.
+    const uid = firebaseEnabled && req.user?.username ? await resolveFirestoreUid(req.user.username) : null;
+    const clientPro = uid ? await syncClientPro(uid, 'plan read') : null;
     const info = await getUserPlanInfo(req.user?.username);
     // `admin` lets the app unlock paid features for admins without
     // pretending they hold a subscription.
-    return res.json({ ...info, admin: planAccess.isAdmin(req.user?.username) });
+    return res.json({ ...info, clientPro, admin: planAccess.isAdmin(req.user?.username) });
   } catch (err) {
     console.error('[GET /api/user/plan]', err.message);
     // Not a 200 "free": the app would overwrite a paying user's cached plan.
@@ -1092,6 +1142,9 @@ async function applyEntitlement({ username, uid, plan, status, periodEnd = null,
     } catch (err) {
       console.error('[applyEntitlement] entitlement mirror failed:', err.message);
     }
+    // A coach's plan starting or ending changes their clients' Client Pro.
+    clientProService.syncRoster(resolvedUid)
+      .catch(err => console.error('[applyEntitlement] Client Pro roster sync failed:', err.message));
 
     const { customClaims = {} } = await fbAuth.getUser(resolvedUid);
     await fbAuth.setCustomUserClaims(resolvedUid, { ...customClaims, tier: plan });
@@ -3400,6 +3453,7 @@ function coachClientSummary(id, data, now = new Date()) {
     trainingMode: data.trainingMode || '',
     currentProgram: data.currentProgram || '',
     currentProgramId: data.currentProgramId || '',
+    clientPro: data.clientPro || null, // 'active' | 'paused_inactive' | 'off' (src/clientPro.js)
     activeProgramName: data.activeProgramName || '',
     lastCheckIn: data.lastCheckInAt || null,
     alertStatus,
@@ -3606,6 +3660,7 @@ app.post('/api/coach/clients/accept', authenticateToken, coachInviteLimiter, asy
       coachUsername: inviteSnap.get('coachUsername') || coachUsername, clientUsername: req.user.username,
     });
     await welcomeNewClient({ coachUid, coachUsername: inviteSnap.get('coachUsername') || coachUsername, clientUid, clientUsername: req.user.username });
+    await syncClientPro(clientUid, 'invite accepted'); // grants Client Pro
 
     return sendSuccess(res, 200, { coachUsername, coachUid, status: 'active', sharing });
   } catch (err) {
@@ -3988,6 +4043,7 @@ app.delete('/api/coach/clients/:clientUid', authenticateToken, requireCoachPlan,
     }
 
     await unlinkCoachClient(coachUid, clientUid);
+    await syncClientPro(clientUid, 'coach removed client'); // revokes Client Pro
     await coachNotifications.coachInviteWithdrawn(db, {
       coachUsername: req.user.username, clientUsername: existing.get('athleteDisplayName') || await usernameForUid(clientUid),
     });
@@ -4028,6 +4084,7 @@ app.delete('/api/client/coaches/:coachUid', authenticateToken, async (req, res) 
     await endPhotoSharing(coachUid, clientUid);
     // Pro from this coach's code ends with the link.
     await coachCodes.verify(clientUid).catch(err => console.error('[client leave] coach code check failed:', err.message));
+    await syncClientPro(clientUid, 'client left coach'); // revokes Client Pro
 
     await coachNotifications.coachLeftByClient(db, {
       coachUsername: invite.get('coachUsername') || await usernameForUid(coachUid),
@@ -4285,6 +4342,7 @@ app.patch('/api/coach/clients/:clientUid', authenticateToken, requireCoachPlan, 
       if (sent > 0) delivery = 'notified';
     }
 
+    await clientProService.touch(coachUid, [clientUid]); // coaching activity
     return sendSuccess(res, 200, { clientUid, ...fields, linkStatus, delivery });
   } catch (err) {
     console.error('PATCH /api/coach/clients/:clientUid failed:', err);
@@ -4363,6 +4421,7 @@ app.post('/api/coach/clients/:clientUid/notes', authenticateToken, requireCoachP
       coachUsername: req.user.username, clientUsername: existing.get('athleteDisplayName') || await usernameForUid(clientUid),
     });
 
+    await clientProService.touch(coachUid, [clientUid]); // coaching activity
     return sendSuccess(res, 201, { noteId: noteRef.id });
   } catch (err) {
     console.error('POST /api/coach/clients/:clientUid/notes failed:', err);
@@ -5156,7 +5215,7 @@ app.post('/mobility/sessions', authenticateToken, async (req, res) => {
 
 // POST /ai/chat — short general chat through the configured AI provider
 // (src/coach/client.js: Anthropic, or Ollama / OpenRouter).
-app.post('/ai/chat', authenticateToken, requirePaidPlan, async (req, res) => {
+app.post('/ai/chat', authenticateToken, aiMeter.meterAi(AI_LIMITS.FEATURES['/chat']), async (req, res) => {
   const aiClient = require('./src/coach/client');
   try {
     if (!aiClient.isConfigured()) {
@@ -5203,8 +5262,8 @@ const aiLimiter = rateLimit({
   message: { success: false, error: { code: 'ai.rate_limited', message: 'Too many AI requests. Try again shortly.' } }
 });
 
-// Every AI feature is Pro — see src/planAccess.js.
-app.use('/api/ai', authenticateToken, aiLimiter, requirePaidPlan, aiRouter);
+// Plan + monthly AI allowance per feature — see src/aiMeter.js.
+app.use('/api/ai', authenticateToken, aiLimiter, aiMeter.meterAi(), aiRouter);
 
 // Ebooks and the ready-made program library. Full content is only returned to
 // Pro/Coach accounts (checked per request); free accounts get teasers.
@@ -5425,6 +5484,8 @@ const planLimiter = rateLimit({
 const coachPlansRouter = planRegistry && createCoachPlansRouter({
   db, FieldValue, registry: planRegistry, sendError, sendSuccess, resolveCallerUid,
   notifyPlanPublished: async ({ coachUsername, clientUid, fields, announce }) => {
+    const coachUid = await resolveFirestoreUid(coachUsername);
+    if (coachUid) await clientProService.touch(coachUid, [clientUid]); // coaching activity
     const clientUsername = await usernameForUid(clientUid);
     if (clientUsername) await coachNotifications.notifyCoachPlan(db, { coachUsername, clientUsername, fields, announce });
   },
@@ -5446,6 +5507,8 @@ const coachVideosLimiter = rateLimit({
 app.use('/api/coach/videos', authenticateToken, requireCoachPlan, coachVideosLimiter, videosAvailable, createCoachVideosRouter({
   db, sendError, sendSuccess, resolveCallerUid,
   notifyVideo: async ({ coachUsername, clients, title }) => {
+    const coachUid = await resolveFirestoreUid(coachUsername);
+    if (coachUid) await clientProService.touch(coachUid, clients.map(c => c.uid)); // coaching activity
     const clientUsernames = (await Promise.all(clients.map(c => c.name || usernameForUid(c.uid)))).filter(Boolean);
     if (clientUsernames.length) await coachNotifications.notifyCoachVideo(db, { coachUsername, clientUsernames, title });
   },
