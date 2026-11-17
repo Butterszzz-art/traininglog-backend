@@ -419,6 +419,8 @@ app.use('/api/client/checkin-photos', express.json({ limit: '7mb' }));
 // A coach adds check-in photos one at a time (~450 KB each as a data URL).
 app.use(/^\/api\/coach\/clients\/[^/]+\/checkin-photos\//, express.json({ limit: '1mb' }));
 app.use('/api/ai/coach', express.json({ limit: '1mb' }));
+// A meal photo for AI logging (≤ 3 MB as base64 → ~4 MB JSON).
+app.use('/api/ai/food-photo', express.json({ limit: '5mb' }));
 app.use(express.json({ limit: '256kb' }));
 
 // ── Rate limiting ─────────────────────────────────────────────────────────────
