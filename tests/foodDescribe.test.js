@@ -103,7 +103,65 @@ test('describe: unusable model reply → items null', async () => {
   assert.equal(out.items, null);
 });
 
-test('the route spends a monthly credit and is not on the free plan', () => {
+test('the routes spend a monthly credit and are not on the free plan', () => {
   assert.deepEqual(LIMITS.FEATURES['/food-describe'], { key: 'food-describe', kind: 'credit' });
+  assert.deepEqual(LIMITS.FEATURES['/food-photo'], { key: 'food-photo', kind: 'credit' });
   assert.ok(!LIMITS.free.allowedFeatures.includes('food-describe'));
+  assert.ok(!LIMITS.free.allowedFeatures.includes('food-photo'));
+});
+
+// ── Photos ────────────────────────────────────────────────────────────────
+const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(200, 7)]);
+const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47]), Buffer.alloc(200, 7)]);
+
+test('cleanPhoto: JPEG/PNG data URLs or bare base64 only', () => {
+  assert.deepEqual(d.cleanPhoto(`data:image/jpeg;base64,${jpeg.toString('base64')}`), { mediaType: 'image/jpeg', data: jpeg.toString('base64') });
+  assert.equal(d.cleanPhoto(png.toString('base64')).mediaType, 'image/png');
+  // The type comes from the bytes, not the label.
+  assert.equal(d.cleanPhoto(`data:image/png;base64,${jpeg.toString('base64')}`).mediaType, 'image/jpeg');
+  assert.equal(d.cleanPhoto(`data:image/jpeg;base64,${Buffer.from('<svg>' + 'x'.repeat(200)).toString('base64')}`), null);
+  assert.equal(d.cleanPhoto('not base64 at all!'.repeat(10)), null);
+  assert.equal(d.cleanPhoto(42), null);
+  const huge = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), Buffer.alloc(d.MAX_PHOTO_BYTES + 10)]);
+  assert.equal(d.cleanPhoto(huge.toString('base64')), null);
+});
+
+test('cleanNote: one line, 200 characters', () => {
+  assert.equal(d.cleanNote(' fried in\n olive oil '), 'fried in olive oil');
+  assert.equal(d.cleanNote('x'.repeat(500)).length, 200);
+  assert.equal(d.cleanNote(null), '');
+});
+
+test('describePhoto: sends the image and note, skips unusable models, looks foods up', async () => {
+  let sent = null;
+  let opts = null;
+  const stream = async (_m, params, o) => {
+    sent = params;
+    opts = o;
+    const reply = reply2([item({ text: 'rice', search: 'rijst', english: 'rice white cooked', grams: 180 })]);
+    assert.equal(o.accept(reply), true);
+    assert.equal(o.accept({ content: [{ type: 'text', text: 'I see a plate' }] }), false);
+    return { reply };
+  };
+  const reply2 = items => ({ content: [{ type: 'text', text: JSON.stringify({ items }) }] });
+  const searcher = { search: async (q, { sources }) => ({ foods: [{ id: `${sources}:${q}`, name: q, source: sources, brand: '', per100: { kcal: 130, protein: 2.7, carbs: 28, fat: 0.3 }, servings: [] }] }) };
+  const api = d.createDescribe({ searcher, streamMessageFn: stream, openModels: () => true, log: { warn() {} } });
+  const photo = d.cleanPhoto(jpeg.toString('base64'));
+  const out = await api.describePhoto(photo, ' met\nolijfolie ');
+  const content = sent.messages[0].content;
+  assert.equal(content[0].type, 'image');
+  assert.equal(content[0].source.media_type, 'image/jpeg');
+  assert.equal(content[1].text, JSON.stringify({ note: 'met olijfolie' }));
+  assert.ok(opts.skipStatuses.includes(400) && opts.skipStatuses.includes(404));
+  assert.equal(out.items.length, 1);
+  assert.equal(out.items[0].grams, 180);
+  assert.equal(out.items[0].foods.length, 2);
+});
+
+test('describePhoto: no usable answer → items null; no food → empty list', async () => {
+  const photo = d.cleanPhoto(jpeg.toString('base64'));
+  const bad = d.createDescribe({ searcher: { search: async () => ({ foods: [] }) }, streamMessageFn: async () => ({ reply: { content: [{ type: 'text', text: 'hmm' }] } }) });
+  assert.equal((await bad.describePhoto(photo)).items, null);
+  const none = d.createDescribe({ searcher: { search: async () => ({ foods: [] }) }, streamMessageFn: async () => ({ reply: reply([]) }) });
+  assert.deepEqual((await none.describePhoto(photo)).items, []);
 });

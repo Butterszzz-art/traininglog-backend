@@ -48,4 +48,5 @@ module.exports.FEATURES = {
   '/classify-exercises':    { key: 'classify-exercises', kind: 'background' },
   '/food-search-assist':    { key: 'food-search-assist', kind: 'background' },
   '/food-describe':         { key: 'food-describe', kind: 'credit' },
+  '/food-photo':            { key: 'food-photo', kind: 'credit' },
 };

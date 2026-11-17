@@ -1,11 +1,11 @@
 const express = require('express');
-const { providers, openModels, createMessage, perModelTimeoutMs, modelChain } = require('../coach/client');
+const { providers, openModels, createMessage, streamMessage, perModelTimeoutMs, modelChain } = require('../coach/client');
 const { TRAINING_KNOWLEDGE } = require('../knowledge/training-methodology');
 const { NUTRITION_KNOWLEDGE } = require('../knowledge/nutrition-methodology');
 const exerciseClassify = require('../coach/exerciseClassify');
 const { jsonOutput } = require('../coach/client');
 const { createSearchAssist, cleanQuery: cleanFoodQuery } = require('../nutrition/searchAssist');
-const { createDescribe, cleanText: cleanFoodDescription } = require('../nutrition/describe');
+const { createDescribe, cleanText: cleanFoodDescription, cleanPhoto: cleanFoodPhoto } = require('../nutrition/describe');
 const { getDefaultSearcher } = require('./food');
 
 const router = express.Router();
@@ -375,22 +375,44 @@ router.post('/food-search-assist', async (req, res) => {
 // amount, unit, grams, count?, servingHint?, ml?, foods }] }. "What did you
 // eat" in plain words → foods to confirm; see src/nutrition/describe.js.
 let foodDescribe = null;
+function getFoodDescribe() {
+  if (!foodDescribe) {
+    foodDescribe = createDescribe({
+      searcher: getDefaultSearcher(), createMessageFn: createMessage, streamMessageFn: streamMessage,
+      jsonOutputFn: jsonOutput, openModels,
+      timeoutMs: perModelTimeoutMs(10000, 20000),
+      photoTimeoutMs: perModelTimeoutMs(60000, 60000),
+    });
+  }
+  return foodDescribe;
+}
 router.post('/food-describe', async (req, res) => {
   const text = cleanFoodDescription((req.body || {}).text);
   if (!text) return res.status(422).json({ success: false, error: 'Describe what you ate.' });
   try {
-    if (!foodDescribe) {
-      foodDescribe = createDescribe({
-        searcher: getDefaultSearcher(), createMessageFn: createMessage, jsonOutputFn: jsonOutput,
-        timeoutMs: perModelTimeoutMs(10000, 20000),
-      });
-    }
-    const out = await foodDescribe.describe(text);
+    const out = await getFoodDescribe().describe(text);
     if (!out.items) return res.status(502).json({ success: false, error: 'Could not read that. Try listing the foods, e.g. "2 eggs, 1 slice of toast".' });
     return res.json({ success: true, items: out.items });
   } catch (err) {
     console.error('[AI food-describe]', err.message);
     return res.status(502).json({ success: false, error: 'AI logging is unavailable right now.' });
+  }
+});
+
+// POST /api/ai/food-photo — { image (JPEG/PNG/WebP data URL, ≤ 3 MB), note? }
+// → same as food-describe. A photo of the meal → foods to confirm. The photo
+// is only passed to the model, never stored.
+router.post('/food-photo', async (req, res) => {
+  const body = req.body || {};
+  const photo = cleanFoodPhoto(body.image);
+  if (!photo) return res.status(422).json({ success: false, error: 'That photo can’t be used. Try a JPEG or PNG under 3 MB.' });
+  try {
+    const out = await getFoodDescribe().describePhoto(photo, body.note);
+    if (!out.items) return res.status(502).json({ success: false, error: 'Couldn’t read the photo. Try another one, or describe the meal in words.' });
+    return res.json({ success: true, items: out.items });
+  } catch (err) {
+    console.error('[AI food-photo]', err.message);
+    return res.status(502).json({ success: false, error: 'Photo logging is unavailable right now. Try again, or describe the meal in words.' });
   }
 });
 

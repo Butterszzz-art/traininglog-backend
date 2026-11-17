@@ -17,6 +17,11 @@
    Only the description goes to the model, nothing about the user. The
    split is cached per description (7 days), so the same words don't call
    the model again.
+
+   Photo — POST /api/ai/food-photo (Pro): the same, from a photo of the
+   meal (and an optional note, "fried in olive oil"). A model that can see
+   images names the foods and estimates the amounts; the lookup and the
+   check-before-logging are the same. Photos aren't cached or stored.
    ============================================================= */
 'use strict';
 
@@ -43,6 +48,43 @@ Return ONLY JSON:
 - grams: your best estimate of the total weight in grams (ml for drinks) of this item as eaten, using typical portions when they gave no amount (an egg ≈ 50, a slice of bread ≈ 35, butter on toast ≈ 5, a banana ≈ 120, a flat white ≈ 180). Say cooked or dry the way they described it.
 - At most ${MAX_ITEMS} items. Ignore words that aren't food or drink. Water, black coffee and tea without anything count as foods only if mentioned.
 Keep every string under 60 characters. Never include calories, macros or any other nutrition numbers.`;
+
+const PHOTO_SYSTEM = `You help a food-logging app used mostly in the Netherlands. You get a photo of what someone is about to eat or just ate, sometimes with a note from them. Name each separate food or drink you can see so it can be looked up in two databases: Open Food Facts (supermarket products, Dutch and English names, brands like Albert Heijn/AH, Jumbo, Lidl) and USDA FoodData Central (generic foods, English names only), and estimate how much of it there is.
+Return ONLY JSON:
+{"items": [{"text": string, "search": string, "english": string, "amount": number|null, "unit": "g"|"ml"|"piece"|"slice"|"cup"|"tbsp"|"tsp"|"serving"|null, "grams": number|null}]}
+- One item per food you can see ("rice, chicken, broccoli" = three items). A packaged product with a readable brand or name: use that name. Sauces, oil or butter only if you can see them or the note mentions them.
+- text: a short description of what you see ("grilled chicken breast").
+- search: a short search in Dutch if the note is Dutch, else English, with the brand if one is readable.
+- english: a short generic English description for USDA. No brand.
+- amount + unit: only for things you can count ("2 eggs" → 2, "piece"; "3 slices of bread" → 3, "slice"), else null.
+- grams: your best estimate of the weight in grams (ml for drinks) of that food on the plate, as served (cooked rice, not dry). Use the plate, cutlery and hands for scale.
+- Use the note for things a photo can't show (what's in it, how it was cooked, how much was eaten).
+- At most ${MAX_ITEMS} items. If there is no food or drink in the photo, return {"items": []}.
+Keep every string under 60 characters. Never include calories, macros or any other nutrition numbers.`;
+
+const MAX_PHOTO_BYTES = 3 * 1024 * 1024;
+const MAX_NOTE = 200;
+
+// A photo from the app (a data URL or bare base64) → { mediaType, data }, or
+// null when it isn't a JPEG / PNG / WebP image of a sensible size.
+function cleanPhoto(v) {
+  if (typeof v !== 'string' || v.length < 100) return null;
+  const m = /^data:(image\/[a-z+]+);base64,/i.exec(v);
+  const data = (m ? v.slice(m[0].length) : v).replace(/\s+/g, '');
+  if (!/^[A-Za-z0-9+/]+=*$/.test(data) || data.length > Math.ceil(MAX_PHOTO_BYTES / 3) * 4) return null;
+  const buf = Buffer.from(data, 'base64');
+  let mediaType = null;
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) mediaType = 'image/jpeg';
+  else if (buf[0] === 0x89 && buf.subarray(1, 4).toString('latin1') === 'PNG') mediaType = 'image/png';
+  else if (buf.subarray(0, 4).toString('latin1') === 'RIFF' && buf.subarray(8, 12).toString('latin1') === 'WEBP') mediaType = 'image/webp';
+  if (!mediaType || buf.length > MAX_PHOTO_BYTES) return null;
+  return { mediaType, data };
+}
+
+function cleanNote(v) {
+  if (typeof v !== 'string') return '';
+  return v.normalize('NFC').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, MAX_NOTE);
+}
 
 const SCHEMA = {
   type: 'object',
@@ -118,7 +160,7 @@ function parseReply(text) {
   return parsed.items.map(cleanItem).filter(Boolean).slice(0, MAX_ITEMS);
 }
 
-function createDescribe({ searcher, createMessageFn, jsonOutputFn, timeoutMs = 20000, cache = createCache(2000), log = console } = {}) {
+function createDescribe({ searcher, createMessageFn, streamMessageFn, jsonOutputFn, openModels = () => false, timeoutMs = 20000, photoTimeoutMs = 60000, cache = createCache(2000), log = console } = {}) {
   async function split(text) {
     const key = `d:${text.toLowerCase()}`;
     const hit = cache.get(key);
@@ -154,7 +196,39 @@ function createDescribe({ searcher, createMessageFn, jsonOutputFn, timeoutMs = 2
     return { items: await Promise.all(items.map(lookUp)) };
   }
 
-  return { describe, split };
+  // Photo → items. Streamed across the model chain so a model that can't
+  // take images (or answers without JSON) is skipped for the next one.
+  async function splitPhoto(photo, note) {
+    const open = openModels();
+    const params = {
+      max_tokens: 1200,
+      system: open ? `${PHOTO_SYSTEM}\n\nReply with only the JSON object, no other text.` : PHOTO_SYSTEM,
+      output_config: jsonOutputFn ? jsonOutputFn(SCHEMA) : { format: { type: 'json_schema', schema: SCHEMA } },
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: photo.mediaType, data: photo.data } },
+          { type: 'text', text: note ? JSON.stringify({ note }) : 'What food is in this photo?' },
+        ],
+      }],
+    };
+    const { reply } = await streamMessageFn(MODEL, params, {
+      deadlineMs: photoTimeoutMs,
+      idleMs: Math.min(photoTimeoutMs, 45000),
+      accept: r => parseReply((r.content || []).filter(b => b.type === 'text').map(b => b.text).join('')) !== null,
+      skipStatuses: open ? [400, 404, 413, 415, 422] : [],
+    });
+    return parseReply((reply.content || []).filter(b => b.type === 'text').map(b => b.text).join(''));
+  }
+
+  // → same as describe(); items null when no model gave a usable answer.
+  async function describePhoto(photo, note) {
+    const items = await splitPhoto(photo, cleanNote(note));
+    if (!items) return { items: null };
+    return { items: await Promise.all(items.map(lookUp)) };
+  }
+
+  return { describe, split, describePhoto };
 }
 
-module.exports = { SYSTEM, SCHEMA, MODEL, UNITS, MAX_ITEMS, cleanText, cleanItem, parseReply, createDescribe };
+module.exports = { SYSTEM, PHOTO_SYSTEM, SCHEMA, MODEL, UNITS, MAX_ITEMS, MAX_PHOTO_BYTES, cleanText, cleanItem, cleanPhoto, cleanNote, parseReply, createDescribe };
