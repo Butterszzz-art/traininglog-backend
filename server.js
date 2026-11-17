@@ -57,6 +57,7 @@ const { computeSessionVolume, safeDocId, naturalDocId, syncEntryDocId, saveWorko
 const TERMS_VERSION = '2026-10-02';
 const coachShare = require('./src/coachShare');
 const checkInPhotos = require('./src/checkInPhotos');
+const coachCheckInPhotos = require('./src/coachCheckInPhotos');
 const checkInComments = require('./src/checkInComments');
 const coachMessages = require('./src/coachMessages');
 const formChecks = require('./src/formChecks');
@@ -415,6 +416,8 @@ app.use('/api/ai/coach/import-plan', express.json({ limit: '12mb' }));
 app.use('/api/coach/plans', express.json({ limit: '2mb' }));
 // Check-in photos: up to 10 photos of ~450 KB each, sent as data URLs.
 app.use('/api/client/checkin-photos', express.json({ limit: '7mb' }));
+// A coach adds check-in photos one at a time (~450 KB each as a data URL).
+app.use(/^\/api\/coach\/clients\/[^/]+\/checkin-photos\//, express.json({ limit: '1mb' }));
 app.use('/api/ai/coach', express.json({ limit: '1mb' }));
 app.use(express.json({ limit: '256kb' }));
 
@@ -3826,10 +3829,15 @@ app.get('/api/coach/clients/:clientUid', authenticateToken, requireCoachPlan, as
     // the client's own index so the count is never stale.
     const photoIndex = (data.status || 'active') === 'active' && await clientPhotosAllowed(clientUid)
       ? await checkInPhotos.readIndex(db, clientUid) : {};
+    // Photos the coach added by hand (src/coachCheckInPhotos.js), by date.
+    // Dates without a shared check-in are listed too, so the console can
+    // show photo-only check-ins.
+    const coachPhotoCounts = coachCheckInPhotos.counts(data.coachPhotoIndex);
     const client = {
       ...coachClientSummary(clientUid, data),
       checkIns: (Array.isArray(data.checkIns) ? data.checkIns : [])
         .map(c => (c && photoIndex[c.date] ? { ...c, photoCount: photoIndex[c.date] } : c)),
+      coachPhotoCounts,
       bodyweight: Array.isArray(data.bodyweight) ? data.bodyweight : [],
       weeklyWorkouts: Array.isArray(data.weeklyWorkouts) ? data.weeklyWorkouts : [],
       mealPlan: data.mealPlan || null
@@ -3940,12 +3948,87 @@ app.get('/api/coach/clients/:clientUid/checkin-photos/:date', authenticateToken,
     if (!coachUid) return sendError(res, 409, 'coach.not_migrated', 'Your account needs to complete migration first. Contact support.');
     const snap = await db.collection(`coaches/${coachUid}/clients`).doc(clientUid).get();
     if (!snap.exists || (snap.get('status') || 'active') !== 'active') return sendError(res, 404, 'coach.not_linked', 'This client is not linked to your roster.');
-    // The client's live switch, not the copy on the roster doc.
+    // The client's live switch, not the copy on the roster doc. Photos the
+    // coach added themselves don't depend on it.
     res.set('Cache-Control', 'private, no-store');
-    if (!(await clientPhotosAllowed(clientUid))) return sendSuccess(res, 200, { date, photos: [] });
-    return sendSuccess(res, 200, { date, photos: await checkInPhotos.readPhotos(db, clientUid, date) });
+    const [photos, coachPhotos] = await Promise.all([
+      clientPhotosAllowed(clientUid).then(ok => (ok ? checkInPhotos.readPhotos(db, clientUid, date) : [])),
+      coachCheckInPhotos.readPhotos(db, coachUid, clientUid, date),
+    ]);
+    return sendSuccess(res, 200, { date, photos, coachPhotos });
   } catch (err) {
     console.error('GET /api/coach/clients/:clientUid/checkin-photos/:date failed:', err);
+    return sendError(res, 500, 'coach.server_error', String(err));
+  }
+});
+
+// ── Coach-added check-in photos (src/coachCheckInPhotos.js) ─────────────────
+// The coach adds progress photos to a client's check-in by hand, one per
+// request. Only the coach sees them; they go when the link ends.
+
+const coachPhotoLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: { code: 'checkin_photos.rate_limited', message: 'Too many uploads. Try again shortly.' } }
+});
+
+const COACH_PHOTO_ERRORS = {
+  invalid: [422, 'checkin_photos.invalid', 'Photos must be JPEG, PNG or WebP images.'],
+  too_large: [413, 'checkin_photos.too_large', 'A photo is too large.'],
+  too_many: [422, 'checkin_photos.too_many', `A check-in holds at most ${coachCheckInPhotos.MAX_PER_DATE} photos you added.`],
+  too_many_dates: [422, 'checkin_photos.too_many_dates', `You can keep photos on at most ${coachCheckInPhotos.MAX_DATES} check-ins per client. Remove some older ones first.`],
+};
+
+// The coach's active roster doc for a client, or an error already sent.
+async function coachRosterForPhotos(req, res) {
+  const clientUid = String(req.params.clientUid || '').trim();
+  const date = checkInPhotos.isoDate(req.params.date);
+  if (!clientUid || !date) { sendError(res, 422, 'checkin_photos.invalid_request', 'A client and a YYYY-MM-DD date are required.'); return null; }
+  const coachUid = await resolveCallerUid(req.user);
+  if (!coachUid) { sendError(res, 409, 'coach.not_migrated', 'Your account needs to complete migration first. Contact support.'); return null; }
+  const snap = await db.collection(`coaches/${coachUid}/clients`).doc(clientUid).get();
+  if (!snap.exists || (snap.get('status') || 'active') !== 'active') { sendError(res, 404, 'coach.not_linked', 'This client is not linked to your roster.'); return null; }
+  return { coachUid, clientUid, date };
+}
+
+// POST /api/coach/clients/:clientUid/checkin-photos/:date — body { image, pose? }
+// adds one photo to that check-in (the date needn't have a shared check-in).
+app.post('/api/coach/clients/:clientUid/checkin-photos/:date', authenticateToken, requireCoachPlan, coachPhotoLimiter, async (req, res) => {
+  if (!firebaseEnabled) return sendError(res, 503, 'coach.firebase_disabled', 'Client linking requires a migrated (Firebase) account.');
+  try {
+    const parsed = coachCheckInPhotos.parseUpload(req.body);
+    if (parsed.error) {
+      const [status, code, message] = COACH_PHOTO_ERRORS[parsed.error];
+      return sendError(res, status, code, message);
+    }
+    const ctx = await coachRosterForPhotos(req, res);
+    if (!ctx) return undefined;
+    const added = await coachCheckInPhotos.addPhoto(db, ctx.coachUid, ctx.clientUid, ctx.date, parsed.photo);
+    if (added.error) {
+      const [status, code, message] = COACH_PHOTO_ERRORS[added.error];
+      return sendError(res, status, code, message);
+    }
+    return sendSuccess(res, 201, { date: ctx.date, id: added.id, count: added.count });
+  } catch (err) {
+    console.error('POST /api/coach/clients/:clientUid/checkin-photos/:date failed:', err);
+    return sendError(res, 500, 'coach.server_error', String(err));
+  }
+});
+
+// DELETE /api/coach/clients/:clientUid/checkin-photos/:date/:photoId — removes
+// a photo the coach added. The client's own photos can't be removed here.
+app.delete('/api/coach/clients/:clientUid/checkin-photos/:date/:photoId', authenticateToken, requireCoachPlan, async (req, res) => {
+  if (!firebaseEnabled) return sendError(res, 503, 'coach.firebase_disabled', 'Client linking requires a migrated (Firebase) account.');
+  try {
+    const ctx = await coachRosterForPhotos(req, res);
+    if (!ctx) return undefined;
+    const count = await coachCheckInPhotos.removePhoto(db, ctx.coachUid, ctx.clientUid, ctx.date, String(req.params.photoId || ''));
+    if (count == null) return sendError(res, 404, 'checkin_photos.not_found', 'That photo was not found.');
+    return sendSuccess(res, 200, { date: ctx.date, count });
+  } catch (err) {
+    console.error('DELETE /api/coach/clients/:clientUid/checkin-photos/:date/:photoId failed:', err);
     return sendError(res, 500, 'coach.server_error', String(err));
   }
 });
