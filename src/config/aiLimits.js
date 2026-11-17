@@ -47,4 +47,5 @@ module.exports.FEATURES = {
   '/rehab-plan':            { key: 'rehab-plan', kind: 'credit' },
   '/classify-exercises':    { key: 'classify-exercises', kind: 'background' },
   '/food-search-assist':    { key: 'food-search-assist', kind: 'background' },
+  '/food-describe':         { key: 'food-describe', kind: 'credit' },
 };

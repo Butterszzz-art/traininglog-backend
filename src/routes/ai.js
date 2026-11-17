@@ -5,6 +5,7 @@ const { NUTRITION_KNOWLEDGE } = require('../knowledge/nutrition-methodology');
 const exerciseClassify = require('../coach/exerciseClassify');
 const { jsonOutput } = require('../coach/client');
 const { createSearchAssist, cleanQuery: cleanFoodQuery } = require('../nutrition/searchAssist');
+const { createDescribe, cleanText: cleanFoodDescription } = require('../nutrition/describe');
 const { getDefaultSearcher } = require('./food');
 
 const router = express.Router();
@@ -367,6 +368,29 @@ router.post('/food-search-assist', async (req, res) => {
   } catch (err) {
     console.error('[AI food-search-assist]', err.message);
     return res.status(502).json({ success: false, error: 'AI search is unavailable right now.' });
+  }
+});
+
+// POST /api/ai/food-describe — { text } → { items: [{ text, search, english,
+// amount, unit, grams, count?, servingHint?, ml?, foods }] }. "What did you
+// eat" in plain words → foods to confirm; see src/nutrition/describe.js.
+let foodDescribe = null;
+router.post('/food-describe', async (req, res) => {
+  const text = cleanFoodDescription((req.body || {}).text);
+  if (!text) return res.status(422).json({ success: false, error: 'Describe what you ate.' });
+  try {
+    if (!foodDescribe) {
+      foodDescribe = createDescribe({
+        searcher: getDefaultSearcher(), createMessageFn: createMessage, jsonOutputFn: jsonOutput,
+        timeoutMs: perModelTimeoutMs(10000, 20000),
+      });
+    }
+    const out = await foodDescribe.describe(text);
+    if (!out.items) return res.status(502).json({ success: false, error: 'Could not read that. Try listing the foods, e.g. "2 eggs, 1 slice of toast".' });
+    return res.json({ success: true, items: out.items });
+  } catch (err) {
+    console.error('[AI food-describe]', err.message);
+    return res.status(502).json({ success: false, error: 'AI logging is unavailable right now.' });
   }
 });
 
