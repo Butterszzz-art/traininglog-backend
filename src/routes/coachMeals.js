@@ -16,7 +16,9 @@
 // Storage:
 //   coaches/{coachUid}/meals/{mealId}                    the coach's library
 //   users/{clientUid}/coachAssignment/{coachUid}.mealPlan  a snapshot the client follows
-//     { key, note, sentAt, days: { training: { breakfast: [meal, alt…], … }, rest: {…} } }
+//     { key, note, sentAt, days: { training: { breakfast: [meal, alt…], … }, rest: {…} },
+//       times?: { breakfast: 'HH:MM', … } }   when to eat each slot (optional;
+//       the client's app puts timed meals in their calendar feed)
 //
 // Routes (mounted at /api/coach/meals, coach plan required):
 //   GET    /       the coach's meals
@@ -34,6 +36,7 @@ const DAY_TYPES = ['training', 'rest'];
 const MAX_ITEMS = 25;
 const MAX_OPTIONS = 4; // a meal + up to three alternatives
 const MAX_MEALS = 300;
+const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 const text = (v, max) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : '');
 const num = v => (v === null || v === undefined || v === '' || typeof v === 'boolean' || !Number.isFinite(Number(v)) ? null : Number(v));
@@ -106,11 +109,22 @@ function sanitizeMealPlan(body, { now = new Date() } = {}) {
   if (!days.training && !days.rest) return { error: 'Add at least one meal to the plan.' };
   if (!days.training) days.training = days.rest;
   if (!days.rest) days.rest = days.training;
+  // Meal times: per slot, 'HH:MM' (24h). Anything else is dropped.
+  const times = {};
+  const srcTimes = b.times && typeof b.times === 'object' ? b.times : {};
+  for (const slot of SLOTS) {
+    const t = typeof srcTimes[slot] === 'string' ? srcTimes[slot].trim() : '';
+    const m = /^(\d{1,2}):(\d{2})$/.exec(t);
+    const norm = m ? `${m[1].padStart(2, '0')}:${m[2]}` : '';
+    if (TIME_RE.test(norm)) times[slot] = norm;
+  }
   const summary = DAY_TYPES.map(dt => {
     const kcal = SLOTS.reduce((n, s) => n + (days[dt][s] ? mealTotals(days[dt][s][0]).kcal : 0), 0);
     return `${dt === 'training' ? 'Training' : 'Rest'} day ${kcal} kcal`;
   }).join(' · ');
-  return { plan: { key: `meals:${now.getTime().toString(36)}`, note: text(b.note, 500), sentAt: now.toISOString(), days }, summary };
+  const plan = { key: `meals:${now.getTime().toString(36)}`, note: text(b.note, 500), sentAt: now.toISOString(), days };
+  if (Object.keys(times).length) plan.times = times;
+  return { plan, summary };
 }
 
 function createCoachMealsRouter({ db, sendError, sendSuccess, resolveCallerUid }) {

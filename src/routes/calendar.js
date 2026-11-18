@@ -1,8 +1,9 @@
-// Calendar feed: the user's program days in their phone's calendar app.
+// Calendar feed: the user's plan in their phone's calendar app.
 //
-// The app works out which program session falls on which date (that logic
-// lives in the app, src/js/program-schedule.js), so it uploads the next few
-// weeks of training days here. We serve them as an iCalendar (.ics) feed at a
+// The app works out what falls on which date (program days from
+// src/js/program-schedule.js, the coach's meal plan and meal times, and when
+// the next check-ins are due), so it uploads the next few weeks of events
+// here. We serve them as an iCalendar (.ics) feed at a
 // secret, unguessable URL that Apple Calendar, Google Calendar or Outlook
 // subscribe to and re-check on their own schedule.
 //
@@ -14,8 +15,15 @@
 //
 // Authenticated routes (mounted at /api/calendar):
 //   GET    /         → { enabled, path }
-//   PUT    /         { programName, events: [{ date, title, description }] }
+//   PUT    /         { programName, timeZone?, events: [{ date, title,
+//                      description, kind?, key?, time?, minutes? }] }
 //                    → { path }   (creates the feed on first call)
+//     kind: 'training' (default) | 'meal' | 'checkin'
+//     time: 'HH:MM' local time → a timed event of `minutes` (default 30);
+//           without it the event is all-day.
+//     key:  tells events of one kind on one day apart (e.g. 'breakfast').
+//     timeZone: IANA zone the times are in; without it times float (the
+//           calendar app shows them in the phone's own zone).
 //   POST   /reset    → { path }   new secret URL; the old one stops working
 //   DELETE /         → removes the feed
 // Public route: GET /cal/:token.ics (see createCalendarFeedHandler).
@@ -25,7 +33,11 @@ const { profileKey } = require('./profiles');
 
 const FEEDS = 'calendarFeeds';
 const OWNERS = 'calendarFeedOwners';
-const MAX_EVENTS = 120;          // ~16 weeks at 7 days a week
+const MAX_EVENTS = 400;          // program days + meals + check-ins
+const KINDS = ['training', 'meal', 'checkin'];
+const KEY_RE = /^[a-z0-9-]{1,24}$/;
+const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
+const MAX_TZ = 64;
 const MAX_TITLE = 120;
 const MAX_DESCRIPTION = 1000;
 const MAX_PROGRAM_NAME = 80;
@@ -54,6 +66,18 @@ function isRealDate(str) {
   return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
 }
 
+/** An IANA time zone the runtime knows, else ''. */
+function cleanTimeZone(value) {
+  const tz = typeof value === 'string' ? value.trim().slice(0, MAX_TZ) : '';
+  if (!tz || !/^[A-Za-z0-9_+\-/]+$/.test(tz)) return '';
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: tz });
+    return tz;
+  } catch {
+    return '';
+  }
+}
+
 /** Validate the uploaded events. Returns { events } or { error }. */
 function cleanEvents(raw) {
   if (!Array.isArray(raw)) return { error: 'events must be an array.' };
@@ -63,13 +87,28 @@ function cleanEvents(raw) {
   for (const e of raw) {
     const date = e && typeof e.date === 'string' ? e.date : '';
     if (!isRealDate(date)) return { error: 'Each event needs a date as YYYY-MM-DD.' };
-    if (seen.has(date)) continue; // one session per day
-    seen.add(date);
+    const kind = e.kind == null || e.kind === '' ? 'training' : e.kind;
+    if (!KINDS.includes(kind)) return { error: `kind must be one of ${KINDS.join(', ')}.` };
+    const key = e.key == null || e.key === '' ? '' : String(e.key);
+    if (key && !KEY_RE.test(key)) return { error: 'key must be lowercase letters, digits or dashes.' };
+    const id = `${date}|${kind}|${key}`;
+    if (seen.has(id)) continue; // one of each per day
+    seen.add(id);
     const title = cleanText(e.title, MAX_TITLE);
     if (!title) return { error: 'Each event needs a title.' };
-    events.push({ date, title, description: cleanText(e.description, MAX_DESCRIPTION) });
+    const ev = { date, title, description: cleanText(e.description, MAX_DESCRIPTION) };
+    if (kind !== 'training') ev.kind = kind;
+    if (key) ev.key = key;
+    if (e.time != null && e.time !== '') {
+      if (typeof e.time !== 'string' || !TIME_RE.test(e.time)) return { error: 'time must be HH:MM.' };
+      ev.time = e.time;
+      const minutes = Number(e.minutes);
+      ev.minutes = Number.isInteger(minutes) && minutes >= 5 && minutes <= 480 ? minutes : 30;
+    }
+    events.push(ev);
   }
-  events.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  events.sort((a, b) => (a.date !== b.date ? (a.date < b.date ? -1 : 1)
+    : (a.time || '') < (b.time || '') ? -1 : (a.time || '') > (b.time || '') ? 1 : 0));
   return { events };
 }
 
@@ -116,6 +155,14 @@ function nextDay(date) {
   return dt.toISOString().slice(0, 10);
 }
 
+// Local date + HH:MM (+ minutes) → 'YYYYMMDDTHHMMSS' wall-clock time.
+function localStamp(date, time, addMinutes) {
+  const [y, m, d] = date.split('-').map(Number);
+  const [hh, mm] = time.split(':').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d, hh, mm + (addMinutes || 0)));
+  return dt.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, '');
+}
+
 function stamp(iso) {
   const d = iso ? new Date(iso) : new Date();
   const safe = isNaN(d.getTime()) ? new Date() : d;
@@ -123,12 +170,16 @@ function stamp(iso) {
 }
 
 /**
- * Build the .ics text. Events are all-day so they land on the right date in
- * any time zone. Each UID is tied to the date, so when the plan for a day
- * changes the calendar updates that event instead of adding a second one.
+ * Build the .ics text. Program days and check-ins without a time are all-day,
+ * so they land on the right date in any time zone; meals have a time, in the
+ * user's zone (TZID) or floating. Each UID is tied to the date, kind and key,
+ * so when the plan for a day changes the calendar updates that event instead
+ * of adding a second one. Program-day UIDs keep their original form so
+ * existing subscriptions don't see every session twice.
  */
-function buildIcs({ token, programName, events, updatedAt }) {
-  const calName = programName ? `${programName} · Pocket Coach` : 'Pocket Coach training';
+function buildIcs({ token, programName, events, updatedAt, timeZone }) {
+  const calName = programName ? `${programName} · Pocket Coach` : 'Pocket Coach';
+  const tz = cleanTimeZone(timeZone);
   const uidSeed = crypto.createHash('sha256').update(String(token)).digest('hex').slice(0, 12);
   const dtstamp = stamp(updatedAt);
   const lines = [
@@ -138,20 +189,34 @@ function buildIcs({ token, programName, events, updatedAt }) {
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     `X-WR-CALNAME:${escapeIcs(calName)}`,
-    'X-WR-CALDESC:Your program days from Pocket Coach',
+    'X-WR-CALDESC:Your training\\, meals and check-ins from Pocket Coach',
+    ...(tz ? [`X-WR-TIMEZONE:${tz}`] : []),
     'REFRESH-INTERVAL;VALUE=DURATION:PT6H',
     'X-PUBLISHED-TTL:PT6H',
   ];
   for (const e of events || []) {
+    const kind = e.kind || 'training';
+    const tail = kind === 'training' && !e.key ? '' : `-${kind}${e.key ? '-' + e.key : ''}`;
     lines.push(
       'BEGIN:VEVENT',
-      `UID:${compactDate(e.date)}-${uidSeed}@pocketcoachcoms.org`,
+      `UID:${compactDate(e.date)}${tail}-${uidSeed}@pocketcoachcoms.org`,
       `DTSTAMP:${dtstamp}`,
-      `DTSTART;VALUE=DATE:${compactDate(e.date)}`,
-      `DTEND;VALUE=DATE:${compactDate(nextDay(e.date))}`,
-      `SUMMARY:${escapeIcs(e.title)}`,
     );
+    if (e.time && TIME_RE.test(e.time)) {
+      const param = tz ? `;TZID=${tz}` : '';
+      lines.push(
+        `DTSTART${param}:${localStamp(e.date, e.time)}`,
+        `DTEND${param}:${localStamp(e.date, e.time, e.minutes || 30)}`,
+      );
+    } else {
+      lines.push(
+        `DTSTART;VALUE=DATE:${compactDate(e.date)}`,
+        `DTEND;VALUE=DATE:${compactDate(nextDay(e.date))}`,
+      );
+    }
+    lines.push(`SUMMARY:${escapeIcs(e.title)}`);
     if (e.description) lines.push(`DESCRIPTION:${escapeIcs(e.description)}`);
+    if (kind !== 'training') lines.push(`CATEGORIES:${kind === 'meal' ? 'Meal' : 'Check-in'}`);
     lines.push('TRANSP:TRANSPARENT', 'END:VEVENT');
   }
   lines.push('END:VCALENDAR');
@@ -201,6 +266,7 @@ function createCalendarRouter({ db, FieldValue, firebaseEnabled, sendError, send
     const { events, error } = cleanEvents(req.body && req.body.events);
     if (error) return sendError(res, 400, 'calendar.invalid_events', error);
     const programName = cleanText(req.body && req.body.programName, MAX_PROGRAM_NAME);
+    const timeZone = cleanTimeZone(req.body && req.body.timeZone);
     try {
       let token = await currentToken(db, req.calUser);
       if (!token) {
@@ -210,6 +276,7 @@ function createCalendarRouter({ db, FieldValue, firebaseEnabled, sendError, send
       await db.collection(FEEDS).doc(token).set({
         user: req.calUser,
         programName,
+        timeZone,
         events,
         updatedAt: new Date().toISOString(),
       });
@@ -279,6 +346,7 @@ module.exports = {
   deleteCalendarFeed,
   buildIcs,
   cleanEvents,
+  cleanTimeZone,
   foldLine,
   escapeIcs,
 };

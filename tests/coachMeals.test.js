@@ -38,6 +38,12 @@ test('a plan: options per slot, a missing day type uses the other, a summary for
   assert.equal(many.plan.days.training.dinner.length, 4, 'a meal + up to three alternatives');
 });
 
+test('a plan can carry meal times per slot; bad ones are dropped', () => {
+  const r = sanitizeMealPlan({ days: { training: { breakfast: [breakfast] } }, times: { breakfast: '7:30', lunch: '12:00', dinner: '25:00', snacks: 'soon', brunch: '10:00' } });
+  assert.deepEqual(r.plan.times, { breakfast: '07:30', lunch: '12:00' });
+  assert.equal(sanitizeMealPlan({ days: { training: { breakfast: [breakfast] } } }).plan.times, undefined);
+});
+
 test('library routes: save, list with totals, delete', async () => {
   const docs = new Map();
   const ref = p => ({ get: async () => ({ exists: docs.has(p), data: () => docs.get(p) }), set: async d => { docs.set(p, d); }, delete: async () => { docs.delete(p); } });
