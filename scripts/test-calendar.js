@@ -7,7 +7,7 @@ const http = require('http');
 const express = require('express');
 const {
   createCalendarRouter, createCalendarFeedHandler, deleteCalendarFeed,
-  buildIcs, cleanEvents, foldLine, escapeIcs,
+  buildIcs, cleanEvents, cleanTimeZone, foldLine, escapeIcs,
 } = require('../src/routes/calendar');
 
 // ── Fake Firestore ───────────────────────────────────────────────────────────
@@ -104,6 +104,48 @@ async function test(name, fn) {
     assert.strictEqual(uid(ics), uid(again));
   });
 
+  await test('cleanEvents: meals and check-ins share a day with the session', () => {
+    const { events, error } = cleanEvents([
+      { date: '2026-11-02', kind: 'meal', key: 'lunch', time: '12:30', title: 'Lunch' },
+      { date: '2026-11-02', kind: 'meal', key: 'breakfast', time: '07:30', minutes: 20, title: 'Breakfast' },
+      { date: '2026-11-02', title: 'Upper A' },
+      { date: '2026-11-02', kind: 'checkin', title: 'Check-in' },
+      { date: '2026-11-02', kind: 'meal', key: 'lunch', time: '13:00', title: 'dupe' },
+    ]);
+    assert.ok(!error, error);
+    assert.deepStrictEqual(events.map(e => e.title), ['Upper A', 'Check-in', 'Breakfast', 'Lunch']);
+    assert.strictEqual(events[2].minutes, 20);
+    assert.strictEqual(events[3].minutes, 30);
+    assert.ok(cleanEvents([{ date: '2026-11-02', kind: 'party', title: 'x' }]).error);
+    assert.ok(cleanEvents([{ date: '2026-11-02', kind: 'meal', time: '25:00', title: 'x' }]).error);
+    assert.ok(cleanEvents([{ date: '2026-11-02', kind: 'meal', key: 'Bad Key', title: 'x' }]).error);
+  });
+
+  await test('cleanTimeZone keeps real IANA zones only', () => {
+    assert.strictEqual(cleanTimeZone('Europe/Amsterdam'), 'Europe/Amsterdam');
+    assert.strictEqual(cleanTimeZone('Mars/Olympus'), '');
+    assert.strictEqual(cleanTimeZone('a;b'), '');
+    assert.strictEqual(cleanTimeZone(5), '');
+  });
+
+  await test('buildIcs: timed meals in the user\'s zone, all-day check-ins, distinct UIDs', () => {
+    const ics = buildIcs({ token: 'tok', timeZone: 'Europe/Amsterdam', events: [
+      { date: '2026-12-31', title: 'Push' },
+      { date: '2026-12-31', kind: 'meal', key: 'dinner', time: '23:45', minutes: 30, title: 'Dinner' },
+      { date: '2026-12-31', kind: 'checkin', title: 'Check-in due' },
+    ] });
+    assert.ok(ics.includes('X-WR-TIMEZONE:Europe/Amsterdam'));
+    assert.ok(ics.includes('DTSTART;TZID=Europe/Amsterdam:20261231T234500'));
+    assert.ok(ics.includes('DTEND;TZID=Europe/Amsterdam:20270101T001500'), 'end rolls into the next day');
+    assert.ok(ics.includes('CATEGORIES:Meal'));
+    assert.ok(ics.includes('CATEGORIES:Check-in'));
+    const uids = [...ics.matchAll(/UID:(.+)\r\n/g)].map(m => m[1]);
+    assert.strictEqual(new Set(uids).size, 3);
+    assert.match(uids[0], /^20261231-[0-9a-f]{12}@/, 'program-day UID unchanged for existing subscribers');
+    const floating = buildIcs({ token: 'tok', events: [{ date: '2026-12-31', kind: 'meal', key: 'lunch', time: '12:00', title: 'Lunch' }] });
+    assert.ok(floating.includes('DTSTART:20261231T120000'));
+  });
+
   // ── Routes ──
   const server = app.listen(0);
   try {
@@ -142,6 +184,17 @@ async function test(name, fn) {
       const feed = await request(server, 'GET', path);
       assert.ok(feed.text.includes('Lower A'));
       assert.ok(!feed.text.includes('Upper A'));
+    });
+
+    await test('PUT keeps the time zone and serves timed meals', async () => {
+      const r = await request(server, 'PUT', '/api/calendar', { user: 'Alice', body: {
+        timeZone: 'America/New_York',
+        events: [{ date: '2026-11-03', title: 'Lower A' }, { date: '2026-11-03', kind: 'meal', key: 'breakfast', time: '08:00', title: 'Breakfast · Oats' }],
+      } });
+      assert.strictEqual(r.status, 200);
+      const feed = await request(server, 'GET', path);
+      assert.ok(feed.text.includes('DTSTART;TZID=America/New_York:20261103T080000'));
+      assert.ok(feed.text.includes('Lower A'));
     });
 
     await test('rejects invalid events', async () => {
