@@ -21,6 +21,7 @@ const { createClientPro } = require('./src/clientPro');
 const AI_LIMITS = require('./src/config/aiLimits');
 const { createEntitlements, pickEffective, legacyEntitlement, toDate, SUBSCRIPTION_SOURCES } = require('./src/entitlements');
 const { createCoachCodes, formatCode } = require('./src/coachCode');
+const coachGuide = require('./src/coachGuide');
 const fs = require('fs');
 const path = require('path');
 const { createModerationNotifier } = require('./src/moderationEmail');
@@ -4226,6 +4227,47 @@ app.post('/api/coach/code/regenerate', authenticateToken, requireCoachPlan, coac
   } catch (err) {
     console.error('POST /api/coach/code/regenerate failed:', err);
     return sendError(res, 500, 'coach.server_error', 'Could not make a new code.');
+  }
+});
+
+// ── Coach guide (src/coachGuide.js) ─────────────────────────────────────────
+// The welcome sheet, "Get set up" checklist and tours a coach sees after
+// taking the Coach plan. Kept on the user doc so phone and computer agree.
+
+// GET /api/coach/guide — { welcomeSeen, dismissed, steps, tours }
+app.get('/api/coach/guide', authenticateToken, requireCoachPlan, async (req, res) => {
+  if (!firebaseEnabled) return sendSuccess(res, 200, { guide: coachGuide.emptyGuide(), synced: false });
+  try {
+    const uid = await resolveCallerUid(req.user);
+    if (!uid) return sendSuccess(res, 200, { guide: coachGuide.emptyGuide(), synced: false });
+    const snap = await db.collection('users').doc(uid).get();
+    const raw = snap.exists ? snap.get('coachGuide') : null;
+    return sendSuccess(res, 200, { guide: coachGuide.readGuide(raw), synced: true });
+  } catch (err) {
+    console.error('GET /api/coach/guide failed:', err);
+    return sendError(res, 500, 'coach.server_error', 'Could not load your setup progress.');
+  }
+});
+
+// POST /api/coach/guide — body: { steps?, welcomeSeen?, tour?, replay?, dismissed? }
+// Marks are only added; returns the merged guide.
+app.post('/api/coach/guide', authenticateToken, requireCoachPlan, async (req, res) => {
+  if (!firebaseEnabled) return sendError(res, 503, 'coach.firebase_disabled', 'Setup progress needs a migrated (Firebase) account.');
+  try {
+    const uid = await resolveCallerUid(req.user);
+    if (!uid) return sendError(res, 409, 'coach.not_migrated', 'Your account needs to complete migration first. Contact support.');
+    const ref = db.collection('users').doc(uid);
+    const guide = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const raw = snap.exists ? snap.get('coachGuide') : null;
+      const result = coachGuide.applyUpdate(raw, req.body);
+      if (result.changed) tx.set(ref, { coachGuide: result.guide }, { merge: true });
+      return result.guide;
+    });
+    return sendSuccess(res, 200, { guide, synced: true });
+  } catch (err) {
+    console.error('POST /api/coach/guide failed:', err);
+    return sendError(res, 500, 'coach.server_error', 'Could not save your setup progress.');
   }
 });
 

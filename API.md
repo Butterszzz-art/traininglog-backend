@@ -338,3 +338,13 @@ Removes the feed. Also removed on account deletion.
 The feed itself, `text/calendar`. No login (calendar apps can't send one); the
 unguessable token is the protection. All-day events with one stable UID per
 date, so a changed day updates in place.
+
+## Coach guide (setup checklist and tours)
+
+Progress for the welcome sheet, "Get set up" checklist and tours shown to coaches after they take the Coach plan (`src/coachGuide.js`). Stored on `users/{uid}.coachGuide` so the phone app and the `coach/` dashboard show the same progress. Coach plan only (`403 plan.coach_required` otherwise).
+
+### `GET /api/coach/guide`
+Returns `{ success, synced, guide: { welcomeSeen, dismissed, steps: { [id]: iso }, tours: { phone?, desktop? } } }`. Step ids: `code`, `client`, `program`, `macros`, `checkin`, `desktop`.
+
+### `POST /api/coach/guide`
+Body (all optional): `{ steps: [id…], welcomeSeen: true, tour: 'phone'|'desktop', replay: 'phone'|'desktop', dismissed: true|false }`. Marks are only added (the first time is kept); `replay` clears a tour so it runs again; unknown ids are ignored. Returns the merged guide.
