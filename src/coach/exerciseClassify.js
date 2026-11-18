@@ -11,7 +11,7 @@
    The app saves each answer once and never asks about the name again.
    ============================================================= */
 
-const { createMessage, jsonOutput, perModelTimeoutMs } = require('./client');
+const { createMessage, jsonOutput, perModelTimeoutMs, MODELS } = require('./client');
 
 // Must match CUSTOM_MUSCLE_GROUPS in the app's src/js/customExercises.js.
 const MUSCLE_GROUPS = [
@@ -20,7 +20,7 @@ const MUSCLE_GROUPS = [
 ];
 const MAX_NAMES = 40;
 const MAX_NAME_LENGTH = 80;
-const MODEL = 'claude-haiku-4-5-20251001';
+const MODEL = MODELS.fast;
 
 const SYSTEM = `You classify gym exercise names by the muscle group they train most.
 Names come from lifters' logs and coaches' programs: they may be abbreviated, misspelled, in another language, or a named variation (e.g. "Larsen press", "Spoto press", "JM press", "Meadows row").
@@ -107,7 +107,7 @@ async function classifyExercises(names) {
     // Groq's short-call budget (see groq.js).
     max_tokens: 2000,
     system: SYSTEM,
-    output_config: jsonOutput(SCHEMA), // no effort: Haiku doesn't take one
+    output_config: jsonOutput(SCHEMA, 'low'),
     messages: [{ role: 'user', content: JSON.stringify({ names }) }],
   }, { timeoutMs: perModelTimeoutMs(30000, 30000) });
   const text = reply.content.filter((b) => b.type === 'text').map((b) => b.text).join('');

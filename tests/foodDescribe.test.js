@@ -165,3 +165,22 @@ test('describePhoto: no usable answer → items null; no food → empty list', a
   const none = d.createDescribe({ searcher: { search: async () => ({ foods: [] }) }, streamMessageFn: async () => ({ reply: reply([]) }) });
   assert.deepEqual((await none.describePhoto(photo)).items, []);
 });
+
+test('Claude models: typed meals on the fast model, photos on the smart one', async () => {
+  const seen = [];
+  const reply = { content: [{ type: 'thinking', thinking: '' }, { type: 'text', text: '{"items":[]}' }] };
+  const api = d.createDescribe({
+    searcher: { search: async () => ({ foods: [] }) },
+    createMessageFn: async (model, params) => { seen.push({ model, effort: params.output_config.effort }); return reply; },
+    streamMessageFn: async (model, params) => { seen.push({ model, effort: params.output_config.effort }); return { reply }; },
+    log: { warn() {} },
+  });
+  await api.describe('twee boterhammen met kaas');
+  await api.describePhoto(d.cleanPhoto('data:image/jpeg;base64,' + Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), Buffer.alloc(200)]).toString('base64')), '');
+  assert.deepEqual(seen, [
+    { model: d.MODEL, effort: 'low' },
+    { model: d.PHOTO_MODEL, effort: 'medium' },
+  ]);
+  assert.equal(d.MODEL, 'claude-haiku-5-5');
+  assert.equal(d.PHOTO_MODEL, 'claude-sonnet-5-5');
+});
