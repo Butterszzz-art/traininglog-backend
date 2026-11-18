@@ -1,5 +1,5 @@
 const express = require('express');
-const { providers, openModels, createMessage, streamMessage, perModelTimeoutMs, modelChain } = require('../coach/client');
+const { providers, openModels, createMessage, streamMessage, perModelTimeoutMs, modelChain, MODELS } = require('../coach/client');
 const { TRAINING_KNOWLEDGE } = require('../knowledge/training-methodology');
 const { NUTRITION_KNOWLEDGE } = require('../knowledge/nutrition-methodology');
 const exerciseClassify = require('../coach/exerciseClassify');
@@ -16,18 +16,22 @@ router.use('/coach', require('./coach'));
 
 // Anthropic model ids; with open models (Ollama / OpenRouter),
 // src/coach/client.js maps every call onto its model chain instead.
-const MODEL = 'claude-sonnet-4-6';
-const MODEL_FAST = 'claude-haiku-4-5-20251001';
-// Open models often reason before answering, and that counts against
-// max_tokens; this floor keeps short answers from coming back empty.
+const MODEL = MODELS.smart;
+const MODEL_FAST = MODELS.fast;
+// Models reason before answering (current Claude models think by default),
+// and that counts against max_tokens; these floors keep short answers from
+// coming back empty. The prompts themselves keep the answers short.
 const OPEN_MODEL_MIN_TOKENS = 4096;
+const CLAUDE_MIN_TOKENS = 2048;
 
 const BASE_SYSTEM = `You are an expert fitness coach inside Pocket Coach. Your advice is grounded in the following evidence-based methodology. ALWAYS apply these principles — never contradict them with bro-science or outdated advice.\n\n${TRAINING_KNOWLEDGE}\n\n${NUTRITION_KNOWLEDGE}\n\n`;
 
 async function callClaude(systemPrompt, userPrompt, maxTokens = 1024, model = MODEL) {
   try {
     const message = await createMessage(model, {
-      max_tokens: openModels() ? Math.max(maxTokens, OPEN_MODEL_MIN_TOKENS) : maxTokens,
+      max_tokens: Math.max(maxTokens, openModels() ? OPEN_MODEL_MIN_TOKENS : CLAUDE_MIN_TOKENS),
+      // Low effort for the short one-paragraph answers, medium for analysis.
+      output_config: { effort: model === MODEL_FAST ? 'low' : 'medium' },
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }]
     }, { timeoutMs: perModelTimeoutMs(45000) });

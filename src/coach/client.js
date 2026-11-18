@@ -29,6 +29,16 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const { createGroqClient, fitsGroq } = require('./groq');
 
+// Claude model ids, in one place. With open models the chain replaces them.
+//   fast   — short insights, food search, exercise classify (Haiku 5.5:
+//            $0.10 / $0.50 per million tokens in / out)
+//   smart  — longer analysis and the meal-photo reader (Sonnet 5.5:
+//            $2 / $10). Override either with AI_FAST_MODEL / AI_SMART_MODEL.
+const MODELS = {
+  fast: process.env.AI_FAST_MODEL || 'claude-haiku-5-5',
+  smart: process.env.AI_SMART_MODEL || 'claude-sonnet-5-5',
+};
+
 const BASE_URLS = {
   openrouter: 'https://openrouter.ai/api',
   ollama: 'https://ollama.com', // the SDK appends /v1/messages
@@ -304,6 +314,6 @@ function jsonOutput(schema, effort) {
 module.exports = {
   Anthropic, provider, providers, openModels, isConfigured, getClient, prepare, parseRef,
   modelChain, markGood, isRetryable, perModelTimeoutMs,
-  createMessage, streamMessage, fallbackParams, jsonOutput, MalformedReply,
+  createMessage, streamMessage, fallbackParams, jsonOutput, MalformedReply, MODELS,
   OPENROUTER_FREE_MODELS, OLLAMA_FREE_MODELS, GROQ_FREE_MODELS,
 };

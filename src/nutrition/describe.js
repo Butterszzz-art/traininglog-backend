@@ -29,7 +29,12 @@ const foods = require('./foods');
 const { createCache } = require('../routes/food');
 const { cleanTerm } = require('./searchAssist');
 
-const MODEL = 'claude-haiku-4-5-20251001';
+const { MODELS } = require('../coach/client');
+
+// Typed meals: Haiku. Photos: Sonnet, which reads portions and mixed plates
+// more reliably.
+const MODEL = MODELS.fast;
+const PHOTO_MODEL = MODELS.smart;
 const MAX_TEXT = 400;
 const MAX_ITEMS = 10;
 const CANDIDATES = 5;
@@ -168,7 +173,7 @@ function createDescribe({ searcher, createMessageFn, streamMessageFn, jsonOutput
     const reply = await createMessageFn(MODEL, {
       max_tokens: 1200,
       system: SYSTEM,
-      output_config: jsonOutputFn ? jsonOutputFn(SCHEMA) : { format: { type: 'json_schema', schema: SCHEMA } },
+      output_config: jsonOutputFn ? jsonOutputFn(SCHEMA, 'low') : { effort: 'low', format: { type: 'json_schema', schema: SCHEMA } },
       messages: [{ role: 'user', content: JSON.stringify({ ate: text }) }],
     }, { timeoutMs });
     const out = parseReply((reply.content || []).filter(b => b.type === 'text').map(b => b.text).join(''));
@@ -201,9 +206,9 @@ function createDescribe({ searcher, createMessageFn, streamMessageFn, jsonOutput
   async function splitPhoto(photo, note) {
     const open = openModels();
     const params = {
-      max_tokens: 1200,
+      max_tokens: open ? 1200 : 4000,
       system: open ? `${PHOTO_SYSTEM}\n\nReply with only the JSON object, no other text.` : PHOTO_SYSTEM,
-      output_config: jsonOutputFn ? jsonOutputFn(SCHEMA) : { format: { type: 'json_schema', schema: SCHEMA } },
+      output_config: jsonOutputFn ? jsonOutputFn(SCHEMA, 'medium') : { effort: 'medium', format: { type: 'json_schema', schema: SCHEMA } },
       messages: [{
         role: 'user',
         content: [
@@ -212,7 +217,7 @@ function createDescribe({ searcher, createMessageFn, streamMessageFn, jsonOutput
         ],
       }],
     };
-    const { reply } = await streamMessageFn(MODEL, params, {
+    const { reply } = await streamMessageFn(PHOTO_MODEL, params, {
       deadlineMs: photoTimeoutMs,
       idleMs: Math.min(photoTimeoutMs, 45000),
       accept: r => parseReply((r.content || []).filter(b => b.type === 'text').map(b => b.text).join('')) !== null,
@@ -231,4 +236,4 @@ function createDescribe({ searcher, createMessageFn, streamMessageFn, jsonOutput
   return { describe, split, describePhoto };
 }
 
-module.exports = { SYSTEM, PHOTO_SYSTEM, SCHEMA, MODEL, UNITS, MAX_ITEMS, MAX_PHOTO_BYTES, cleanText, cleanItem, cleanPhoto, cleanNote, parseReply, createDescribe };
+module.exports = { SYSTEM, PHOTO_SYSTEM, SCHEMA, MODEL, PHOTO_MODEL, UNITS, MAX_ITEMS, MAX_PHOTO_BYTES, cleanText, cleanItem, cleanPhoto, cleanNote, parseReply, createDescribe };

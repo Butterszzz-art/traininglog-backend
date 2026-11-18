@@ -5354,8 +5354,9 @@ app.post('/ai/chat', authenticateToken, aiMeter.meterAi(AI_LIMITS.FEATURES['/cha
       return sendError(res, 422, 'ai.invalid_payload', 'messages array is required.');
     }
 
-    const reply = await aiClient.createMessage('claude-haiku-4-5-20251001', {
-      max_tokens: aiClient.openModels() ? 4096 : 1024,
+    const reply = await aiClient.createMessage(aiClient.MODELS.fast, {
+      max_tokens: aiClient.openModels() ? 4096 : 2048,
+      output_config: { effort: 'low' },
       system:     systemPrompt || 'You are a helpful fitness coaching assistant.',
       messages:   messages.map(m => ({ role: m.role, content: String(m.content) }))
     }, { timeoutMs: aiClient.perModelTimeoutMs(30000, 30000) });

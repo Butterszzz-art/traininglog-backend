@@ -17,10 +17,11 @@ const { defineSecret } = require('firebase-functions/params');
 // need no changes. Add STRIPE_SECRET_KEY here once it's been set the same
 // way (it's optional today — server.js already guards its absence).
 const jwtSecret = defineSecret('JWT_SECRET');
-// AI provider keys (src/coach/client.js): Ollama Cloud first, Groq for
-// short calls, OpenRouter as overflow. ANTHROPIC_API_KEY would override
-// them all but isn't declared, because a declared secret that doesn't
-// exist fails the deploy.
+// AI provider keys (src/coach/client.js). ANTHROPIC_API_KEY, when set, is
+// used alone (Claude for every AI route); Ollama Cloud, Groq and OpenRouter
+// are only used without it. A declared secret that doesn't exist fails the
+// deploy, so set it first:  firebase functions:secrets:set ANTHROPIC_API_KEY
+const anthropicApiKey = defineSecret('ANTHROPIC_API_KEY');
 const ollamaApiKey = defineSecret('OLLAMA_API_KEY');
 const groqApiKey = defineSecret('GROQ_API_KEY');
 const openRouterApiKey = defineSecret('OPENROUTER_API_KEY');
@@ -49,7 +50,7 @@ exports.api = onRequest({
   // can take minutes to write out a month of training.
   timeoutSeconds: 540,
   secrets: [
-    jwtSecret, ollamaApiKey, groqApiKey, openRouterApiKey, intakeCoachUsername,
+    jwtSecret, anthropicApiKey, ollamaApiKey, groqApiKey, openRouterApiKey, intakeCoachUsername,
     googleHealthClientId, googleHealthClientSecret, googleHealthRedirectUri,
     resendApiKey, usdaApiKey, apnsKey
   ]

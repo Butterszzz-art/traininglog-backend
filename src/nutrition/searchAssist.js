@@ -21,7 +21,7 @@
 const foods = require('./foods');
 const { createCache } = require('../routes/food');
 
-const MODEL = 'claude-haiku-4-5-20251001';
+const MODEL = require('../coach/client').MODELS.fast;
 const MAX_QUERY = 80;
 const MAX_TERM = 60;
 const REWRITE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -84,9 +84,9 @@ function createSearchAssist({ searcher, createMessageFn, jsonOutputFn, timeoutMs
     const hit = cache.get(`r:${query}`);
     if (hit) return { ...hit, cached: true };
     const reply = await createMessageFn(MODEL, {
-      max_tokens: 600,
+      max_tokens: 2000,
       system: SYSTEM,
-      output_config: jsonOutputFn ? jsonOutputFn(SCHEMA) : { format: { type: 'json_schema', schema: SCHEMA } },
+      output_config: jsonOutputFn ? jsonOutputFn(SCHEMA, 'low') : { effort: 'low', format: { type: 'json_schema', schema: SCHEMA } },
       messages: [{ role: 'user', content: JSON.stringify({ search: query }) }],
     }, { timeoutMs });
     const text = (reply.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
