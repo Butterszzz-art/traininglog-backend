@@ -55,11 +55,11 @@ check('BMR formula cut-offs = ClientIntake constants', (() => {
 check('sleep flag = ClientIntake SLAAP_MINIMUM_UREN', registry.params('safety.sleep.min_hours').default === calc.SLAAP_MINIMUM_UREN);
 check('post-training boost = ClientIntake POST_TRAINING_BOOST_STANDAARD', registry.resolve('nutr.meals.post_training_protein').value === calc.POST_TRAINING_BOOST_STANDAARD);
 check('volume bands = ClientIntake VOLUME_BAND_PER_STATUS (Butters University)', (() => {
-  const b = registry.params('train.volume.henselmans').bands;
+  const b = registry.params('train.volume.bu').bands;
   return [1, 2, 3].every(s => b[s].min === calc.VOLUME_BAND_PER_STATUS[s].min && b[s].max === calc.VOLUME_BAND_PER_STATUS[s].max);
 })());
 check('older-adult volume cap = ClientIntake constants', (() => {
-  const o = registry.params('train.volume.henselmans').olderAdults;
+  const o = registry.params('train.volume.bu').olderAdults;
   return o.fromAge === calc.VOLUME_OUDEREN_VANAF_LEEFTIJD && o.max === calc.VOLUME_OUDEREN_MAX;
 })());
 
@@ -101,25 +101,41 @@ check('kcal provenance cites the energy rule', cut.phases[0].nutrition.provenanc
 check('cut phase has a coach-set target slot and a time cap',
   cut.phases[0].endCriteria.any[0].kind === 'target' && cut.phases[0].endCriteria.any[0].value === null && cut.phases[0].endCriteria.any[1].weeks === 12);
 check('maintain phase ends on its time cap only', cut.phases[1].endCriteria.any.length === 1);
-check('volume is lower in a cut than in maintenance', cut.phases[0].training.weeklySetsPerMuscle.chest < cut.phases[1].training.weeklySetsPerMuscle.chest);
-check('volume = Henselmans formula inside the BU band', cut.phases[1].training.provenance.weeklySetsPerMuscle.value === calc.trainingsvolumeAdvies(2, 0, 1, 1, 2));
+// Butters University calculates volume; Menno's formula is a comparison only.
+const { buWeeklySets } = require(path.join(root, 'src', 'plan', 'buVolume'));
+check('volume is NOT lowered in a cut (BU: hold volume in a deficit)', cut.phases[0].training.weeklySetsPerMuscle.chest === cut.phases[1].training.weeklySetsPerMuscle.chest);
+check('volume = BU calculation (intermediate, 4 sessions: 12)', cut.phases[1].training.weeklySetsPerMuscle.chest === 12
+  && cut.phases[1].training.provenance.weeklySetsPerMuscle.ruleId === 'train.volume.bu');
 check('volume band recorded (intermediate 10–15 direct sets)', cut.phases[1].training.volumeBand.min === 10 && cut.phases[1].training.volumeBand.max === 15);
 check('indirect sets count half', cut.phases[1].training.setCounting.indirect === 0.5);
+check('Menno is reported as a comparison', cut.phases[0].training.comparison.menno.ruleId === 'train.volume.henselmans'
+  && cut.phases[0].training.comparison.menno.value === calc.trainingsvolumeMenno(2, 0, 1, cut.phases[0].nutrition.settingsUsed.energiebalansFactor, 2)
+  && typeof cut.phases[0].training.comparison.menno.note === 'string');
+check('Menno rule is not one of the plan\'s rules', !cut.unverifiedRules.includes('train.volume.henselmans')
+  && !cut.butters.conflicts.some(c => c.ruleId === 'train.volume.henselmans'));
 
-// Butters University caps Menno's formula: 3 full-body days for an
-// intermediate woman gave 20.7 sets before, BU says 10–15.
+// Menno's formula gave an intermediate woman on 3 full-body days 20.7 sets;
+// the plan stays on BU's 12 and only shows the 20.7.
 const fullBody = generatePlan({
   intake: { ...intake, persoonsgegevens: { ...intake.persoonsgegevens, geslacht: 'vrouw', leeftijd: 34 }, trainingsfrequentie: { huidig: 3 } },
   packageId: 'cut_cycle_32', startDate: '2026-10-12', tier: 'medium', registry, now, client: { uid: 'u2', coachUid: 'c1' },
 });
 const fbMaintain = fullBody.phases[1].training;
-check('BU caps the formula (intermediate woman, 3 full-body days: 20.7 → 15)',
-  fbMaintain.provenance.weeklySetsPerMuscle.mennoSets === 20.7 && fbMaintain.weeklySetsPerMuscle.chest === 15);
+check('Menno does not move the plan (woman, 3 full-body days: Menno 20.7, plan 12)',
+  fbMaintain.comparison.menno.value === 20.7 && fbMaintain.weeklySetsPerMuscle.chest === 12 && fbMaintain.comparison.menno.differenceSets === 8.7);
 const older = generatePlan({
   intake: { ...intake, persoonsgegevens: { ...intake.persoonsgegevens, leeftijd: 66, trainingservaring: 10 } },
   packageId: 'cut_cycle_32', startDate: '2026-10-12', tier: 'medium', registry, now, client: { uid: 'u3', coachUid: 'c1' },
 });
-check('60+ clients get at most 12 sets (BU)', older.phases.every(p => p.training.weeklySetsPerMuscle.chest <= 12));
+check('60+ clients get 10 sets, at most 12 (BU)', older.phases.every(p => p.training.weeklySetsPerMuscle.chest === 10 && p.training.volumeBand.max === 12));
+const crunched = generatePlan({
+  intake: { ...intake, trainingsfrequentie: { huidig: 2 } },
+  packageId: 'cut_cycle_32', startDate: '2026-10-12', tier: 'medium', registry, now,
+});
+check('2 sessions a week: 8–10 sets (BU case study)', crunched.phases.every(p => p.training.weeklySetsPerMuscle.chest === 10 && p.training.volumeBand.min === 8));
+const vb = registry.params('train.volume.bu');
+check('BU start points: beginner 10, intermediate 12, advanced 15', [1, 2, 3].map(st => buWeeklySets(vb, { status: st, sessionsPerWeek: 4, phaseType: 'maintain' }).sets).join() === '10,12,15');
+check('BU: a cut never goes below 10 sets', buWeeklySets(vb, { status: 1, sessionsPerWeek: 4, phaseType: 'cut' }).sets >= 10);
 check('injury conflicts carried from the intake', cut.injuryConflicts.some(c => c.oefening === 'squat'));
 check('unverified rules are listed for review', cut.unverifiedRules.includes('nutr.protein.g_per_kg'));
 check('deload policy is reactive (BU Module 7)', cut.phases[0].training.deloads.mode === 'reactive');

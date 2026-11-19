@@ -1,16 +1,11 @@
 [
   {
-    "id": "train.volume.henselmans",
-    "version": 2,
+    "id": "train.volume.bu",
+    "version": 1,
     "domain": "training",
-    "statement": "Weekly direct sets per muscle group (indirect sets count about half). Butters University sets the band: beginner 8–12 (coach default), intermediate 10–15, advanced 10–20, age 60+ at most 12. Inside that band, Menno Henselmans formula personalises the number: (f<3 ? f : 2.5) × 5 × recovery × energy-balance factor × √training status (+3 for women), clamped to the band.",
+    "statement": "Weekly direct sets per muscle group, calculated from Butters University (indirect sets count about half). Start: beginner 10 (band 8–12), intermediate 12 (band 10–15), advanced 15 (band 10–20). Age 60+: 10, at most 12. Two or fewer sessions a week: 8–10. A cut does not lower volume (at least 10 sets). Go higher only when recovery and strength progress support it.",
     "params": {
-      "formula": "trainingsvolumeAdvies",
-      "recovery": {
-        "min": 0.5,
-        "default": 1,
-        "max": 1.2
-      },
+      "formula": "buWeeklySets",
       "bands": {
         "1": {
           "min": 8,
@@ -25,9 +20,28 @@
           "max": 20
         }
       },
+      "startByStatus": {
+        "1": 10,
+        "2": 12,
+        "3": 15
+      },
+      "statusLabels": {
+        "1": "Beginner",
+        "2": "Intermediate",
+        "3": "Advanced"
+      },
       "olderAdults": {
         "fromAge": 60,
+        "start": 10,
         "max": 12
+      },
+      "timeCrunched": {
+        "maxSessionsPerWeek": 2,
+        "min": 8,
+        "max": 10
+      },
+      "cut": {
+        "minSets": 10
       },
       "setCounting": {
         "direct": 1,
@@ -37,13 +51,13 @@
     "evidenceGrade": "unrated",
     "sources": [
       {
-        "label": "Butters University README — Training intensity, volume & frequency (band, set counting, older adults)"
+        "label": "Butters University README — Training intensity, volume & frequency (bands, set counting, older adults)"
       },
       {
-        "label": "ClientIntake calculations.js (trainingsvolumeBand, trainingsvolumeMenno, trainingsvolumeAdvies)"
+        "label": "Butters University README — Module: Energy balance (hold training volume during a cut)"
       },
       {
-        "label": "Menno Henselmans volume model (personalisation inside the band only)"
+        "label": "Butters University README — Training case studies (Tom: 2 sessions/week, ~8–10 sets)"
       }
     ],
     "moduleRef": "BU: Training intensity, volume & frequency",
@@ -56,7 +70,42 @@
         "weighting indirect sets at roughly half",
         "If you're training an older client (60+), the evidence points the other way"
       ],
-      "note": "Band follows BU: intermediate 10–15 direct sets, past ~20 only with evidence, older clients lower. BU gives no beginner number (only that moderate beat high volume in untrained women), so 8–12 for beginners is a coaching default. Menno's formula alone ran above BU (e.g. 17.7 for an intermediate on 3 full-body days, 20.7 for a woman), so it is clamped to the band."
+      "note": "BU sets both the band and the number. Intermediate starts at 12, low in BU's 10–15 anchor ('move up cautiously'; BU's worked example lands on ~11.5). Beginners start at 10 (BU: moderate volume beat high volume in untrained lifters). Advanced start at 15, leaving 15–20 for when progress and recovery support it. 60+ start at 10 (BU case study: 'closer to 10 sets/week/muscle'). Two sessions a week: 8–10 (BU case study Tom). A cut keeps volume (BU Energy balance: 'don't shortchange training volume during a cut'). Menno's formula is reported beside it as a comparison only (train.volume.henselmans)."
+    },
+    "lastReviewed": null,
+    "verified": false
+  },
+  {
+    "id": "train.volume.henselmans",
+    "version": 3,
+    "role": "comparison",
+    "domain": "training",
+    "statement": "Comparison only — never sets the plan. Menno Henselmans volume formula: (f<3 ? f : 2.5) × 5 × recovery × energy-balance factor × √training status (+3 for women). The plan shows it next to the Butters University number (train.volume.bu) so the coach can compare.",
+    "params": {
+      "formula": "trainingsvolumeMenno",
+      "recovery": {
+        "min": 0.5,
+        "default": 1,
+        "max": 1.2
+      }
+    },
+    "evidenceGrade": "unrated",
+    "sources": [
+      {
+        "label": "ClientIntake calculations.js (trainingsvolumeMenno)"
+      },
+      {
+        "label": "Menno Henselmans PTC volume model"
+      }
+    ],
+    "moduleRef": "PTC (comparison only)",
+    "bu": {
+      "section": "Training intensity, volume & frequency",
+      "status": "conflict",
+      "quotes": [
+        "Anchor around 10–15 direct sets/week/muscle if intermediate, and move up cautiously"
+      ],
+      "note": "Differs from BU: the formula lowers volume in a deficit (BU says hold it), adds +3 sets for every woman (BU: only where in-session fatigue limits, not for every exercise), and runs above BU's bands (17.7 for an intermediate on 3 full-body days, 20.7 for a woman). That is why it is a comparison only."
     },
     "lastReviewed": null,
     "verified": false
@@ -129,9 +178,16 @@
     "version": 2,
     "domain": "training",
     "statement": "At least one session per week for every 6 weekly sets of a muscle: flag more than 6 sets per muscle per session.",
-    "params": {"default": 6, "setsPerSession": 6},
+    "params": {
+      "default": 6,
+      "setsPerSession": 6
+    },
     "evidenceGrade": "unrated",
-    "sources": [{"label": "Butters University README — Training intensity, volume & frequency; seed text from src/knowledge/training-methodology.js"}],
+    "sources": [
+      {
+        "label": "Butters University README — Training intensity, volume & frequency; seed text from src/knowledge/training-methodology.js"
+      }
+    ],
     "moduleRef": "BU: Training intensity, volume & frequency",
     "bu": {
       "section": "Training intensity, volume & frequency",
@@ -149,9 +205,24 @@
     "version": 2,
     "domain": "training",
     "statement": "Double progression in 6–12 reps: leave 1–3 reps in reserve on most sets, failure only on the last set of an exercise; add reps, then the smallest load increment.",
-    "params": {"scheme": "double_progression", "repRange": [6, 12], "rir": [3, 1], "failure": "last_set_only"},
+    "params": {
+      "scheme": "double_progression",
+      "repRange": [
+        6,
+        12
+      ],
+      "rir": [
+        3,
+        1
+      ],
+      "failure": "last_set_only"
+    },
     "evidenceGrade": "unrated",
-    "sources": [{"label": "Butters University README — Exercise execution / technique; seed text from src/knowledge/training-methodology.js"}],
+    "sources": [
+      {
+        "label": "Butters University README — Exercise execution / technique; seed text from src/knowledge/training-methodology.js"
+      }
+    ],
     "moduleRef": "BU: Exercise execution / technique",
     "bu": {
       "section": "Exercise execution / technique",

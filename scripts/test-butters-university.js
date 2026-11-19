@@ -70,13 +70,16 @@ check('bu.section is required', validateRule({ ...base, bu: { status: 'match', q
 
 // ── The registry ────────────────────────────────────────────────────────────
 const registry = createRegistry();
-const evidenceRules = registry.all().filter(r => r.domain !== 'package');
+// Comparison rules (Menno's formulas) only sit beside a BU number in a plan.
+const evidenceRules = registry.all().filter(r => r.domain !== 'package' && r.role !== 'comparison');
+const comparisonRules = registry.all().filter(r => r.role === 'comparison');
 check('every non-package rule points at Butters University', evidenceRules.every(r => r.bu && r.moduleRef && r.moduleRef.startsWith('BU: ')));
 check('the BU commit is pinned', /^[0-9a-f]{40}$/.test(registry.butters?.commit || '') && registry.butters.repo === 'Butterszzz-art/butters-university');
 check('no rule marks itself verified on the strength of the connector', evidenceRules.every(r => r.verified === false));
 const summary = registry.buttersSummary();
 check('the summary groups rules by BU status', summary.match.includes('nutr.bmr.method') && summary.not_covered.includes('train.status.from_experience'));
 check('no rule conflicts with or only partly matches Butters University', summary.conflict.length === 0 && summary.partial.length === 0);
+check('Menno\'s volume formula is a comparison rule, listed apart', summary.comparison.includes('train.volume.henselmans') && comparisonRules.every(r => r.bu));
 
 // ── Plans carry the review; clients never see it ────────────────────────────
 const intake = {
@@ -98,6 +101,7 @@ check('a plan lists the BU conflicts among the rules it used', conflicted.butter
 check('a plan records the BU commit it was checked against', plan.butters.source.commit === registry.butters.commit);
 check('the coach summary counts BU conflicts', summarize(conflicted).buConflicts === 1 && summarize(plan).buConflicts === 0);
 check('the client view leaves the BU review out', !('butters' in clientView(plan)));
+check('the client view leaves the Menno comparison out', 'comparison' in plan.phases[0].training && clientView(plan).phases.every(p => !('comparison' in p.training)));
 
 // ── The real README, when available ─────────────────────────────────────────
 const real = process.env.BU_README;

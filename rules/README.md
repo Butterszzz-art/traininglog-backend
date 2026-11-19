@@ -48,11 +48,15 @@ Plans that were already generated keep the `ruleVersion` they were made with.
 
 Butters University (BU) is the evidence behind the rules. It is the GitHub
 repo `Butterszzz-art/butters-university`, and its content is `README.md`.
-BU is the single source for programming, periodization, exercise science and
-volume. Menno Henselmans' material (the PTC course, the ClientIntake xlsx
-formulas) may personalise a number inside a BU range, or cover a topic BU is
-silent on, but never overrides BU. Example: `train.volume.henselmans` runs
-Menno's volume formula and clamps the result to BU's direct-set band. The AI
+BU is the single source for the master plan's calculations: nutrition,
+programming, periodization, exercise science and volume. Menno Henselmans'
+material (the PTC course, the ClientIntake xlsx formulas) only serves as
+advice to compare against: it never sets a plan number. Such rules carry
+`"role": "comparison"`, are left out of the plan's rule list and BU
+conflicts, and appear in `buttersSummary().comparison`. Example:
+`train.volume.bu` calculates weekly sets; `train.volume.henselmans` runs
+Menno's formula and the plan shows the result under
+`training.comparison.menno`, with the difference and a note for the coach. The AI
 coach's training knowledge (`src/knowledge/training-methodology.js`) follows
 the same split: Part 1 is BU, Part 2 is PTC-only material.
 Each rule that rests on evidence carries a `bu` block:

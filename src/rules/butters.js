@@ -101,10 +101,15 @@ function checkRegistry(rules, readme) {
   });
 }
 
-// Rule ids grouped by BU status, for a plan's review summary.
+// Rule ids grouped by BU status, for a plan's review summary. Rules with
+// role "comparison" (Menno Henselmans' formulas) never set a plan number:
+// they are listed apart and do not count as BU conflicts.
 function summarize(rules) {
-  const out = { match: [], partial: [], conflict: [], not_covered: [], unreviewed: [] };
-  for (const r of rules) if (r.bu) out[r.bu.status].push(r.id);
+  const out = { match: [], partial: [], conflict: [], not_covered: [], unreviewed: [], comparison: [] };
+  for (const r of rules) {
+    if (r.role === 'comparison') out.comparison.push(r.id);
+    else if (r.bu) out[r.bu.status].push(r.id);
+  }
   return out;
 }
 
