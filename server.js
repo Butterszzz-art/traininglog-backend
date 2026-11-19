@@ -3524,6 +3524,11 @@ function coachClientSummary(id, data, now = new Date()) {
     // the coach marked reviewed.
     checkInSettings: coachShare.sanitizeCheckInSettings(data.checkInSettings || {}),
     roadmap: coachShare.sanitizeRoadmap(data.roadmap),
+    // Repeat / pause weeks for the assigned program, and when the client
+    // started the program they follow (shared with their workouts).
+    programSchedule: coachShare.sanitizeProgramSchedule(data.programSchedule, data.programSchedule && data.programSchedule.programId),
+    activeProgramId: data.activeProgramId || '',
+    activeProgramStartDate: data.activeProgramStartDate || null,
     reviewedCheckInDate: typeof data.reviewedCheckInDate === 'string' ? data.reviewedCheckInDate : null
   };
 }
@@ -4385,6 +4390,10 @@ app.post('/api/client/coach-code', authenticateToken, coachCodeRedeemLimiter, as
 //     Its full content is converted to the app's program format and copied to
 //     the client's assignment, so they can import it; '' clears it.
 //   macroTargets: { calories, protein, carbs, fat } the client can apply.
+//   programSchedule: { startDate?, changes: [{ kind: 'repeat'|'pause', afterWeek, note? }] }
+//     — this client's repeat / pause weeks in the assigned program (and the
+//     date it starts); null clears it. Assigning another program clears it
+//     unless the body sends a new one.
 //   macroPlan: { days: { training, rest?, high?, low? } (grams each),
 //     schedule: { mon..sun: day type }, note? } — goes live in the client's
 //     Macros tab. Also fills macroTargets with the training day for older
@@ -4443,8 +4452,9 @@ app.patch('/api/coach/clients/:clientUid', authenticateToken, requireCoachPlan, 
       }
     }
     const programId = typeof req.body?.programId === 'string' ? req.body.programId.trim() : null;
-    if (!Object.keys(fields).length && programId === null) {
-      return sendError(res, 422, 'coach.invalid_payload', 'Provide at least one of currentProgram, programId, nutritionSummary, macroTargets, macroPlan, mealPlan, trainingMode, hideNutritionNumbers, checkInSettings, roadmap.');
+    const scheduleSent = req.body?.programSchedule !== undefined;
+    if (!Object.keys(fields).length && programId === null && !scheduleSent) {
+      return sendError(res, 422, 'coach.invalid_payload', 'Provide at least one of currentProgram, programId, nutritionSummary, macroTargets, macroPlan, mealPlan, trainingMode, hideNutritionNumbers, checkInSettings, roadmap, programSchedule.');
     }
 
     const coachUid = await resolveCallerUid(req.user);
@@ -4456,6 +4466,19 @@ app.patch('/api/coach/clients/:clientUid', authenticateToken, requireCoachPlan, 
     const existing = await clientDocRef.get();
     if (!existing.exists) {
       return sendError(res, 404, 'coach.not_linked', 'This client is not linked to your roster.');
+    }
+
+    // Repeat / pause weeks belong to one assigned program.
+    if (scheduleSent || programId !== null) {
+      const forProgram = programId !== null ? programId : (existing.get('currentProgramId') || '');
+      if (scheduleSent && req.body.programSchedule !== null) {
+        const schedule = coachShare.sanitizeProgramSchedule(req.body.programSchedule, forProgram);
+        if (!schedule) return sendError(res, 422, 'coach.invalid_schedule', 'A program schedule needs a start date (YYYY-MM-DD) or at least one repeat or pause week.');
+        if (!forProgram) return sendError(res, 422, 'coach.no_program', 'Assign a program before changing its weeks.');
+        fields.programSchedule = schedule;
+      } else if (scheduleSent || programId !== (existing.get('currentProgramId') || '')) {
+        fields.programSchedule = null;
+      }
     }
 
     if (programId === '') {

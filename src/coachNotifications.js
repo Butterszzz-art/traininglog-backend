@@ -98,6 +98,7 @@ async function notifyCoachPlan(db, { coachUsername, clientUsername, fields = {},
   if (fields.currentProgram) parts.push('program');
   if (fields.nutritionSummary || fields.macroPlan) parts.push('nutrition');
   if (fields.roadmap) parts.push('roadmap');
+  if (fields.programSchedule && !fields.currentProgram) parts.push('program schedule');
   if (fields.trainingMode && !parts.length) parts.push('training plan');
   if (!parts.length) return 0;
   return notify(db, {

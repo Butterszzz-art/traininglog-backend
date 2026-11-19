@@ -20,7 +20,7 @@ test('X-frame weeks 1–4 import exactly, with no warnings', () => {
   assert.deepEqual(warnings, []);
   assert.deepEqual(rowWarnings, []);
   assert.equal(program.name, 'X-frame');
-  assert.deepEqual(M.stats(program), { weekCount: 4, dayCount: 4, exerciseCount: 104, weekdays: [1, 2, 4, 5] });
+  assert.deepEqual(M.stats(program), { weekCount: 4, dayCount: 4, exerciseCount: 104, weekdays: [1, 2, 4, 5], blockCount: 0 });
   assert.deepEqual(M.weekDays(program, 1).map(d => [d.weekday, d.label, d.focus, d.exercises.length]), [
     [1, 'Lower A', 'quads', 6], [2, 'Upper A', 'lats and delts', 7], [4, 'Lower B', 'hamstrings and hips', 4], [5, 'Upper B', 'width and delts', 9],
   ]);
@@ -85,4 +85,33 @@ test('messy tables: header found below a title, blanks repeat, warnings pinned t
 test('a sheet that is not a table → null (the AI path takes it)', () => {
   assert.equal(parseTables([{ name: 'A', grid: [['Exercise', 'Week 1', 'Week 2'], ['Bench', '3x8', '3x6']] }]), null);
   assert.equal(parseTables(null), null);
+});
+
+test('Block and Load columns (the dashboard CSV export) read back as mesocycles, deloads and loads', () => {
+  const grid = [
+    ['Block', 'Week', 'Day', 'Exercise', 'Sets', 'Reps', 'RIR', 'Load', 'Rest', 'Notes'],
+    ['Accumulation', 'Week 1', 'Mon - Lower', 'Squat', '3', '6-8', '3', '70%', '3 min', ''],
+    ['Accumulation', 'Week 2', 'Mon - Lower', 'Squat', '4', '6-8', '2', '72.5%', '3 min', ''],
+    ['Accumulation', 'Week 3 (deload)', 'Mon - Lower', 'Squat', '2', '6-8', '5', '62.5%', '3 min', ''],
+    ['Intensification', 'Week 4', 'Mon - Lower', 'Squat', '4', '3-5', '2', '140kg', '3 min', ''],
+    ['', '', '', 'Leg curl', '3', '10-12', '2', 'heavy', '', ''],
+  ];
+  const { program, rowWarnings } = parseTables([{ name: 'Program', grid }], { fileName: 'meso.csv' });
+  assert.deepEqual(program.blocks.map(b => b.name), ['Accumulation', 'Intensification']);
+  assert.deepEqual(program.weeks.map(w => [w.block, !!w.deload]), [['b1', false], ['b1', false], ['b1', true], ['b2', false]]);
+  const sq = n => M.weekDays(program, n)[0].exercises[0];
+  assert.deepEqual([1, 2, 3].map(n => sq(n).loadPct), [70, 72.5, 62.5]);
+  assert.equal(sq(4).loadKg, 140);
+  assert.ok(rowWarnings.some(w => /load "heavy" not understood/.test(w.message)));
+});
+
+test('sheets without Block or Load columns import exactly as before', () => {
+  const grid = [
+    ['Week', 'Day', 'Exercise', 'Sets', 'Reps', 'RIR'],
+    ['Week 1', 'Mon - Lower', 'Squat', '3', '6-8', '3'],
+  ];
+  const { program } = parseTables([{ name: 'Program', grid }], { fileName: 'plain.csv' });
+  assert.equal('blocks' in program, false);
+  assert.equal('block' in program.weeks[0], false);
+  assert.equal('loadPct' in M.weekDays(program, 1)[0].exercises[0], false);
 });

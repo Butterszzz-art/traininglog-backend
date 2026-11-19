@@ -6,6 +6,9 @@
 //   Week 2 | Tue - Upper A          | Curl       | 2    | 10-15| 3 (last set 2) | 1-2 min |
 //
 // plus an optional key/value "Notes" sheet (Block, Progression, RIR rules…).
+// Optional columns: Block (mesocycle name, per row; "Week 5 (deload)" or a
+// block named "Deload" marks a deload week) and Load ("75%" of 1RM or "100kg").
+// The coach dashboard's Export CSV writes exactly this layout.
 // Header names are matched loosely; Week/Day cells left blank repeat the row
 // above (merged cells). Everything maps onto pocketcoach.program/2 exactly,
 // with a warning pinned to each row that needed a guess.
@@ -17,6 +20,8 @@
 const M = require('../programs/model');
 
 const COLUMNS = [
+  ['block', /^(block|meso(cycle)?|phase|blok|fase)\b/i],
+  ['load', /^(load|weight|intensity|gewicht|%\s*(of\s*)?1\s*rm|kg)\b/i],
   ['week', /^(week|wk|wo?ek)\b/i],
   ['day', /^(day|dag|session|workout|training)\b/i],
   ['exercise', /^(exercise|exercises|movement|oefening|lift)\b/i],
@@ -96,8 +101,11 @@ function parseTables(sheets, { fileName } = {}) {
   const warnings = [];
   const weeks = new Map(); // week number → Map(dayKey → day)
   const dayIds = new Map(); // "weekday|label" → dayId, the same across weeks
+  const weekBlock = new Map(); // week number → block name
+  const deloads = new Set();
   let week = null;
   let dayText = '';
+  let blockText = '';
 
   for (let r = header.row + 1; r < sheet.grid.length; r++) {
     const name = cell(sheet.grid, r, cols.exercise);
@@ -105,6 +113,9 @@ function parseTables(sheets, { fileName } = {}) {
     const dayCell = cell(sheet.grid, r, cols.day);
     if (weekCell) week = M.parseWeek(weekCell) || week;
     if (dayCell) dayText = dayCell;
+    if (cols.block !== undefined && (weekCell || cell(sheet.grid, r, cols.block))) blockText = cell(sheet.grid, r, cols.block);
+    if (week && /deload/i.test(weekCell)) deloads.add(week);
+    if (week && blockText && !weekBlock.has(week)) weekBlock.set(week, blockText);
     if (!name) continue;
     const at = { sheet: sheet.name, row: r + 1 };
     const warn = message => rowWarnings.push({ ...at, message });
@@ -136,11 +147,15 @@ function parseTables(sheets, { fileName } = {}) {
     const rest = M.parseRest(restText);
     if (restText && rest.restSec === null && !/^[-–—]+$/.test(restText)) warn(`"${name}": rest "${restText}" not understood.`);
 
+    const loadText = cols.load !== undefined ? cell(sheet.grid, r, cols.load) : '';
+    const load = M.parseLoad(loadText);
+    if (loadText && load.loadPct === null && load.loadKg === null && !/^[-–—]+$/.test(loadText)) warn(`"${name}": load "${loadText}" not understood (use 75% or 100kg).`);
+
     let type = M.guessType(name);
     if (rir.rir === null && /^[-–—]+$/.test(rirText) && type !== 'core') type = 'core';
     const exerciseId = `w${week}-${dayId}-e${target.exercises.length + 1}`;
     target.exercises.push({
-      id: exerciseId, name, type, sets, ...reps, ...rir, ...rest,
+      id: exerciseId, name, type, sets, ...reps, ...rir, ...rest, ...load,
       notes: cols.notes !== undefined ? cell(sheet.grid, r, cols.notes) : '',
     });
     rowWarnings.forEach(w => { if (w.row === at.row && !w.exerciseId) Object.assign(w, { week, dayId, exerciseId }); });
@@ -149,9 +164,26 @@ function parseTables(sheets, { fileName } = {}) {
 
   const max = Math.max(...weeks.keys());
   if (max > M.LIMITS.weeks) warnings.push(`Only the first ${M.LIMITS.weeks} weeks were imported.`);
+  // Block names → blocks; a block called just "Deload" marks its weeks as deloads.
+  const blocks = [];
+  const blockId = name => {
+    const key = name.trim().replace(/\s*\(?deload\)?\s*$/i, '').trim();
+    if (!key) return null;
+    let b = blocks.find(x => x.name.toLowerCase() === key.toLowerCase());
+    if (!b) { b = { id: `b${blocks.length + 1}`, name: key.slice(0, M.LIMITS.label), goal: '' }; blocks.push(b); }
+    return b.id;
+  };
+  const weekExtras = n => {
+    const name = weekBlock.get(n) || '';
+    const out = {};
+    const id = blockId(name);
+    if (id) out.block = id;
+    if (deloads.has(n) || /deload/i.test(name)) out.deload = true;
+    return out;
+  };
   const weekList = [];
   for (let n = 1; n <= Math.min(max, M.LIMITS.weeks); n++) {
-    if (weeks.has(n)) weekList.push({ week: n, days: [...weeks.get(n).values()] });
+    if (weeks.has(n)) weekList.push({ week: n, ...weekExtras(n), days: [...weeks.get(n).values()] });
     else {
       warnings.push(`Week ${n} is missing from the sheet; it repeats week ${n - 1}.`);
       weekList.push(n > 1 ? { week: n, sameAs: n - 1 } : { week: n, days: [] });
@@ -166,6 +198,7 @@ function parseTables(sheets, { fileName } = {}) {
     notes: notes.notes.join('\n'),
     progressionNotes: notes.progressionNotes.join('\n'),
     rules: notes.rules,
+    blocks,
     weeks: weekList,
   });
   if (!program) return null;

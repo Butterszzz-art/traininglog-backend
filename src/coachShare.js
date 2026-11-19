@@ -19,7 +19,7 @@ const DEFAULT_SHARING = Object.freeze({ checkIns: true, bodyweight: true, workou
 const SHARE_FIELDS = {
   checkIns: ['checkIns', 'lastCheckInAt', 'latestCheckInJson'],
   bodyweight: ['bodyweight', 'currentBodyweight', 'weeklyWeightChangePercent'],
-  workouts: ['weeklyWorkouts', 'workoutsLoggedThisWeek', 'workoutsWeekStart', 'compliancePercent', 'activeProgramName'],
+  workouts: ['weeklyWorkouts', 'workoutsLoggedThisWeek', 'workoutsWeekStart', 'compliancePercent', 'activeProgramName', 'activeProgramId', 'activeProgramStartDate'],
   // Nothing is copied onto the roster: the coach reads the client's own
   // synced food log at request time (src/routes/coachNutrition.js), so
   // switching it off cuts access straight away.
@@ -146,6 +146,33 @@ function sanitizeRoadmap(value) {
   return phases.length || milestones.length ? { phases, milestones } : null;
 }
 
+// A coach's per-client changes to the assigned program's weeks: "do week 3
+// again" (repeat) or "a week off after week 5" (pause), plus an optional
+// start date. Same rules as the app's src/js/program-timeline.js normalize():
+// a repeat needs a week before it, afterWeek 0–52, up to 30 changes in week
+// order. → the schedule, or null when there's neither a date nor a change.
+const MAX_SCHEDULE_CHANGES = 30;
+function sanitizeProgramSchedule(value, programId) {
+  if (!value || typeof value !== 'object') return null;
+  const seen = new Set();
+  const changes = (Array.isArray(value.changes) ? value.changes : []).map((c, i) => {
+    if (!c || typeof c !== 'object' || !['repeat', 'pause'].includes(c.kind)) return null;
+    const afterWeek = Number(c.afterWeek);
+    if (!Number.isInteger(afterWeek) || afterWeek < (c.kind === 'repeat' ? 1 : 0) || afterWeek > 52) return null;
+    let id = typeof c.id === 'string' ? c.id.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 24) : '';
+    if (!id || seen.has(id)) id = `c${i + 1}-${afterWeek}`;
+    while (seen.has(id)) id += 'x';
+    seen.add(id);
+    return { id, kind: c.kind, afterWeek, note: text(c.note, 80).replace(/\s+/g, ' '), order: i };
+  }).filter(Boolean)
+    .sort((a, b) => a.afterWeek - b.afterWeek || a.order - b.order)
+    .slice(0, MAX_SCHEDULE_CHANGES)
+    .map(({ order, ...c }) => c);
+  const startDate = isoDate(value.startDate) || '';
+  if (!startDate && !changes.length) return null;
+  return { programId: text(programId || value.programId, 64), startDate, changes };
+}
+
 function sanitizeCheckInSettings(value) {
   if (!value || typeof value !== 'object') return null;
   const days = Number(value.everyDays);
@@ -200,6 +227,10 @@ function buildShareFields(snapshot, sharing, now = new Date()) {
     fields.workoutsWeekStart = isoDate(w.weekStart) || isoDate(now.toISOString());
     fields.compliancePercent = num(s.compliancePercent, 0, 100);
     fields.activeProgramName = text(s.activeProgramName, 120);
+    // Which program the client follows and since when, so the coach's
+    // schedule shows the client's real weeks (program-timeline.js).
+    fields.activeProgramId = text(s.activeProgramId, 120);
+    fields.activeProgramStartDate = isoDate(s.activeProgramStartDate);
   }
 
   return fields;
@@ -380,6 +411,7 @@ function sanitizeMacroPlan(value) {
 
 module.exports = {
   sanitizeRoadmap,
+  sanitizeProgramSchedule,
   sanitizeCheckInSettings,
   SHARING_KEYS,
   SHARE_FIELDS,

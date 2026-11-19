@@ -721,6 +721,20 @@ setTimeout(() => {
     r = await req('GET', '/api/client/coach-assignment', tokClient);
     check('client reads the assigned program', r.body?.assignments?.[0]?.program?.title === 'Coach PPL');
 
+    // Repeat / pause weeks for this client's program (src/js/program-timeline.js in the app).
+    r = await req('PATCH', '/api/coach/clients/uidClient456', tokCoach, { programSchedule: { startDate: '2026-11-02', changes: [{ kind: 'pause', afterWeek: 2, note: 'Holiday' }, { kind: 'repeat', afterWeek: 1 }, { kind: 'repeat', afterWeek: 0 }] } });
+    const sched = store['users/uidClient456/coachAssignment']?.uidABC123?.programSchedule;
+    check('a program schedule reaches the client, tied to the assigned program, bad changes dropped',
+      r.status === 200 && sched?.programId === 'p1' && sched.startDate === '2026-11-02'
+      && JSON.stringify(sched.changes.map(c => [c.kind, c.afterWeek])) === '[["repeat",1],["pause",2]]'
+      && store['coaches/uidABC123/clients'].uidClient456.programSchedule?.changes?.length === 2);
+    r = await req('PATCH', '/api/coach/clients/uidClient456', tokCoach, { programSchedule: { startDate: 'soon', changes: [] } });
+    check('an empty or invalid program schedule -> 422', r.status === 422);
+    r = await req('PATCH', '/api/coach/clients/uidClient456', tokCoach, { programId: 'p1' });
+    check('assigning the same program again keeps the schedule', store['users/uidClient456/coachAssignment'].uidABC123.programSchedule?.changes?.length === 2);
+    r = await req('PATCH', '/api/coach/clients/uidClient456', tokCoach, { programSchedule: null });
+    check('a program schedule can be cleared', r.status === 200 && store['users/uidClient456/coachAssignment'].uidABC123.programSchedule === null);
+
     r = await req('PATCH', '/api/coach/clients/uidClient456', tokCoach, { hideNutritionNumbers: true });
     check('hide nutrition numbers reaches the client mirror', r.status === 200 && store['users/uidClient456/coachAssignment']?.uidABC123?.hideNutritionNumbers === true);
     r = await req('PATCH', '/api/coach/clients/uidClient456', tokCoach, { hideNutritionNumbers: 'yes' });
