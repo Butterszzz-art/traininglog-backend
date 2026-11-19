@@ -75,6 +75,11 @@ Parameters:
 
 Returns an array of workouts with the same structure as above. Any missing technique flags will be returned as `false` for backward compatibility.
 
+### `POST /workouts/import`
+History brought in from another app (the app parses a Strong, Hevy or Fitbod CSV on the phone). Body: `{ source: 'strong'|'hevy'|'fitbod'|'generic', workouts: [{ date, title, workout }] }`, at most 200 per request; each `workout.id` must start with `imp_` (the app derives it from the session, so re-importing overwrites). Rows that don't validate are skipped, not fatal. Returns `{ saved, skipped }`.
+
+Imported sessions are stored in `users/{uid}/workouts` with `imported: true` and read back by `GET /workouts` like any other, but they never count towards the leaderboard (`totalVolume` / `workoutCount`), the exercise board or "passed you" notifications. `POST /workouts` and `DELETE /workouts/:id` keep it that way for later edits. Rate limit: 60 requests an hour. See `src/workoutImport.js`.
+
 ## Templates
 
 ### `GET /templates?username=:username`

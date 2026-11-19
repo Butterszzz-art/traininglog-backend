@@ -51,6 +51,7 @@ const { auth: fbAuth, db, FieldValue, firebaseEnabled, projectId: firebaseProjec
 const entitlements = createEntitlements({ db });
 const { berekenClient } = require('./src/intakeCalculations');
 const { compactWorkout, readStoredWorkout } = require('./workoutFormat');
+const { prepareImport, saveImport, isImportedWorkout } = require('./src/workoutImport');
 const { computeSessionVolume, safeDocId, naturalDocId, syncEntryDocId, saveWorkoutWithTotals, batchSetAll, queryHistoryPage } = require('./workoutStore');
 
 // The "Last updated" date of terms.html / privacy.html in the app repo. Bump it
@@ -1404,6 +1405,15 @@ app.post('/workouts', authenticateToken, async (req, res) => {
     const sessionVolume = computeSessionVolume(workout);
 
     const uid = await resolveFirestoreUid(username);
+    if (uid && isImportedWorkout({ workout })) {
+      // A session brought in from another app (src/workoutImport.js), sent
+      // again after an edit: saved, but kept out of the leaderboard totals,
+      // the exercise board and pass notifications, like the import itself.
+      const clientId = safeDocId(workout.id);
+      const docRef = clientId ? db.collection(`users/${uid}/workouts`).doc(clientId) : db.collection(`users/${uid}/workouts`).doc();
+      await docRef.set({ date: String(date), title: String(title || 'Workout'), sessionVolume, imported: true, ...storedWorkoutFields(workout) });
+      return sendSuccess(res, 200, { recordId: docRef.id });
+    }
     if (uid) {
       // The whole `workout` object is stored as-is (not exploded) so GET can
       // return it byte-for-byte — that's the API's existing contract. (A
@@ -1458,6 +1468,31 @@ app.post('/workouts', authenticateToken, async (req, res) => {
         data?.error?.message || JSON.stringify(data));
     }
     return sendSuccess(res, 200, { recordId: data?.records?.[0]?.id || null });
+  } catch (err) {
+    return sendError(res, 500, 'workouts.server_error', String(err));
+  }
+});
+
+// POST /workouts/import — history brought in from another app (Strong,
+// Hevy, Fitbod CSV), parsed on the phone and sent in chunks of up to 200.
+// See src/workoutImport.js: stored like any workout but kept off the
+// leaderboard. Firestore accounts only.
+const workoutImportLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: { code: 'workouts.import_rate_limited', message: 'Too many imports. Try again in an hour.' } }
+});
+
+app.post('/workouts/import', authenticateToken, workoutImportLimiter, async (req, res) => {
+  try {
+    const uid = await resolveFirestoreUid(req.user.username);
+    if (!uid) return sendError(res, 409, 'workouts.not_migrated', 'This account can’t import workouts yet.');
+    const prepared = prepareImport(req.body);
+    if (prepared.error) return sendError(res, 422, 'workouts.invalid_import', prepared.error);
+    const saved = prepared.docs.length ? await saveImport(db, uid, prepared.docs) : 0;
+    return sendSuccess(res, 200, { saved, skipped: prepared.skipped });
   } catch (err) {
     return sendError(res, 500, 'workouts.server_error', String(err));
   }
@@ -1533,6 +1568,8 @@ app.delete('/workouts/:id', authenticateToken, async (req, res) => {
       existed = prev.exists;
       if (!prev.exists) return;
       tx.delete(docRef);
+      // Imported sessions never counted towards the totals (src/workoutImport.js).
+      if (isImportedWorkout(prev)) return;
       tx.set(userRef, {
         totalVolume: FieldValue.increment(-(Number(prev.get('sessionVolume')) || 0)),
         workoutCount: FieldValue.increment(-1)
