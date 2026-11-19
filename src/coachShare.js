@@ -92,6 +92,8 @@ function text(value, max) {
   return typeof value === 'string' ? value.trim().slice(0, max) : '';
 }
 
+const { cleanDetail } = require('./checkInDetail');
+
 function sanitizeCheckIn(entry) {
   if (!entry || typeof entry !== 'object') return null;
   const date = isoDate(entry.date);
@@ -113,6 +115,10 @@ function sanitizeCheckIn(entry) {
       .filter(x => x.q && x.a).slice(0, MAX_QUESTIONS);
     if (answers.length) out.answers = answers;
   }
+  // Recovery per muscle, workload per session, nutrition and lifestyle
+  // answers (src/checkInDetail.js). Only valid, non-empty answers are kept.
+  const detail = cleanDetail(entry.detail);
+  if (detail) out.detail = detail;
   return out;
 }
 

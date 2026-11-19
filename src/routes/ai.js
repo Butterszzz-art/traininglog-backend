@@ -70,7 +70,7 @@ router.post('/checkin-summary', async (req, res) => {
   const {
     sleep, energy, stress, hunger, digestion, trainingPerformance,
     bodyweightThisWeek, bodyweightLastWeek,
-    compliancePercent, adjustmentNotes, goal, archetype,
+    compliancePercent, adjustmentNotes, goal, archetype, detail,
   } = req.body;
 
   const required = { sleep, energy, stress, bodyweightThisWeek, compliancePercent, goal, archetype };
@@ -94,8 +94,12 @@ router.post('/checkin-summary', async (req, res) => {
   parts.push(`Bodyweight: ${bodyweightThisWeek}kg (${delta}kg vs last week).`);
   parts.push(`Weekly compliance: ${compliancePercent}%.`);
   parts.push(`Adjustment notes: ${adjustmentNotes || 'None'}.`);
+  // The client's detailed answers (src/checkInDetail.js detailToText).
+  const detailText = typeof detail === 'string' ? detail.trim().slice(0, 3000) : '';
+  if (detailText) parts.push(`Detailed check-in:\n${detailText}`);
 
-  const system = BASE_SYSTEM + `You write concise, direct, data-driven check-in summaries. Be factual, encouraging but honest. Never use filler phrases. Reference the specific numbers. Write in second person. Max 3 sentences.`;
+  const system = BASE_SYSTEM + `You write concise, direct, data-driven check-in summaries. Be factual, encouraging but honest. Never use filler phrases. Reference the specific numbers. Write in second person. Max 3 sentences.`
+    + (detailText ? ' When a detailed check-in is given, point out what matters for the program: muscles still sore by the next session or never sore, sessions that were too much or too easy, joint pain, weak pumps, and nutrition, fatigue or adherence problems. Max 5 sentences.' : '');
 
   try {
     const summary = (await callClaude(system, parts.join(' '), 256, MODEL_FAST)).trim();
@@ -257,7 +261,7 @@ router.post('/plateau-check', async (req, res) => {
 
 // POST /api/ai/coach-draft-message
 router.post('/coach-draft-message', async (req, res) => {
-  const { clientName, archetype, currentPhase, compliancePercent, checkIn, bodyweightChange, alerts, currentProgramSummary, currentNutritionSummary, coachNotes } = req.body;
+  const { clientName, archetype, currentPhase, compliancePercent, checkIn, checkInDetail, bodyweightChange, alerts, currentProgramSummary, currentNutritionSummary, coachNotes } = req.body;
   if (!clientName) return res.status(400).json({ error: 'Missing: clientName' });
 
   const firstName = clientName.split(' ')[0];
@@ -276,6 +280,7 @@ router.post('/coach-draft-message', async (req, res) => {
   if (currentProgramSummary) parts.push(`Program: ${currentProgramSummary}.`);
   if (currentNutritionSummary) parts.push(`Nutrition: ${currentNutritionSummary}.`);
   if (coachNotes) parts.push(`Coach notes: ${coachNotes}.`);
+  if (typeof checkInDetail === 'string' && checkInDetail.trim()) parts.push(`Detailed check-in:\n${checkInDetail.trim().slice(0, 3000)}`);
 
   const system = `You are drafting a weekly check-in response on behalf of a fitness coach. Write in a professional but warm tone. Be specific, reference actual numbers. No generic encouragement. Under 150 words. Natural prose. Start with the athlete's first name.`;
 
