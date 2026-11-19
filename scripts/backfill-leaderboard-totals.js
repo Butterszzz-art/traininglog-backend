@@ -30,16 +30,18 @@ async function backfillTotals() {
     if (page.empty) break;
 
     for (const userDoc of page.docs) {
-      const workoutsQuery = userDoc.ref.collection('workouts').select('sessionVolume');
+      const workoutsQuery = userDoc.ref.collection('workouts').select('sessionVolume', 'imported');
       if (DRY_RUN) {
         const snap = await workoutsQuery.get();
-        const totalVolume = snap.docs.reduce((t, d) => t + (Number(d.get('sessionVolume')) || 0), 0);
-        console.log(`[dry-run] ${userDoc.id}: workoutCount=${snap.size} totalVolume=${totalVolume}`);
+        const counted = snap.docs.filter(d => d.get('imported') !== true); // imported history stays off the board
+        const totalVolume = counted.reduce((t, d) => t + (Number(d.get('sessionVolume')) || 0), 0);
+        console.log(`[dry-run] ${userDoc.id}: workoutCount=${counted.length} totalVolume=${totalVolume}`);
       } else {
         await db.runTransaction(async tx => {
           const snap = await tx.get(workoutsQuery);
-          const totalVolume = snap.docs.reduce((t, d) => t + (Number(d.get('sessionVolume')) || 0), 0);
-          tx.set(userDoc.ref, { totalVolume, workoutCount: snap.size }, { merge: true });
+          const counted = snap.docs.filter(d => d.get('imported') !== true); // imported history stays off the board
+          const totalVolume = counted.reduce((t, d) => t + (Number(d.get('sessionVolume')) || 0), 0);
+          tx.set(userDoc.ref, { totalVolume, workoutCount: counted.length }, { merge: true });
         });
       }
       users++;
