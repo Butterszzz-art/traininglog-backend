@@ -81,14 +81,15 @@ function assignmentFields(plan) {
 
 // What the client gets: their phases, targets, guidance and the program
 // snapshots. The override log, rule provenance, red flags, the
-// unverified-rule list and the Butters University review stay coach-side.
+// unverified-rule list, the Butters University review and the Menno
+// comparison stay coach-side.
 function clientView(plan) {
   const { overrides, unverifiedRules, butters, inputsSnapshot, injuryConflicts, ...rest } = plan;
   return {
     ...rest,
     phases: plan.phases.map(({ redFlags, ...phase }) => {
       const { provenance: _np, settingsUsed, ...nutrition } = phase.nutrition;
-      const { provenance: _tp, ...training } = phase.training;
+      const { provenance: _tp, comparison: _tc, ...training } = phase.training;
       return { ...phase, nutrition, training };
     }),
   };

@@ -4,14 +4,18 @@
 // provenance. Nothing here is shown to a client: a draft only reaches the
 // client after the coach approves and publishes it (see routes in server.js).
 //
-// The maths is ClientIntake's (src/intakeCalculations.js, generated from
-// ClientIntake/calculations.js — the source of truth). The registry
+// Every number follows Butters University (BU). The nutrition maths is
+// ClientIntake's (src/intakeCalculations.js, generated from
+// ClientIntake/calculations.js), running on BU's parameters. Weekly training
+// volume is BU's own calculation (./buVolume.js); Menno Henselmans' volume
+// formula is only reported next to it as a comparison. The registry
 // (rules/*.json) supplies the parameters it runs with, so changing a rule
 // changes the plan without touching any formula.
 'use strict';
 
 const crypto = require('crypto');
 const calc = require('../intakeCalculations');
+const { buWeeklySets } = require('./buVolume');
 
 const PLAN_SCHEMA = 'pocketcoach.plan/1';
 const GENERATOR = 'plan-generator@1';
@@ -50,6 +54,14 @@ function validateInput({ intake, packageId, startDate, tier }, registry) {
   if (!(tier in caps)) throw new Error(`Unknown tier: ${tier} (expected ${Object.keys(caps).join(', ')})`);
 }
 
+function mennoComparisonNote(menno, bu, band) {
+  const diff = Math.round((menno - bu) * 10) / 10;
+  if (Math.abs(diff) < 1) return `Menno's formula agrees with Butters University (~${bu} sets).`;
+  const where = menno > band.max ? `above BU's ${band.min}–${band.max} band`
+    : menno < band.min ? `below BU's ${band.min}–${band.max} band` : `inside BU's ${band.min}–${band.max} band`;
+  return `Menno's formula says ${menno} sets (${diff > 0 ? '+' : ''}${diff}), ${where}. The plan uses Butters University (${bu}); raise it only if recovery and strength progress support it.`;
+}
+
 function generatePlan({ intake, instellingen = {}, packageId, startDate, tier, client = {}, registry, now = new Date(), planId }) {
   validateInput({ intake, packageId, startDate, tier }, registry);
 
@@ -59,7 +71,7 @@ function generatePlan({ intake, instellingen = {}, packageId, startDate, tier, c
   const tee = registry.params('nutr.training_day.expenditure');
   const used = new Set([`pkg.${packageId}`, 'pkg.phase.goal_map', 'nutr.bmr.method', 'nutr.pal.table', 'nutr.tef.factor',
     'nutr.training_day.expenditure', 'nutr.energy.factor', 'nutr.protein.g_per_kg', 'nutr.fat.pct_ree', 'nutr.meals.count',
-    'nutr.meals.post_training_protein', 'train.volume.henselmans', 'train.status.from_experience', 'train.split.by_frequency',
+    'nutr.meals.post_training_protein', 'train.volume.bu', 'train.status.from_experience', 'train.split.by_frequency',
     'train.volume.max_per_session', 'train.progression.scheme', 'train.deload.policy', 'safety.deficit.max',
     'safety.injury.conflicts', 'safety.sleep.min_hours', 'pkg.tier.adjustment_caps']);
 
@@ -88,6 +100,8 @@ function generatePlan({ intake, instellingen = {}, packageId, startDate, tier, c
   const sessions = coachSettings.trainingsdagenPerWeek ?? intake.trainingsfrequentie?.huidig ?? 3;
   const status = trainingStatus(registry, intake.persoonsgegevens.trainingservaring);
   const female = intake.persoonsgegevens.geslacht === 'vrouw' ? 1 : 0;
+  const buVolume = registry.params('train.volume.bu');
+  // Menno's recovery factor: only feeds the comparison number.
   const recovery = registry.params('train.volume.henselmans').recovery.default;
   const split = registry.params('train.split.by_frequency');
   const maxPerSession = registry.params('train.volume.max_per_session').default;
@@ -106,12 +120,13 @@ function generatePlan({ intake, instellingen = {}, packageId, startDate, tier, c
 
     const splitDef = calc.bepaalSplitsdagen(sessions);
     const muscleFrequency = split.muscleFrequency[String(splitDef.dagen.length)] ?? 2;
-    // Butters University sets the band (direct sets/week/muscle); Menno's
-    // formula only picks the personal number inside it.
+    // Butters University calculates the volume. Menno's formula runs only
+    // to show the coach what it would have said.
     const age = intake.persoonsgegevens.leeftijd ?? null;
+    const bu = buWeeklySets(buVolume, { status, age, sessionsPerWeek: sessions, phaseType: def.type });
+    const weeklySets = bu.sets;
+    const volumeBand = bu.band;
     const mennoSets = calc.trainingsvolumeMenno(status, female, recovery, energy.value, muscleFrequency);
-    const volumeBand = calc.trainingsvolumeBand(status, age);
-    const weeklySets = calc.trainingsvolumeAdvies(status, female, recovery, energy.value, muscleFrequency, age);
     const setsPerSession = Math.round((weeklySets / muscleFrequency) * 10) / 10;
 
     const plannedStart = cursor;
@@ -162,17 +177,27 @@ function generatePlan({ intake, instellingen = {}, packageId, startDate, tier, c
       training: {
         split: { ...splitDef, sessionsPerWeek: sessions, muscleFrequency, ruleId: 'train.split.by_frequency' },
         weeklySetsPerMuscle: Object.fromEntries(MUSCLES.map(m => [m, Math.round(weeklySets)])),
-        setCounting: { direct: 1, indirect: 0.5, ruleId: 'train.volume.henselmans' },
+        setCounting: { ...buVolume.setCounting, ruleId: 'train.volume.bu' },
         volumeBand: { min: volumeBand.min, max: volumeBand.max },
         setsPerSession,
         provenance: {
           weeklySetsPerMuscle: {
-            ...registry.cite('train.volume.henselmans', weeklySets),
-            inputs: { status, female, recovery, energyFactor: energy.value, muscleFrequency, age },
-            mennoSets,
+            ...registry.cite('train.volume.bu', weeklySets),
+            inputs: { status, age, sessionsPerWeek: sessions, phaseType: def.type },
+            reasons: bu.reasons,
             buBand: volumeBand,
           },
           status: registry.cite('train.status.from_experience', status),
+        },
+        // Advice only: Menno Henselmans' formula next to BU's number. It
+        // never changes weeklySetsPerMuscle.
+        comparison: {
+          menno: {
+            ...registry.cite('train.volume.henselmans', mennoSets),
+            inputs: { status, female, recovery, energyFactor: energy.value, muscleFrequency },
+            differenceSets: Math.round((mennoSets - weeklySets) * 10) / 10,
+            note: mennoComparisonNote(mennoSets, weeklySets, volumeBand),
+          },
         },
         progression: { ...progression, ruleId: 'train.progression.scheme' },
         deloads: { ...deload, ruleId: 'train.deload.policy' },

@@ -31,6 +31,7 @@ function validateRule(rule) {
   if (['min', 'default', 'max'].every(k => typeof p[k] === 'number') && !(p.min <= p.default && p.default <= p.max)) {
     errors.push(`${where}: params need min <= default <= max`);
   }
+  if (rule.role !== undefined && rule.role !== 'comparison') errors.push(`${where}: role must be "comparison" when set`);
   if (p.conditions !== undefined && !Array.isArray(p.conditions)) errors.push(`${where}: params.conditions must be an array`);
   errors.push(...validateBu(rule));
   return errors;

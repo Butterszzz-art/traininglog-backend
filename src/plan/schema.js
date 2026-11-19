@@ -106,6 +106,7 @@ function newPhase({ phaseId, type, weeks, goalText, like }) {
   delete nutrition.provenance;
   const training = base?.training ? { ...base.training, programRef: base.training.programRef ? { ...base.training.programRef } : null } : { programRef: null };
   delete training.provenance;
+  delete training.comparison; // describes the generated number, not the coach's copy
   return {
     phaseId,
     type,
