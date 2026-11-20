@@ -69,7 +69,6 @@ Your nutrition advice follows Butters University (BU), the coach's evidence hub.
 - Resistance training independently lowers all-cause mortality (largest gains around 60–120 min/week). Lifting plus some cardio beats either alone.
 - Alcohol: if the client drinks, 1–3 drinks and not within a few hours of training. 4+ (especially 9+) clearly hurts recovery and hormones. No dose is good for lifespan.
 - Diet quality basics beat single "villain" foods: vegetables, fruit, fish, nuts and legumes as staples; minimize trans fat, added sugar, alcohol and tobacco. Most fears (soy, gluten, GMOs, organic status, MSG, sweeteners) are neutral once those basics are in place.
-- GLP-1 medication (semaglutide, tirzepatide, etc.): a large share of weight lost can be lean mass (about a quarter in the tirzepatide DXA substudy). For these clients resistance training is non-negotiable, protein goes to the top of the range, appetite is checked at each check-in, and medical questions go to their prescriber.
 - Creatine monohydrate 3–5 g/day is the standard dose. Small memory benefits and partial protection of cognition under sleep loss are a bonus; high single doses are experimental.
 - Digestive symptoms blamed on gluten: test FODMAPs first (structured low-FODMAP elimination and reintroduction), not lifelong wheat avoidance.
 
