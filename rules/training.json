@@ -202,9 +202,9 @@
   },
   {
     "id": "train.progression.scheme",
-    "version": 2,
+    "version": 3,
     "domain": "training",
-    "statement": "Double progression in 6–12 reps: leave 1–3 reps in reserve on most sets, failure only on the last set of an exercise; add reps, then the smallest load increment.",
+    "statement": "Double progression in 6–12 reps: compounds at 1–3 reps in reserve, isolation and machine work at 0–2, failure only on the last set of an exercise (mainly isolation); add reps, then the smallest load increment.",
     "params": {
       "scheme": "double_progression",
       "repRange": [
@@ -214,6 +214,10 @@
       "rir": [
         3,
         1
+      ],
+      "rirIsolation": [
+        2,
+        0
       ],
       "failure": "last_set_only"
     },
@@ -228,9 +232,11 @@
       "section": "Exercise execution / technique",
       "status": "match",
       "quotes": [
-        "Leave 1–3 reps in reserve on most sets; save all-out failure for the last set of an exercise, if at all"
+        "Leave 1–3 reps in reserve on most sets; save all-out failure for the last set of an exercise, if at all",
+        "default to 0–2 RIR on most hypertrophy sets",
+        "Keep compounds at 1–3 RIR."
       ],
-      "note": "RIR as BU says. 6–12 reps is roughly 70–85% 1RM, inside the 30–90% band BU's training-volume module gives; BU leaves the exact load to feel, so the range is a coaching default the coach can change."
+      "note": "Matches BU's Nov 2026 update (Robinson 2024, Refalo 2024): compounds 1–3 RIR (`rir`), isolation and machine sets 0–2 RIR (`rirIsolation`). 6–12 reps is roughly 70–85% 1RM, inside the 30–90% band BU's training-volume module gives; BU leaves the exact load to feel, so the range is a coaching default the coach can change."
     },
     "lastReviewed": null,
     "verified": false

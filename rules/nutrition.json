@@ -140,9 +140,12 @@
       "quotes": [
         "never found a significant hypertrophy/strength benefit above 1.6 g/kg/day",
         "the PTC still recommends 1.8 g/kg for advanced lifters",
-        "implies needs of 2.4+ g/kg"
+        "implies needs of 2.4+ g/kg",
+        "keep 1.6–2.2 g/kg as the working range",
+        "closer to linear than to a hard 1.6 g/kg breakpoint",
+        "Use fat-free mass to set targets for clients with high body fat."
       ],
-      "note": "Matches: no added benefit above 1.6 g/kg, default 1.8 g/kg, 2.4+ g/kg for steroid users."
+      "note": "Matches: BU keeps 1.6–2.2 g/kg as the working range, the PTC default is 1.8 g/kg, 2.4+ g/kg for steroid users. BU's Nov 2026 update reads the dose-response as closer to linear than a hard 1.6 g/kg plateau and suggests fat-free mass as the basis for clients with high body fat; the plan still multiplies by bodyweight. Switching to fat-free mass is an open proposal and a calculation change, so it would go through ClientIntake first."
     },
     "lastReviewed": null,
     "verified": false
@@ -181,9 +184,10 @@
       "section": "Module: Protein",
       "status": "match",
       "quotes": [
-        "the PTC's recommendation is 3-5 meals/day as a practical default"
+        "the PTC's recommendation is 3-5 meals/day as a practical default",
+        "Meal number and size are about appetite and preference, not a cap."
       ],
-      "note": "Default 4 within 3–5. The ad libitum module allows 2–5, and up to 6 in a bulk."
+      "note": "Default 4 within 3–5. The ad libitum module allows 2–5, and up to 6 in a bulk. BU's Nov 2026 update (Trommelen 2023) removes the per-meal protein cap, so fewer, larger meals are fine when a client prefers them."
     },
     "lastReviewed": null,
     "verified": false
