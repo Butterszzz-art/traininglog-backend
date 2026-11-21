@@ -1,0 +1,41 @@
+name: Deploy backend
+
+# Deploys the API (Cloud Functions, project pocketcoach-280c4) from main.
+# Run it by hand: GitHub › Actions › Deploy backend › Run workflow — works
+# from the GitHub mobile app too. Same as `firebase deploy --only functions`
+# from a laptop; the deployed function reads ADMIN_USERNAMES etc. from .env.
+#
+# Needs the repo secret FIREBASE_SERVICE_ACCOUNT: the JSON key of a Google
+# Cloud service account in pocketcoach-280c4 with the roles
+#   Cloud Functions Admin, Service Account User, Secret Manager Admin,
+#   Artifact Registry Administrator, Cloud Build Editor, Cloud Scheduler Admin,
+#   Firebase Admin.
+# Function secrets (JWT_SECRET, …) stay in Secret Manager as today.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-functions
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      - run: npx --yes firebase-tools@14 deploy --only functions --project pocketcoach-280c4 --non-interactive
