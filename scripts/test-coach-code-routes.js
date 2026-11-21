@@ -12,6 +12,7 @@ process.env.AIRTABLE_TOKEN = 'fake-token';
 process.env.AIRTABLE_BASE_ID = 'fakeBaseId';
 const TEST_PORT = 39874;
 process.env.PORT = String(TEST_PORT);
+process.env.ADMIN_USERNAMES = 'Bossman'; // an admin with no plan of their own
 
 const BACKEND_DIR = path.join(__dirname, '..');
 const firebasePath = path.join(BACKEND_DIR, 'firebaseAdmin.js');
@@ -166,11 +167,13 @@ class FakeAirtable {
 }
 require.cache[airtablePath] = { id: airtablePath, filename: airtablePath, loaded: true, exports: FakeAirtable };
 
-store['usernames'] = { coachy: { uid: 'uCoach' }, athlete: { uid: 'uAth' }, other: { uid: 'uOther' } };
+store['usernames'] = { coachy: { uid: 'uCoach' }, athlete: { uid: 'uAth' }, other: { uid: 'uOther' }, bossman: { uid: 'uAdmin' }, adminclient: { uid: 'uAdminClient' } };
 store['users'] = {
   uCoach: { username: 'coachy', userPlan: 'coach' },
   uAth: { username: 'athlete' },
   uOther: { username: 'other' },
+  uAdmin: { username: 'bossman' },
+  uAdminClient: { username: 'adminclient' },
 };
 
 const jwt = require(path.join(BACKEND_DIR, 'node_modules/jsonwebtoken'));
@@ -271,6 +274,17 @@ function req(method, urlPath, token, body) {
   await req('POST', '/api/client/coach-code', tok('athlete'), { code: fresh });
   r = await req('GET', '/api/user/plan', tok('athlete'));
   check('re-entering the code restores Pro', r.body?.plan === 'pro' && r.body?.coachPro?.status === 'active', r.body);
+
+  // An admin with no subscription reads as Coach, and their code gives Pro.
+  r = await req('GET', '/api/user/plan', tok('bossman'));
+  check('admin reads as the Coach plan', r.body?.plan === 'coach' && r.body?.planSource === 'admin' && r.body?.admin === true, r.body);
+  r = await req('GET', '/api/coach/code', tok('bossman'));
+  check('admin gets a coach code', r.status === 200 && /^[A-Z2-9]{8}$/.test(r.body?.code), r.body);
+  const adminCode = r.body?.code;
+  r = await req('POST', '/api/client/coach-code', tok('adminclient'), { code: adminCode });
+  check('client redeems the admin\'s code', r.status === 200 && r.body?.plan === 'pro', r.body);
+  r = await req('GET', '/api/user/plan', tok('adminclient'));
+  check('admin\'s client is Pro and stays active', r.body?.plan === 'pro' && r.body?.coachPro?.status === 'active', r.body);
 
   const failed = results.filter(x => !x.pass);
   for (const x of results) console.log(`${x.pass ? 'PASS' : 'FAIL'} ${x.label}${x.pass ? '' : ' ' + JSON.stringify(x.extra || '')}`);
