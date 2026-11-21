@@ -493,8 +493,14 @@ app.get('/health', async (_req, res) => {
 // plan from the same place: Firestore first, Airtable for not-yet-migrated accounts.
 // opts.verifyCoachCode=false skips the coach-code check (src/coachCode.js);
 // that check itself asks for the coach's plan, and must not recurse.
+// Admins (ADMIN_USERNAMES) read as the Coach plan everywhere — the app's Pro
+// screens, Coach Mode and their coach code, which must give clients Pro.
+const ADMIN_PLAN_USERNAMES = new Set(parseUsernames(process.env.ADMIN_USERNAMES));
+const ADMIN_EFFECTIVE_PLAN = Object.freeze({ plan: 'coach', source: 'admin', expiresAt: null, status: 'active', id: null });
+
 async function getUserPlanInfo(username, opts = {}) {
   if (!username) return { plan: 'free', status: 'none' };
+  const isAdminUser = ADMIN_PLAN_USERNAMES.has(String(username).toLowerCase());
 
   const uid = await resolveFirestoreUid(username);
   if (uid) {
@@ -519,6 +525,7 @@ async function getUserPlanInfo(username, opts = {}) {
       const legacy = legacyEntitlement(u);
       effective = pickEffective(legacy ? [legacy] : []);
     }
+    if (isAdminUser && effective.plan !== 'coach') effective = { ...ADMIN_EFFECTIVE_PLAN };
     const fromSubscription = effective.plan === 'free' || SUBSCRIPTION_SOURCES.has(effective.source);
     const lastMoment = toDate(u.lastMomentTrialAt);
     return {
@@ -541,11 +548,11 @@ async function getUserPlanInfo(username, opts = {}) {
   }
 
   const user = await getUserByUsername(username);
-  if (!user) return { plan: 'free', status: 'none' };
+  if (!user) return isAdminUser ? { plan: 'coach', status: 'active', planSource: 'admin' } : { plan: 'free', status: 'none' };
 
   const f = user.fields;
   return {
-    plan: f.UserPlan || 'free',
+    plan: isAdminUser ? 'coach' : (f.UserPlan || 'free'),
     status: f.SubStatus || 'none',
     periodEnd: f.SubCurrentPeriodEnd || '',
     billingCycle: f.BillingCycle || '',
