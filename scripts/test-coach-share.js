@@ -133,6 +133,42 @@ test('sanitizeMacroPlan rejects a plan without training or with a half-filled da
   assert.strictEqual(cs.sanitizeMacroPlan('nope'), null);
 });
 
+test('buildShareFields keeps session times and weekly muscle sets under the workouts switch', () => {
+  const snapshot = { workouts: { weekly: [], thisWeek: 2, weekStart: '2026-09-21',
+    sessions: [
+      { date: '2026-09-23', durationMin: 52.4, sets: 16, minPerSet: 3.27, otherMin: 12, targetMin: 45 },
+      { date: '2026-09-21', durationMin: 40, sets: 14 },
+      { date: 'bad', durationMin: 40, sets: 14 },
+      { date: '2026-09-20', durationMin: 0, sets: 10 },
+    ],
+    muscleSets: { chest: 9.25, quads: 0, glutes: 'x', made_up: 5 } } };
+  const f = cs.buildShareFields(snapshot, {}, NOW);
+  assert.deepStrictEqual(f.sessionTimes, [
+    { date: '2026-09-23', durationMin: 52, sets: 16, minPerSet: 3.3, otherMin: 12, targetMin: 45 },
+    { date: '2026-09-21', durationMin: 40, sets: 14 },
+  ]);
+  assert.deepStrictEqual(f.weeklyMuscleSets, { chest: 9.3 });
+  assert.ok(cs.SHARE_FIELDS.workouts.includes('sessionTimes') && cs.SHARE_FIELDS.workouts.includes('weeklyMuscleSets'));
+  const off = cs.buildShareFields(snapshot, { workouts: false }, NOW);
+  assert.strictEqual(off.sessionTimes, undefined);
+});
+
+test('computeClientAlerts flags sessions running long (3+ with a target, 15+ min and 25% over)', () => {
+  const long = n => Array.from({ length: n }, (_, i) => ({ date: `2026-09-${String(20 - i).padStart(2, '0')}`, durationMin: 65, sets: 18, targetMin: 45 }));
+  const { alerts } = cs.computeClientAlerts({ sessionTimes: long(3) }, NOW);
+  assert.deepStrictEqual(alerts.find(a => a.id === 'long_sessions'), { id: 'long_sessions', severity: 'watch', label: 'Sessions running long', reason: 'Averaging 65 min, target 45 min' });
+  assert.ok(!cs.computeClientAlerts({ sessionTimes: long(2) }, NOW).alerts.some(a => a.id === 'long_sessions'), 'needs 3 sessions');
+  const close = long(3).map(x => ({ ...x, durationMin: 55 }));
+  assert.ok(!cs.computeClientAlerts({ sessionTimes: close }, NOW).alerts.some(a => a.id === 'long_sessions'), '10 min over is fine');
+  const old = long(3).map(x => ({ ...x, date: '2026-07-01' }));
+  assert.ok(!cs.computeClientAlerts({ sessionTimes: old }, NOW).alerts.some(a => a.id === 'long_sessions'), 'only the last 28 days');
+});
+
+test('sanitizeProgramSchedule keeps busy weeks (after week 1+)', () => {
+  const s = cs.sanitizeProgramSchedule({ startDate: '2026-09-21', changes: [{ kind: 'busy', afterWeek: 2, note: 'Exams' }, { kind: 'busy', afterWeek: 0 }] });
+  assert.deepStrictEqual(s.changes.map(c => [c.kind, c.afterWeek, c.note]), [['busy', 2, 'Exams']]);
+});
+
 for (const r of results) console.log((r.pass ? 'PASS' : 'FAIL') + ' - ' + r.label + (r.err ? '\n   ' + r.err.message : ''));
 const failed = results.filter(r => !r.pass).length;
 console.log(`\n${results.length - failed}/${results.length} passed`);

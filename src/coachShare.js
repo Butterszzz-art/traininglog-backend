@@ -19,7 +19,7 @@ const DEFAULT_SHARING = Object.freeze({ checkIns: true, bodyweight: true, workou
 const SHARE_FIELDS = {
   checkIns: ['checkIns', 'lastCheckInAt', 'latestCheckInJson'],
   bodyweight: ['bodyweight', 'currentBodyweight', 'weeklyWeightChangePercent'],
-  workouts: ['weeklyWorkouts', 'workoutsLoggedThisWeek', 'workoutsWeekStart', 'compliancePercent', 'activeProgramName', 'activeProgramId', 'activeProgramStartDate'],
+  workouts: ['weeklyWorkouts', 'workoutsLoggedThisWeek', 'workoutsWeekStart', 'compliancePercent', 'activeProgramName', 'activeProgramId', 'activeProgramStartDate', 'sessionTimes', 'weeklyMuscleSets'],
   // Nothing is copied onto the roster: the coach reads the client's own
   // synced food log at request time (src/routes/coachNutrition.js), so
   // switching it off cuts access straight away.
@@ -39,6 +39,8 @@ function photosAllowed(sharing) {
 const MAX_CHECKINS = 12;
 const MAX_BODYWEIGHT = 120;
 const MAX_WEEKS = 12;
+const MAX_SESSION_TIMES = 12;
+const MUSCLE_KEYS = ['chest', 'back', 'shoulders', 'traps', 'biceps', 'triceps', 'forearms', 'quads', 'hamstrings', 'glutes', 'calves', 'adductors', 'abductors', 'abs'];
 const SCORE_KEYS = ['sleep', 'energy', 'stress', 'hunger', 'digestion', 'trainingPerformance', 'cardioAdherence', 'mood', 'motivation', 'soreness'];
 
 function normalizeSharing(value) {
@@ -156,9 +158,11 @@ function sanitizeProgramSchedule(value, programId) {
   if (!value || typeof value !== 'object') return null;
   const seen = new Set();
   const changes = (Array.isArray(value.changes) ? value.changes : []).map((c, i) => {
-    if (!c || typeof c !== 'object' || !['repeat', 'pause'].includes(c.kind)) return null;
+    // busy: a maintenance copy of the week before it (BU Time-efficient
+    // training: keep the top sets, about a third of the volume).
+    if (!c || typeof c !== 'object' || !['repeat', 'pause', 'busy'].includes(c.kind)) return null;
     const afterWeek = Number(c.afterWeek);
-    if (!Number.isInteger(afterWeek) || afterWeek < (c.kind === 'repeat' ? 1 : 0) || afterWeek > 52) return null;
+    if (!Number.isInteger(afterWeek) || afterWeek < (c.kind === 'pause' ? 0 : 1) || afterWeek > 52) return null;
     let id = typeof c.id === 'string' ? c.id.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 24) : '';
     if (!id || seen.has(id)) id = `c${i + 1}-${afterWeek}`;
     while (seen.has(id)) id += 'x';
@@ -231,9 +235,55 @@ function buildShareFields(snapshot, sharing, now = new Date()) {
     // schedule shows the client's real weeks (program-timeline.js).
     fields.activeProgramId = text(s.activeProgramId, 120);
     fields.activeProgramStartDate = isoDate(s.activeProgramStartDate);
+    // How long sessions take (the phone's session-efficiency.js) and weekly
+    // sets per muscle, for the coach's Session time card and alert.
+    fields.sessionTimes = sanitizeSessionTimes(w.sessions);
+    fields.weeklyMuscleSets = sanitizeMuscleSets(w.muscleSets);
   }
 
   return fields;
+}
+
+function sanitizeSessionTimes(list) {
+  const seen = new Set();
+  return (Array.isArray(list) ? list : []).map((x) => {
+    const date = isoDate(x && x.date);
+    const durationMin = num(x && x.durationMin, 1, 600);
+    const sets = num(x && x.sets, 1, 200);
+    if (!date || durationMin === null || sets === null) return null;
+    const out = { date, durationMin: Math.round(durationMin), sets: Math.round(sets) };
+    const minPerSet = num(x.minPerSet, 0, 60);
+    if (minPerSet !== null) out.minPerSet = Math.round(minPerSet * 10) / 10;
+    const otherMin = num(x.otherMin, 0, 600);
+    if (otherMin !== null) out.otherMin = Math.round(otherMin);
+    const targetMin = num(x.targetMin, 5, 300);
+    if (targetMin !== null) out.targetMin = Math.round(targetMin);
+    return out;
+  }).filter(Boolean)
+    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+    .filter((x) => { const k = x.date + ':' + x.durationMin; if (seen.has(k)) return false; seen.add(k); return true; })
+    .slice(0, MAX_SESSION_TIMES);
+}
+
+function sanitizeMuscleSets(value) {
+  const src = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const out = {};
+  for (const m of MUSCLE_KEYS) {
+    const v = num(src[m], 0, 100);
+    if (v !== null && v > 0) out[m] = Math.round(v * 10) / 10;
+  }
+  return out;
+}
+
+/** Sessions with a target in the last 28 days: { count, avgMin, avgTarget, overMin } or null. */
+function sessionLengthSummary(sessionTimes, now = new Date()) {
+  const cutoff = new Date(now.getTime() - 28 * 86400000).toISOString().slice(0, 10);
+  const withTarget = (Array.isArray(sessionTimes) ? sessionTimes : []).filter(x => x && x.date >= cutoff && x.targetMin);
+  if (!withTarget.length) return null;
+  const avg = k => withTarget.reduce((n, x) => n + x[k], 0) / withTarget.length;
+  const avgMin = Math.round(avg('durationMin'));
+  const avgTarget = Math.round(avg('targetMin'));
+  return { count: withTarget.length, avgMin, avgTarget, overMin: avgMin - avgTarget };
 }
 
 // Percent change per week between the average of the latest 7 days and the
@@ -305,6 +355,13 @@ function computeClientAlerts(doc, now = new Date()) {
   const dow = (now.getUTCDay() + 6) % 7; // 0 = Monday
   if (d.workoutsWeekStart === thisWeek && Number(d.workoutsLoggedThisWeek) === 0 && dow >= 3) {
     alerts.push({ id: 'no_workout_logs', severity: 'watch', label: 'No workouts logged', reason: '0 sessions logged this week' });
+  }
+
+  // BU Time-efficient training: sessions keep running well past what the
+  // plan or the client's time budget allows (3+ recent sessions).
+  const length = sessionLengthSummary(d.sessionTimes, now);
+  if (length && length.count >= 3 && length.overMin >= 15 && length.avgMin >= length.avgTarget * 1.25) {
+    alerts.push({ id: 'long_sessions', severity: 'watch', label: 'Sessions running long', reason: `Averaging ${length.avgMin} min, target ${length.avgTarget} min` });
   }
 
   if (d.sharedAt || d.lastSharedAt) {
@@ -422,6 +479,9 @@ module.exports = {
   mergeSharing,
   buildShareFields,
   computeClientAlerts,
+  sanitizeSessionTimes,
+  sanitizeMuscleSets,
+  sessionLengthSummary,
   weeklyChangePercent,
   weekStartOf,
   sanitizeCoachProgram,
