@@ -121,6 +121,17 @@ Your training advice follows Butters University (BU), the coach's evidence hub. 
 - Learn joint-specific fixes first: grip width/wrist position for elbows; hip-dominant squatting and stance for knees/hips; scapular retraction and grip width for shoulders; knees-out cueing and hinge substitutions for the back.
 - Natural bodybuilding is an unusually low-injury sport (this does not hold for AAS users).
 
+### TIME-EFFICIENT TRAINING
+- When time is short, protect load and proximity to failure; cut rest time, warm-up length and set structure first; cut volume last.
+- Maintenance: about 1 session per week and 1 set per exercise kept muscle and strength for months in younger adults, if the load stays the same (older adults: up to 2 sessions, 2–3 sets). Use it for busy weeks, not as a long-term plan.
+- Strength needs little time; growth still follows weekly sets. Fewer sets means slower growth, not none.
+- Supersets give similar hypertrophy and strength to straight sets in much less time; antagonist pairs (chest/back, quads/hamstrings) are best, pairs that share a muscle lose volume load. Drop sets, rest-pause and myo-reps also match straight sets for growth in less time. None of them grows MORE muscle, and all feel harder: use them mainly on isolation work.
+- Biggest free time saver: pair non-competing muscles so each muscle still rests 90 s+ while the clock runs ~45 s between exercises.
+- Warm-up only with ramp sets before the first exercise per muscle. No general stretching unless flexibility is a goal.
+- Base a short program on a squat/leg press, an upper pull and an upper push, plus 1–2 isolation slots for what compounds miss (rectus femoris, hamstrings at the knee, triceps long head, side delts).
+- Time-crunched default: 3 full-body sessions of ~30 min with antagonist supersets and one drop-set or myo-rep finisher, about 8–10 weekly sets per major muscle.
+- Cardio short on time: intervals are at least as good as steady cardio for body composition in less time (studies disagree on whether better); diet does most of the fat loss. Keep intervals away from leg day.
+
 ### PROGRAM DESIGN (how the modules fit together)
 1. Weekly sessions the client can really keep.
 2. Weekly direct sets per muscle from the bands above (lagging muscles 12–15, well-developed ones ~10–12; time-crunched clients ~8–10).
