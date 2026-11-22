@@ -98,6 +98,7 @@ router.post('/', async (req, res) => {
         access,
         style,
         today: String(pack.generatedAt || new Date().toISOString()).slice(0, 10),
+        timeBudgetMin: pack.timeBudgetMin,
       }),
     },
   ];
@@ -317,7 +318,7 @@ router.post('/brief', async (req, res) => {
       output_config: jsonOutput(BRIEF_SCHEMA, 'low'),
       system: [
         { type: 'text', text: BRIEF_INSTRUCTIONS },
-        { type: 'text', text: athleteContext({ profile: pack.profile || {}, memory, style, today: digest.date }) },
+        { type: 'text', text: athleteContext({ profile: pack.profile || {}, memory, style, today: digest.date, timeBudgetMin: pack.timeBudgetMin }) },
       ],
       messages: [{ role: 'user', content: JSON.stringify(facts) }],
     }, { timeoutMs: perModelTimeoutMs(20000, 30000) });
