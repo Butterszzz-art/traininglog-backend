@@ -55,6 +55,21 @@ function bestE1rm(sets) {
 
 // Exercises whose best estimated 1RM hasn't moved (within 1%) for 2+ weeks
 // across 3+ sessions — returns the most-trained one, or null.
+/** Recent sessions with a target (the lifter's time budget, else the
+ * plan's estimate), from each pack workout's `timing`: { count, avgMin,
+ * avgTarget, overMin } over the last 4 such sessions in 28 days, or null.
+ * BU Time-efficient training; same rule as the coach dashboard card. */
+function sessionLength(workouts, now) {
+  const timed = arr(workouts)
+    .filter(w => w && w.timing && num(w.timing.min) && num(w.timing.target) && now - Date.parse(w.date) <= 28 * DAY)
+    .sort((a, b) => Date.parse(b.date) - Date.parse(a.date))
+    .slice(0, 4);
+  if (!timed.length) return null;
+  const avgMin = Math.round(timed.reduce((n, w) => n + num(w.timing.min), 0) / timed.length);
+  const avgTarget = Math.round(timed.reduce((n, w) => n + num(w.timing.target), 0) / timed.length);
+  return { count: timed.length, avgMin, avgTarget, overMin: avgMin - avgTarget };
+}
+
 function findStall(workouts, now) {
   const byName = {};
   arr(workouts).forEach(w => {
@@ -152,6 +167,12 @@ function buildBriefDigest(pack, today) {
       signals.push({ key: 'load', text: `${last7} session${last7 === 1 ? '' : 's'} in the last 7 days`, tone: 'good', weight: 0 });
     }
     if (daysSince >= 2 && daysSince < 5) score += 4;
+  }
+
+  // Session length against the target (BU Time-efficient training).
+  const length = sessionLength(p.workouts, now);
+  if (length && length.count >= 3 && length.overMin >= 10) {
+    signals.push({ key: 'time', text: `Sessions averaging ${length.avgMin} min, about ${length.overMin} over your ${length.avgTarget}-min target`, tone: 'watch', weight: 1 });
   }
 
   // Bodyweight trend against the phase goal.

@@ -14,6 +14,7 @@ How you work:
 - If the data needed isn't available (not logged, or the athlete turned off access), say so plainly and give the best general guidance, labelled as general.
 - When a change to the program or to macro targets would help, propose it with propose_program_change or propose_macro_targets rather than only describing it. The athlete sees a card and decides. Only propose when you're confident it's an improvement, and at most two cards per reply.
 - Use remember for facts that stay true for weeks (injuries, equipment limits, schedule, preferences, goal dates). Don't remember one-off numbers.
+- Session length: get_training_summary shows how long sessions took against their target. When they run long or the athlete is short on time, apply the time-efficient training rules: protect load and effort, save time with supersets of non-competing exercises and myo-reps or drop sets on isolations first, cut sets last. Cite their real minutes. A program change that pairs exercises can be proposed as a superset in the notes.
 
 How you write:
 - Phone-sized replies: usually 2–5 short sentences. Lead with the answer, then the reason, citing specific numbers and dates from the data.
@@ -40,7 +41,7 @@ function oneLine(v, max = 120) {
  * read, tone, and today's date. Memory and profile text come from the phone,
  * so they're fenced as data.
  */
-function athleteContext({ profile = {}, memory = [], access = {}, style, today }) {
+function athleteContext({ profile = {}, memory = [], access = {}, style, today, timeBudgetMin }) {
   const lines = [`Today is ${oneLine(today, 10)}.`];
 
   const p = [];
@@ -50,6 +51,8 @@ function athleteContext({ profile = {}, memory = [], access = {}, style, today }
   if (profile.goal) p.push(`goal: ${oneLine(profile.goal)}`);
   if (profile.experience) p.push(`experience: ${oneLine(profile.experience, 40)}`);
   if (p.length) lines.push(`Athlete profile: ${p.join('; ')}.`);
+  const budget = Number(timeBudgetMin);
+  if ([30, 45, 60].includes(budget)) lines.push(`Time budget: about ${budget} min per session (picked in performance mode).`);
   if (profile.unit && profile.unit !== 'kg') {
     lines.push(`Lifting weights in the data are logged in ${oneLine(profile.unit, 5)} (fields named "kg" hold that unit); bodyweight is in kg. Answer in ${oneLine(profile.unit, 5)}.`);
   }

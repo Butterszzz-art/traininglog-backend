@@ -31,7 +31,7 @@ const SET_SCHEMA = {
 const TOOL_DEFS = [
   {
     name: 'get_training_summary',
-    description: 'Overview of recent training: sessions and tonnage per week, plus the most recent sessions with their exercises. Start here for broad questions about consistency, volume or what was trained.',
+    description: 'Overview of recent training: sessions and tonnage per week, plus the most recent sessions with their exercises and, when logged, how long each took against its target. Start here for broad questions about consistency, volume, session length or what was trained.',
     input_schema: {
       type: 'object',
       properties: { weeks: { type: 'integer', minimum: 1, maximum: 12, description: 'How many weeks back. Default 4.' } },
@@ -194,6 +194,34 @@ function unavailable(what) {
 
 // ── Read tools ──────────────────────────────────────────────────────────────
 
+/** One session's timing (the phone's session-efficiency.js) for the model. */
+function sessionTiming(t) {
+  if (!t || !num(t.min)) return {};
+  const out = { minutes: num(t.min) };
+  if (num(t.perSet)) out.minutesPerSet = num(t.perSet);
+  if (num(t.otherMin) !== null) out.minutesNotSetsOrRest = num(t.otherMin);
+  if (num(t.target)) { out.targetMinutes = num(t.target); out.targetFrom = t.budget ? 'time budget' : 'plan estimate'; }
+  return out;
+}
+
+/** Averages over the timed sessions in the window, or undefined. */
+function sessionLengthSummary(workouts) {
+  const timed = arr(workouts).filter(w => w && w.timing && num(w.timing.min));
+  if (!timed.length) return undefined;
+  const avg = xs => round(xs.reduce((n, x) => n + x, 0) / xs.length, 0);
+  const withTarget = timed.filter(w => num(w.timing.target));
+  return {
+    timedSessions: timed.length,
+    avgMinutes: avg(timed.map(w => num(w.timing.min))),
+    avgMinutesPerSet: round(timed.reduce((n, w) => n + num(w.timing.min), 0) / Math.max(1, timed.reduce((n, w) => n + (num(w.timing.sets) || 0), 0)), 1),
+    avgMinutesNotSetsOrRest: avg(timed.map(w => num(w.timing.otherMin) || 0)),
+    ...(withTarget.length ? {
+      avgTargetMinutes: avg(withTarget.map(w => num(w.timing.target))),
+      sessionsOverTargetBy5Plus: withTarget.filter(w => num(w.timing.min) - num(w.timing.target) > 5).length,
+    } : {}),
+  };
+}
+
 function getTrainingSummary(input, pack) {
   if (!Array.isArray(pack.workouts)) return { result: unavailable('workouts'), trace: 'Training' };
   const weeks = clampInt(input.weeks, 1, 12, 4);
@@ -222,7 +250,10 @@ function getTrainingSummary(input, pack) {
         date: w.date,
         title: w.title || 'Workout',
         exercises: arr(w.exercises).map(ex => `${ex.name} (${arr(ex.sets).length} sets)`),
+        ...sessionTiming(w.timing),
       })),
+      sessionLength: sessionLengthSummary(recent),
+      timeBudgetMin: num(pack.timeBudgetMin) || undefined,
       cardioSessions: cardio ? cardio.map(c => ({ date: c.date, type: c.type, minutes: c.durationMin })) : undefined,
     },
     trace: `Training · ${recent.length} sessions`,
