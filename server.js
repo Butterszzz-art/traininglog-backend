@@ -3892,6 +3892,10 @@ app.get('/api/coach/clients/:clientUid', authenticateToken, requireCoachPlan, as
       coachPhotoCounts,
       bodyweight: Array.isArray(data.bodyweight) ? data.bodyweight : [],
       weeklyWorkouts: Array.isArray(data.weeklyWorkouts) ? data.weeklyWorkouts : [],
+      // Session length vs. target and weekly sets per muscle (BU
+      // Time-efficient training), from the client's share.
+      sessionTimes: Array.isArray(data.sessionTimes) ? data.sessionTimes : [],
+      weeklyMuscleSets: data.weeklyMuscleSets && typeof data.weeklyMuscleSets === 'object' ? data.weeklyMuscleSets : {},
       mealPlan: data.mealPlan || null
     };
     return sendSuccess(res, 200, { client });

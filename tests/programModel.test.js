@@ -117,3 +117,15 @@ test('coachShare: v2 stored with counts and the legacy days view; client gets li
   assert.equal(client.id, 'coach-coach-a-p1');
   assert.equal(client.weeks.length, 2);
 });
+
+test('superset letters (A–H) are kept and reach the app as supersetGroup', () => {
+  const p = M.readProgram({ name: 'P', weeks: [{ days: [{ weekday: 1, label: 'A', exercises: [
+    { name: 'Incline DB Press', sets: 3, superset: 'a' },
+    { name: 'Chest Supported Row', sets: 3, superset: 'A' },
+    { name: 'Curl', sets: 2, superset: 'Z' },
+  ] }] }] });
+  const rows = p.weeks[0].days[0].exercises;
+  assert.deepEqual(rows.map(e => e.superset), ['A', 'A', undefined]);
+  const lib = M.toLibrary(p, {});
+  assert.deepEqual(lib.days[0].exercises.map(e => e.supersetGroup), ['A', 'A', undefined]);
+});
