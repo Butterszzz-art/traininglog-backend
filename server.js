@@ -20,6 +20,7 @@ const { createAiMeter } = require('./src/aiMeter');
 const { createClientPro } = require('./src/clientPro');
 const AI_LIMITS = require('./src/config/aiLimits');
 const { createEntitlements, pickEffective, legacyEntitlement, toDate, SUBSCRIPTION_SOURCES } = require('./src/entitlements');
+const stripeBilling = require('./src/stripeBilling');
 const { createCoachCodes, formatCode } = require('./src/coachCode');
 const coachGuide = require('./src/coachGuide');
 const fs = require('fs');
@@ -347,9 +348,17 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
         const session = event.data.object;
         const { username, plan, billing } = session.metadata || {};
         if (username && plan) {
+          // The subscription may still be in its trial; the
+          // customer.subscription.* events carry the exact status.
+          let status = 'active';
+          if (session.subscription) {
+            try { status = (await stripe.subscriptions.retrieve(session.subscription)).status || status; }
+            catch (err) { console.warn('[Stripe webhook] could not read subscription status:', err.message); }
+          }
           await applyEntitlement({
-            username, plan, status: 'active', billingCycle: billing || 'monthly',
+            username, plan, status, billingCycle: billing || 'monthly',
             source: 'stripe', sourceCustomerId: session.customer,
+            extraFields: session.subscription ? { stripeSubscriptionId: session.subscription } : null,
           });
         }
         break;
@@ -359,11 +368,19 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
         const sub = event.data.object;
         const { username, plan, billing } = sub.metadata || {};
         if (username && plan) {
+          const userDoc = await stripeUserDoc(username);
+          if (stripeBilling.isStaleSubscriptionEvent(userDoc, sub.id, { status: sub.status })) {
+            console.log(`[Stripe webhook] ${event.type} for old subscription ${sub.id} ignored.`);
+            break;
+          }
+          const extraFields = { stripeSubscriptionId: sub.id };
+          if (sub.trial_start) extraFields.stripeTrialUsedAt = new Date(sub.trial_start * 1000).toISOString();
           await applyEntitlement({
             username, plan, status: sub.status, // active | trialing | past_due | unpaid | ...
             periodEnd: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
             billingCycle: billing || 'monthly',
             source: 'stripe', sourceCustomerId: sub.customer,
+            extraFields,
           });
         }
         break;
@@ -372,6 +389,12 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
         const sub = event.data.object;
         const { username } = sub.metadata || {};
         if (username) {
+          // Cancelling an old subscription must not end the one the user has now.
+          const userDoc = await stripeUserDoc(username);
+          if (stripeBilling.isStaleSubscriptionEvent(userDoc, sub.id, { deleted: true })) {
+            console.log(`[Stripe webhook] deletion of old subscription ${sub.id} ignored.`);
+            break;
+          }
           await applyEntitlement({
             username, plan: 'free', status: 'canceled',
             source: 'stripe', sourceCustomerId: sub.customer,
@@ -388,6 +411,8 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
           const sub = await stripe.subscriptions.retrieve(invoice.subscription);
           const { username, plan, billing } = sub.metadata || {};
           if (username && plan) {
+            const userDoc = await stripeUserDoc(username);
+            if (stripeBilling.isStaleSubscriptionEvent(userDoc, sub.id, { status: 'past_due' })) break;
             await applyEntitlement({
               username, plan, status: 'past_due', billingCycle: billing || 'monthly',
               source: 'stripe', sourceCustomerId: sub.customer,
@@ -540,8 +565,15 @@ async function getUserPlanInfo(username, opts = {}) {
       planExpiresAt: effective.expiresAt ? effective.expiresAt.toISOString() : null,
       trial: {
         usedReverseTrial: u.usedReverseTrial === true,
+        // The web checkout gives one 7-day trial per account (src/stripeBilling.js).
+        stripeTrialUsed: stripeBilling.trialUsed(u),
         lastMomentTrialAt: lastMoment ? lastMoment.toISOString() : null,
       },
+      // The user's own store subscription, if one is running. The app shows
+      // "Current plan" / "Switch plan" from it and never starts a second one.
+      subscription: (u.subSource === 'stripe' || u.subSource === 'apple') && stripeBilling.isLiveStatus(u.subStatus)
+        ? { store: u.subSource, plan: u.userPlan || null, billing: u.billingCycle || null, status: u.subStatus }
+        : null,
       ai: await aiUsageFor(uid, effective),
       coachPro, // { status: 'active' | 'paused' | 'revoked', coachUsername } or null
     };
@@ -665,18 +697,52 @@ app.post('/api/stripe/create-checkout-session', authenticateToken, async (req, r
   try {
     const uid = await resolveFirestoreUid(username);
     let credits = 0;
-    let stripeCustomerId = null;
+    let userDoc = {};
     if (uid) {
       const snap = await db.collection('users').doc(uid).get();
-      const u = snap.exists ? snap.data() : {};
-      credits = Number(u.referralCredits) || 0;
-      stripeCustomerId = u.stripeCustomerId || null;
+      userDoc = snap.exists ? snap.data() : {};
+      credits = Number(userDoc.referralCredits) || 0;
     } else {
       const user = await getUserByUsername(username);
       credits = user ? (Number(user.fields.ReferralCredits) || 0) : 0;
-      stripeCustomerId = user?.fields?.StripeCustomerId || null;
+      userDoc = { stripeCustomerId: user?.fields?.StripeCustomerId || null };
     }
-    const trialDays = credits > 0 ? credits * 30 : 7;
+    const stripeCustomerId = userDoc.stripeCustomerId || null;
+
+    // Already subscribed on Stripe: change the price on that subscription
+    // (Pro ↔ Coach, monthly ↔ annual) instead of starting a second one.
+    if (stripeCustomerId) {
+      const list = await stripe.subscriptions.list({ customer: stripeCustomerId, status: 'all', limit: 20 });
+      const live = stripeBilling.pickLiveSubscription(list.data);
+      if (live) {
+        if (stripeBilling.planChange(live, priceId) === 'same') {
+          return res.status(409).json({ error: 'You already have this plan.', code: 'already_subscribed' });
+        }
+        const updated = await stripe.subscriptions.update(live.id, {
+          items: [{ id: live.items.data[0].id, price: priceId }],
+          proration_behavior: 'create_prorations',
+          metadata: {
+            ...(live.metadata || {}),
+            username, plan, billing: billing || 'monthly',
+            planChangedAt: new Date().toISOString(),
+            termsVersion: TERMS_VERSION,
+          },
+        });
+        // The customer.subscription.updated webhook applies it too; doing it
+        // here means the app sees the new plan straight away.
+        await applyEntitlement({
+          username, plan, status: updated.status,
+          periodEnd: updated.current_period_end ? new Date(updated.current_period_end * 1000).toISOString() : null,
+          billingCycle: billing || 'monthly',
+          source: 'stripe', sourceCustomerId: stripeCustomerId,
+          extraFields: { stripeSubscriptionId: updated.id },
+        });
+        return res.json({ switched: true, plan, billing: billing || 'monthly' });
+      }
+    }
+
+    // One standard trial per account (src/stripeBilling.js).
+    const trialDays = stripeBilling.trialDaysFor({ credits, userDoc });
 
     const sessionParams = {
       mode: 'subscription',
@@ -685,7 +751,7 @@ app.post('/api/stripe/create-checkout-session', authenticateToken, async (req, r
       success_url: (process.env.APP_URL || 'https://pocketcoachcoms.org') + '/payment-success.html?plan=' + plan,
       cancel_url: (process.env.APP_URL || 'https://pocketcoachcoms.org') + '/#pricing',
       subscription_data: {
-        trial_period_days: trialDays,
+        ...(trialDays > 0 ? { trial_period_days: trialDays } : {}),
         metadata: {
           username, plan, billing: billing || 'monthly',
           // Record of the withdrawal-period request, kept with the subscription.
@@ -1126,7 +1192,20 @@ async function updateUserPlan(recordId, fields) {
 // metadata carries username, not uid) OR `uid` directly (the Apple rail
 // resolves uid from the appAccountToken set at purchase time — see
 // payments.js — since Apple notifications don't carry a username at all).
-async function applyEntitlement({ username, uid, plan, status, periodEnd = null, billingCycle = null, source, sourceCustomerId = null, revoked = false }) {
+// The Firestore user doc behind a Stripe webhook's username, or null.
+async function stripeUserDoc(username) {
+  try {
+    const uid = await resolveFirestoreUid(username);
+    if (!uid) return null;
+    const snap = await db.collection('users').doc(uid).get();
+    return snap.exists ? snap.data() : null;
+  } catch (err) {
+    console.warn('[Stripe webhook] could not read user doc:', err.message);
+    return null;
+  }
+}
+
+async function applyEntitlement({ username, uid, plan, status, periodEnd = null, billingCycle = null, source, sourceCustomerId = null, revoked = false, extraFields = null }) {
   if (!firebaseEnabled) return false;
   let resolvedUid = uid || null;
   try {
@@ -1147,6 +1226,8 @@ async function applyEntitlement({ username, uid, plan, status, periodEnd = null,
     };
     if (source === 'stripe' && sourceCustomerId) fields.stripeCustomerId = sourceCustomerId;
     if (source === 'apple' && sourceCustomerId) fields.appleOriginalTransactionId = sourceCustomerId;
+    // e.g. stripeSubscriptionId, stripeTrialUsedAt (src/stripeBilling.js).
+    if (extraFields) Object.assign(fields, extraFields);
     await db.collection('users').doc(resolvedUid).set(fields, { merge: true });
 
     // Mirror into users/{uid}/entitlements. The user-doc fields above stay the
