@@ -5898,6 +5898,7 @@ app.post('/admin/exercises/seed', authenticateToken, async (req, res) => {
       await batch.commit();
       seeded += Math.min(BATCH_SIZE, seed.length - i);
     }
+    exerciseCache = null; // this instance serves the new library right away
     return sendSuccess(res, 200, { total: seed.length, seeded });
   } catch (err) {
     console.error('[Exercises] Seed failed:', err);
@@ -5905,10 +5906,38 @@ app.post('/admin/exercises/seed', authenticateToken, async (req, res) => {
   }
 });
 
+// The exercise library only changes when POST /exercises/seed runs, but every
+// GET /exercises used to read the whole collection (~900 docs) from
+// Firestore. Each instance now keeps it in memory for EXERCISE_CACHE_TTL_MS
+// and shares one in-flight load between concurrent requests.
+const EXERCISE_CACHE_TTL_MS = 10 * 60 * 1000;
+let exerciseCache = null; // { at, promise }
+
+function loadExerciseLibrary() {
+  if (exerciseCache && Date.now() - exerciseCache.at < EXERCISE_CACHE_TTL_MS) return exerciseCache.promise;
+  const promise = db.collection('exercises').get().then(snap => snap.docs.map(d => ({
+    id: d.id,
+    name: d.get('name'),
+    aliases: d.get('aliases') || [],
+    muscleGroup: d.get('muscleGroup'),
+    secondaryMuscles: d.get('secondaryMuscles') || [],
+    equipment: d.get('equipment'),
+    category: d.get('category'),
+    level: d.get('level'),
+    mechanic: d.get('mechanic'),
+    force: d.get('force'),
+    instructions: d.get('instructions') || [],
+    isCustom: d.get('isCustom') || false
+  })));
+  exerciseCache = { at: Date.now(), promise };
+  promise.catch(() => { if (exerciseCache?.promise === promise) exerciseCache = null; });
+  return promise;
+}
+
 // GET /exercises?q=&muscleGroup=&equipment=&limit= — search/list the library.
-// Firestore doesn't do substring/full-text search natively, so `q` matching
-// happens in-memory against name+aliases; fine at this table's size (~900
-// rows), would need a real search index (Algolia/Typesense/etc.) at scale.
+// Firestore doesn't do substring/full-text search natively, so filtering and
+// `q` matching happen in-memory against the cached library; fine at this
+// table's size (~900 rows), would need a real search index at scale.
 app.get('/exercises', authenticateToken, async (req, res) => {
   if (!firebaseEnabled) return sendSuccess(res, 200, { items: [] });
   try {
@@ -5920,29 +5949,12 @@ app.get('/exercises', authenticateToken, async (req, res) => {
     // autocomplete/datalist — not just paginate search results.
     const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 1000);
 
-    let query = db.collection('exercises');
-    if (muscleGroup) query = query.where('muscleGroup', '==', muscleGroup);
-    if (equipment) query = query.where('equipment', '==', equipment);
-
-    const snap = await query.get();
-    let items = snap.docs.map(d => ({
-      id: d.id,
-      name: d.get('name'),
-      aliases: d.get('aliases') || [],
-      muscleGroup: d.get('muscleGroup'),
-      secondaryMuscles: d.get('secondaryMuscles') || [],
-      equipment: d.get('equipment'),
-      category: d.get('category'),
-      level: d.get('level'),
-      mechanic: d.get('mechanic'),
-      force: d.get('force'),
-      instructions: d.get('instructions') || [],
-      isCustom: d.get('isCustom') || false
-    }));
-
+    let items = await loadExerciseLibrary();
+    if (muscleGroup) items = items.filter(e => e.muscleGroup === muscleGroup);
+    if (equipment) items = items.filter(e => e.equipment === equipment);
     if (q) {
       items = items.filter(e =>
-        e.name.toLowerCase().includes(q) || e.aliases.some(a => a.toLowerCase().includes(q))
+        String(e.name || '').toLowerCase().includes(q) || e.aliases.some(a => String(a).toLowerCase().includes(q))
       );
     }
 
