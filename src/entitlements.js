@@ -21,6 +21,8 @@ const SUBSCRIPTION_SOURCES = new Set(['stripe_sub', 'apple_sub']);
 // user's own source.
 const COACH_INCLUDED_SOURCES = new Set(['coach_client', 'coach_code']);
 const OWN_PAID_SOURCES = new Set(['stripe_sub', 'apple_sub', 'prep_pass', 'meet_pass', 'founder_lifetime']);
+// Subscription statuses that no longer give access (both stores).
+const DEAD_SUB_STATUSES = new Set(['canceled', 'incomplete_expired', 'unpaid']);
 const FREE = Object.freeze({ plan: 'free', source: null, expiresAt: null, status: 'none', id: null });
 
 function toDate(value) {
@@ -78,6 +80,9 @@ function legacyEntitlement(userDoc) {
   const u = userDoc || {};
   if (!PLAN_RANK[u.userPlan]) return null;
   const source = u.subSource === 'apple' ? 'apple_sub' : u.subSource === 'stripe' ? 'stripe_sub' : 'admin';
+  // A store subscription that has ended (e.g. Stripe 'unpaid' after failed
+  // retries) leaves userPlan set; it must not keep giving access.
+  if (source !== 'admin' && DEAD_SUB_STATUSES.has(u.subStatus)) return null;
   return { id: 'legacy_user_doc', plan: u.userPlan, source, expiresAt: null, status: 'active' };
 }
 
@@ -120,7 +125,7 @@ function createEntitlements({ db, clock = () => new Date(), log = console }) {
   // ('stripe_sub' / 'apple_sub'), overwritten on every change.
   async function mirrorSubscription(uid, { plan, status, rail, ref = '', revoked = false }) {
     const source = rail === 'apple' ? 'apple_sub' : 'stripe_sub';
-    const live = PLAN_RANK[plan] > 0 && !['canceled', 'incomplete_expired', 'unpaid'].includes(status);
+    const live = PLAN_RANK[plan] > 0 && !DEAD_SUB_STATUSES.has(status);
     const now = clock();
     const ref_ = col(uid).doc(source);
     const existing = await ref_.get();
